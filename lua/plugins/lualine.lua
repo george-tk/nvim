@@ -8,15 +8,11 @@ return {
 
   -- Define keymaps without forcing plugin to load
   init = function()
-    vim.keymap.set('n', '<leader>bb', function()
-      -- Jump to buffer #N using count
-      return vim.cmd('LualineBuffersJump ' .. vim.v.count1)
-    end, { desc = 'go to [b]uffer' })
-
-    vim.keymap.set('n', '<leader>bn', ':bn<CR>', { desc = '[n]ext' })
-    vim.keymap.set('n', '<leader>bp', ':bp<CR>', { desc = '[p]revious' })
-    vim.keymap.set('n', '<leader>bd', ':bd<CR>', { desc = '[d]elete' })
-    vim.keymap.set('n', '<leader>br', '<C-6>', { desc = '[r]eturn' })
+    for i = 1, 9 do
+      vim.keymap.set('n', '<leader>' .. i, function()
+        vim.cmd('LualineBuffersJump ' .. i)
+      end, { desc = 'buffer ' .. i })
+    end
   end,
 
   opts = function()

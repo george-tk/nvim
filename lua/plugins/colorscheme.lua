@@ -15,17 +15,6 @@ return {
       comments = {},
       conditionals = {},
     },
-    integrations = {
-      blink_cmp = true,
-      gitsigns = true,
-      mason = true,
-      mini = { enabled = true },
-      native_lsp = { enabled = true },
-      neogit = true,
-      treesitter = true,
-      treesitter_context = true,
-      which_key = true,
-      snacks = true,
-    },
+    auto_integrations = true,
   },
 }

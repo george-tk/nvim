@@ -17,3 +17,9 @@ vim.keymap.set('n', '<leader>sS', '<cmd>set spell!<CR>', { desc = '[S]et [S]pell
 -- next and previews spelling
 vim.keymap.set('n', '<leader>sn', ']s <leader>ss', { desc = '[S]pell [N]ext', remap = true })
 vim.keymap.set('n', '<leader>sp', '[s <leader>ss', { desc = '[S]pell [P]revious', remap = true })
+
+-- Buffer management
+vim.keymap.set('n', '<leader><Tab>', ':bn<CR>', { desc = 'next buffer' })
+vim.keymap.set('n', '<leader><S-Tab>', ':bp<CR>', { desc = 'previous buffer' })
+vim.keymap.set('n', '<leader>d', ':bd<CR>', { desc = '[d]elete buffer' })
+vim.keymap.set('n', '<leader>r', '<C-6>', { desc = '[r]eturn to buffer' })
