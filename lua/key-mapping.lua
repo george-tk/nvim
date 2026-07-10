@@ -21,5 +21,5 @@ vim.keymap.set('n', '<leader>sp', '[s <leader>ss', { desc = '[S]pell [P]revious'
 -- Buffer management
 vim.keymap.set('n', '<leader><Tab>', ':bn<CR>', { desc = 'next buffer' })
 vim.keymap.set('n', '<leader><S-Tab>', ':bp<CR>', { desc = 'previous buffer' })
-vim.keymap.set('n', '<leader>d', ':bd<CR>', { desc = '[d]elete buffer' })
+vim.keymap.set('n', '<leader>q', ':bd<CR>', { desc = '[q]uit buffer' })
 vim.keymap.set('n', '<leader>r', '<C-6>', { desc = '[r]eturn to buffer' })
