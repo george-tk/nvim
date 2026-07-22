@@ -2,6 +2,7 @@ return { -- Useful plugin to show you pending keybinds.
   'folke/which-key.nvim',
   event = 'VeryLazy',
   opts = {
+    preset = 'helix',
     delay = 0,
     icons = {
       group = '',
@@ -10,13 +11,11 @@ return { -- Useful plugin to show you pending keybinds.
     -- Document existing key chains
     spec = {
       { '<leader>f', group = '[f]ind' },
-      { '<leader>w', group = '[w]orkspace' },
-      { '<leader>t', group = '[t]erminal' },
+      { '<leader>t', group = '[t]odo' },
       { '<leader>g', group = '[g]it', mode = { 'n', 'v' } },
       { '<leader>e', group = '[e]xplore', mode = { 'n', 'v' } },
       { '<leader>m', group = '[m]arkdown' },
       { '<leader>s', group = '[s]pelling' },
-      { '<leader>l', group = '[l]sp' },
       { '<leader>fw', group = '[w]ord' },
       { '<leader>fc', group = '[C]urrent' },
       { '<leader>1', hidden = true, mode = 'n' },
@@ -29,15 +28,13 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>8', hidden = true, mode = 'n' },
       { '<leader>9', hidden = true, mode = 'n' },
       -- Renaming markdown commands
-      { '<leader>mt', desc = '[t]odo list' },
-      { '<leader>mp', desc = '[p]aste link' },
-      { '<leader>md', desc = '[d]elete link' },
-      { '<leader>mm', desc = '[m]ove link' },
-      { '<leader>mu', desc = '[u]pdate numbering' },
       { '<leader>mr', desc = 'create [r]ow below' },
       { '<leader>mR', desc = 'create [R]ow above' },
       { '<leader>mc', desc = 'create [c]olumn after' },
       { '<leader>mC', desc = 'create [C]olumn befor' },
+      { '<leader>mdr', desc = 'delete row' },
+      { '<leader>mdc', desc = 'delete column' },
+      { '<leader>mu', desc = 'update numbering' },
     },
   },
 }

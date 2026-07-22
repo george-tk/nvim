@@ -39,6 +39,21 @@ return {
       require('mkdnflow').setup(opts)
     end,
     opts = {
+      on_attach = function(bufnr)
+        vim.keymap.set('n', '<leader>mt', function()
+          vim.ui.input({ prompt = 'Table size (cols x rows): ' }, function(input)
+            if not input or input == '' then
+              return
+            end
+            local cols, rows = input:match '^(%d+)[%s,xX]+(%d+)$'
+            if cols and rows then
+              vim.cmd('MkdnTable ' .. cols .. ' ' .. rows)
+            else
+              vim.notify("Invalid table dimensions. Use 'cols x rows' (e.g., 3x2) or 'cols rows' (e.g., 3 2)", vim.log.levels.ERROR)
+            end
+          end)
+        end, { buffer = bufnr, desc = 'table' })
+      end,
       modules = {
         bib = false,
         buffers = false,
@@ -55,70 +70,54 @@ return {
         completion = false,
       },
       mappings = {
-        MkdnEnter = { { 'n', 'v', 'i' }, '<CR>' },
-        MkdnNextLink = false,
-        MkdnPrevLink = false,
+        MkdnEnter = { { 'n', 'v' }, '<CR>' },
         MkdnGoBack = false,
         MkdnGoForward = false,
-        MkdnCreateLinkFromClipboard = false,
+        MkdnMoveSource = false,
+        MkdnNextLink = false,
+        MkdnPrevLink = false,
+        MkdnFollowLink = false,
         MkdnDestroyLink = false,
         MkdnTagSpan = false,
-        MkdnMoveSource = false,
         MkdnYankAnchorLink = false,
         MkdnYankFileAnchorLink = false,
+        MkdnNextHeading = false,
+        MkdnPrevHeading = false,
+        MkdnNextHeadingSame = false,
+        MkdnPrevHeadingSame = false,
         MkdnIncreaseHeading = false,
         MkdnDecreaseHeading = false,
+        MkdnIncreaseHeadingOp = false,
+        MkdnDecreaseHeadingOp = false,
         MkdnToggleToDo = false,
+        MkdnNewListItem = false,
         MkdnNewListItemBelowInsert = false,
         MkdnNewListItemAboveInsert = false,
-        MkdnTableCellNewLine = false,
+        MkdnExtendList = false,
         MkdnUpdateNumbering = { 'n', '<leader>mu' },
-        MkdnTableNextCell = { 'i', '<Tab>' },
-        MkdnTablePrevCell = { 'i', '<S-Tab>' },
+        MkdnTableNextCell = { 'n', '<leader>mn' },
+        MkdnTablePrevCell = { 'n', '<leader>mp' },
+        MkdnTableCellNewLine = { 'i', '<M-CR>' },
+        MkdnTableNextRow = false,
+        MkdnTablePrevRow = false,
         MkdnTableNewRowBelow = { 'n', '<leader>mr' },
         MkdnTableNewRowAbove = { 'n', '<leader>mR' },
         MkdnTableNewColAfter = { 'n', '<leader>mc' },
         MkdnTableNewColBefore = { 'n', '<leader>mC' },
+        MkdnTableDeleteRow = { 'n', '<leader>mdr' },
+        MkdnTableDeleteCol = { 'n', '<leader>mdc' },
+        MkdnTableAlignLeft = false,
+        MkdnTableAlignRight = false,
+        MkdnTableAlignCenter = false,
+        MkdnTableAlignDefault = false,
         MkdnFoldSection = false,
         MkdnUnfoldSection = false,
-      },
-      perspective = {
-        priority = 'current',
-      },
-      links = {
-        transform_explicit = function(text)
-          text = text:gsub('%S+', function(w)
-            return w:sub(1, 1):upper() .. w:sub(2):lower()
-          end)
-          text = text:gsub(' ', '')
-          local folder = 'unorganised/'
-          text = folder .. os.date '%d-%m-%Y_' .. text
-          return text
-        end,
-      },
-      new_file_template = {
-        use_template = true,
-        placeholders = {
-          title = 'link_title',
-          date = 'os_date',
-          filename = function()
-            local text = vim.api.nvim_buf_get_name(0)
-            local pattern = '_([^_]+)%.md$'
-            local name = text:match(pattern)
-
-            local result = ''
-            for i = 1, #name do
-              local char = name:sub(i, i)
-              if i > 1 and char:match '%u' then
-                result = result .. ' ' .. char
-              else
-                result = result .. char
-              end
-            end
-            return result
-          end,
-        },
-        template = '# {{ filename }}',
+        MkdnTab = false,
+        MkdnSTab = false,
+        MkdnIndentListItem = false,
+        MkdnDedentListItem = false,
+        MkdnCreateLink = false,
+        MkdnCreateLinkFromClipboard = false,
       },
     },
   },
