@@ -2,7 +2,7 @@ return { -- Useful plugin to show you pending keybinds.
   'folke/which-key.nvim',
   event = 'VeryLazy',
   opts = {
-    preset = 'helix',
+    -- preset = 'helix',
     delay = 0,
     icons = {
       group = '',
@@ -11,13 +11,13 @@ return { -- Useful plugin to show you pending keybinds.
     -- Document existing key chains
     spec = {
       { '<leader>f', group = '[f]ind' },
+      { '<leader>fw', group = '[w]ord' },
+      { '<leader>fc', group = '[C]urrent' },
       { '<leader>t', group = '[t]odo' },
       { '<leader>g', group = '[g]it', mode = { 'n', 'v' } },
       { '<leader>e', group = '[e]xplore', mode = { 'n', 'v' } },
       { '<leader>m', group = '[m]arkdown' },
       { '<leader>s', group = '[s]pelling' },
-      { '<leader>fw', group = '[w]ord' },
-      { '<leader>fc', group = '[C]urrent' },
       { '<leader>1', hidden = true, mode = 'n' },
       { '<leader>2', hidden = true, mode = 'n' },
       { '<leader>3', hidden = true, mode = 'n' },
@@ -31,10 +31,11 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>mr', desc = 'create [r]ow below' },
       { '<leader>mR', desc = 'create [R]ow above' },
       { '<leader>mc', desc = 'create [c]olumn after' },
-      { '<leader>mC', desc = 'create [C]olumn befor' },
+      { '<leader>mC', desc = 'create [C]olumn before' },
       { '<leader>mdr', desc = 'delete row' },
       { '<leader>mdc', desc = 'delete column' },
       { '<leader>mu', desc = 'update numbering' },
+      { '<leader>mt', desc = 'create table' },
     },
   },
 }

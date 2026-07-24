@@ -91,11 +91,23 @@ return {
 
       -- Sources: keep your defaults; load dictionary only for markdown via plugin ft above
       sources = {
-        default = { 'lsp', 'path', 'snippets', 'buffer' },
-        per_filetype = {
-          lua = { inherit_defaults = true, 'lazydev' },
-          markdown = { inherit_defaults = true, 'dictionary' },
-        },
+        default = function()
+          if vim.bo.filetype == 'markdown' then
+            local ok, node = pcall(vim.treesitter.get_node)
+            if ok and node then
+              while node do
+                if node:type() == 'pipe_table' or node:type() == 'table' then
+                  return {}
+                end
+                node = node:parent()
+              end
+            end
+            return { 'lsp', 'path', 'snippets', 'buffer', 'dictionary' }
+          elseif vim.bo.filetype == 'lua' then
+            return { 'lsp', 'path', 'snippets', 'buffer', 'lazydev' }
+          end
+          return { 'lsp', 'path', 'snippets', 'buffer' }
+        end,
         providers = {
           -- keep LazyDev provider
           lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
@@ -163,8 +175,48 @@ return {
         },
 
         -- Prefer snippet placeholders over menu navigation for Tab
-        ['<Tab>'] = { 'snippet_forward', 'select_next', 'fallback' },
-        ['<S-Tab>'] = { 'snippet_backward', 'select_prev', 'fallback' },
+        ['<Tab>'] = {
+          'snippet_forward',
+          function()
+            if vim.bo.filetype == 'markdown' then
+              local ok, node = pcall(vim.treesitter.get_node)
+              if ok and node then
+                while node do
+                  if node:type() == 'pipe_table' or node:type() == 'table' then
+                    vim.schedule(function()
+                      vim.cmd('MkdnTableNextCell')
+                    end)
+                    return true
+                  end
+                  node = node:parent()
+                end
+              end
+            end
+          end,
+          'select_next',
+          'fallback',
+        },
+        ['<S-Tab>'] = {
+          'snippet_backward',
+          function()
+            if vim.bo.filetype == 'markdown' then
+              local ok, node = pcall(vim.treesitter.get_node)
+              if ok and node then
+                while node do
+                  if node:type() == 'pipe_table' or node:type() == 'table' then
+                    vim.schedule(function()
+                      vim.cmd('MkdnTablePrevCell')
+                    end)
+                    return true
+                  end
+                  node = node:parent()
+                end
+              end
+            end
+          end,
+          'select_prev',
+          'fallback',
+        },
 
         -- Scroll docs if open
         ['<C-b>'] = { 'scroll_documentation_up', 'fallback' },

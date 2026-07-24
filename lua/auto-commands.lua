@@ -58,33 +58,23 @@ api.nvim_create_autocmd('BufWritePre', {
 -------------------------------------------------------------------------------
 
 -- Callback to format and save markdown files
-local function autosave_and_format_markdown(args)
-  local ok, conform = pcall(require, 'conform')
-  if ok then
-    conform.format { bufnr = args.buf }
-  end
-  cmd 'silent! write'
-end
+-- local function autosave_and_format_markdown(args)
+--   local ok, conform = pcall(require, 'conform')
+--   if ok then
+--     conform.format { bufnr = args.buf }
+--   end
+--   cmd 'silent! write'
+-- end
+--
+-- -- Autosave & format markdown on leaving Insert mode
+-- api.nvim_create_autocmd('InsertLeave', {
+--   group = augroups.user_markdown_autosave,
+--   pattern = '*.md,*.markdown',
+--   callback = autosave_and_format_markdown,
+--   desc = 'Autosave & format *.md, *.markdown on InsertLeave',
+-- })
 
--- Autosave & format markdown on leaving Insert mode
-api.nvim_create_autocmd('InsertLeave', {
-  group = augroups.user_markdown_autosave,
-  pattern = '*.md,*.markdown',
-  callback = autosave_and_format_markdown,
-  desc = 'Autosave & format *.md, *.markdown on InsertLeave',
-})
 
--- General BufWritePre autoformatting (for manual saves)
-api.nvim_create_autocmd('BufWritePre', {
-  pattern = '*',
-  callback = function(args)
-    local ok, conform = pcall(require, 'conform')
-    if ok then
-      conform.format { bufnr = args.buf }
-    end
-  end,
-  desc = 'Autoformat on BufWritePre (general)',
-})
 
 -- Markdown specific foldexpr function
 function M.markdown_foldexpr()
@@ -128,8 +118,8 @@ api.nvim_create_autocmd('FileType', {
   pattern = { 'markdown' },
   group = augroups.user_markdown_folding,
   callback = function(args)
-    vim.api.nvim_buf_set_option(args.buf, 'foldmethod', 'expr')
-    vim.api.nvim_buf_set_option(args.buf, 'foldexpr', "v:lua.require('auto-commands').markdown_foldexpr()")
+    vim.wo.foldmethod = 'expr'
+    vim.wo.foldexpr = "v:lua.require('auto-commands').markdown_foldexpr()"
     opt_local.fillchars:append { eob = ' ' }
     cmd 'normal! zM'
     cmd 'normal! zr'
@@ -141,9 +131,9 @@ api.nvim_create_autocmd('BufReadPost', {
   pattern = { '*.md', '*.markdown' },
   group = augroups.user_markdown_folding,
   callback = function(args)
-    vim.api.nvim_buf_set_option(args.buf, 'filetype', 'markdown')
-    vim.api.nvim_buf_set_option(args.buf, 'foldmethod', 'expr')
-    vim.api.nvim_buf_set_option(args.buf, 'foldexpr', "v:lua.require('auto-commands').markdown_foldexpr()")
+    vim.bo[args.buf].filetype = 'markdown'
+    vim.wo.foldmethod = 'expr'
+    vim.wo.foldexpr = "v:lua.require('auto-commands').markdown_foldexpr()"
     opt_local.fillchars:append { eob = ' ' }
     cmd 'normal! zM'
     cmd 'normal! zr'

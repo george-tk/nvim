@@ -5,12 +5,12 @@ return {
   cmd = { 'ConformInfo' },
   keys = {
     {
-      '<leader>f',
+      '<leader>=',
       function()
         require('conform').format { async = true, lsp_format = 'fallback' }
       end,
       mode = 'n',
-      desc = '[f]ormat buffer',
+      desc = 'format buffer',
     },
   },
   opts = {

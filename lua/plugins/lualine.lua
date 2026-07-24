@@ -106,7 +106,7 @@ return {
       tabline = nil,
       winbar = nil,
       inactive_winbar = nil,
-      extensions = { 'quickfix', 'man', 'neo-tree' }, -- load small integrations when those filetypes open
+      extensions = { 'quickfix', 'man' }, -- load small integrations when those filetypes open
     }
   end,
 }
