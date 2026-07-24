@@ -24,6 +24,7 @@ local augroups = {
   user_markdown_autosave = api.nvim_create_augroup('UserMarkdownAutosave', { clear = true }),
   user_markdown_folding = api.nvim_create_augroup('UserMarkdownFolding', { clear = true }),
   user_render_markdown_fixes = api.nvim_create_augroup('UserRenderMarkdownFixes', { clear = true }),
+  user_cursorline = api.nvim_create_augroup('UserCursorLine', { clear = true }),
 }
 
 ---
@@ -53,26 +54,38 @@ api.nvim_create_autocmd('BufWritePre', {
   end,
 })
 
+-- Disable cursorline in Insert Mode (for smoothness while typing)
+api.nvim_create_autocmd('InsertEnter', {
+  desc = 'Disable cursorline in insert mode',
+  group = augroups.user_cursorline,
+  callback = function()
+    vim.wo.cursorline = false
+  end,
+})
+
+api.nvim_create_autocmd('InsertLeave', {
+  desc = 'Enable cursorline on insert leave',
+  group = augroups.user_cursorline,
+  callback = function()
+    vim.wo.cursorline = true
+  end,
+})
+
 ---
 -- Markdown Specific Autocommands & Functions
 -------------------------------------------------------------------------------
 
--- Callback to format and save markdown files
--- local function autosave_and_format_markdown(args)
---   local ok, conform = pcall(require, 'conform')
---   if ok then
---     conform.format { bufnr = args.buf }
---   end
---   cmd 'silent! write'
--- end
---
--- -- Autosave & format markdown on leaving Insert mode
--- api.nvim_create_autocmd('InsertLeave', {
---   group = augroups.user_markdown_autosave,
---   pattern = '*.md,*.markdown',
---   callback = autosave_and_format_markdown,
---   desc = 'Autosave & format *.md, *.markdown on InsertLeave',
--- })
+-- Autosave markdown files silently on InsertLeave and TextChanged (noautocmd prevents format on save lag)
+api.nvim_create_autocmd({ 'InsertLeave', 'TextChanged' }, {
+  group = augroups.user_markdown_autosave,
+  pattern = { '*.md', '*.markdown' },
+  callback = function()
+    if vim.bo.modified then
+      vim.cmd('noautocmd silent! write')
+    end
+  end,
+  desc = 'Autosave markdown files on change/InsertLeave',
+})
 
 
 
@@ -81,9 +94,16 @@ function M.markdown_foldexpr()
   local lnum = vim.v.lnum
   local line = fn.getline(lnum)
 
-  local syn_name = fn.synIDattr(fn.synID(lnum, 1, 1), 'name')
-  if syn_name and (syn_name:match 'markdownCodeBlock' or syn_name:match 'markdownCode') then
-    return '='
+  -- Treesitter-native check: Is the current line in a fenced code block?
+  local ok, node = pcall(vim.treesitter.get_node, { pos = { lnum - 1, 0 } })
+  if ok and node then
+    local current = node
+    while current do
+      if current:type() == 'fenced_code_block' then
+        return '='
+      end
+      current = current:parent()
+    end
   end
 
   if line:match '^%s*[-*+>]%s' then
@@ -121,6 +141,17 @@ api.nvim_create_autocmd('FileType', {
     vim.wo.foldmethod = 'expr'
     vim.wo.foldexpr = "v:lua.require('auto-commands').markdown_foldexpr()"
     opt_local.fillchars:append { eob = ' ' }
+
+    -- Local options for Markdown note taking
+    opt_local.wrap = true          -- Wrap long lines of text
+    opt_local.linebreak = true     -- Break lines at word boundaries instead of mid-character
+    opt_local.conceallevel = 2     -- Conceal raw formatting syntax (for render-markdown.nvim)
+    opt_local.spell = true         -- Guarantee spellchecking is enabled for notes
+
+    -- Visual line navigation limited strictly to markdown files
+    vim.keymap.set({ 'n', 'x' }, 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true, buffer = args.buf })
+    vim.keymap.set({ 'n', 'x' }, 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true, buffer = args.buf })
+
     cmd 'normal! zM'
     cmd 'normal! zr'
   end,
