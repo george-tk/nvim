@@ -16,5 +16,11 @@ return {
       conditionals = {},
     },
     auto_integrations = true,
+    custom_highlights = function(colors)
+      return {
+        LineNr = { fg = colors.overlay2 },
+        CursorLineNr = { fg = colors.lavender, bold = true },
+      }
+    end,
   },
 }
