@@ -85,3 +85,9 @@ o.fillchars = { -- Fold fill characters
 -------------------------------------------------------------------------------
 g.have_nerd_font = true -- Nerd Font flag
 g.markdown_recommended_style = 0 -- prevents rewrite of markdown style
+
+---
+-- Custom Window Title
+-------------------------------------------------------------------------------
+o.title = true -- Enable window title setting
+o.titlestring = "%{expand('%:t') == '' ? '[No Name]' : expand('%:p:h:t') . ': ' . expand('%:t')}"
