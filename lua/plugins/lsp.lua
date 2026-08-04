@@ -83,62 +83,44 @@ return {
       end
 
       -----------------------------------------------------------------------
-      -- on_attach: cheap defaults, large-file safeguards, lean highlights
+      -- LspAttach: Inlay hints, document highlight, buffer keymaps
       -----------------------------------------------------------------------
-      local function on_attach(client, bufnr)
-        -- Large-file: disable expensive features
-        if not small_file(bufnr) then
-          if client.server_capabilities.semanticTokensProvider then
-            client.server_capabilities.semanticTokensProvider = nil
-          end
-          -- If you prefer inlay hints off for big files:
-          if vim.lsp.inlay_hint then
-            vim.lsp.inlay_hint.enable(bufnr, false)
-          end
-        end
+      vim.api.nvim_create_autocmd('LspAttach', {
+        group = vim.api.nvim_create_augroup('UserLspAttachAutocmd', { clear = true }),
+        callback = function(event)
+          local client = vim.lsp.get_client_by_id(event.data.client_id)
+          if not client then return end
+          local bufnr = event.buf
 
-        -- Helper: client supports method?
-        local function supports(method)
-          if vim.fn.has 'nvim-0.11' == 1 then
-            return client:supports_method(method, bufnr)
-          else
-            return client.supports_method(method, { bufnr = bufnr })
+          -- Inlay hints: always automatically enabled
+          if client.server_capabilities.inlayHintProvider and small_file(bufnr) then
+            vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
           end
-        end
 
-        -- Document highlight (CursorHold only, not in Insert)
-        if supports(vim.lsp.protocol.Methods.textDocument_documentHighlight) and small_file(bufnr) then
-          local aug = vim.api.nvim_create_augroup('lsp-doc-hl-' .. bufnr, { clear = true })
-          -- Increase updatetime a bit to reduce churn if you want:
-          -- vim.opt_local.updatetime = 500
-          vim.api.nvim_create_autocmd('CursorHold', {
-            buffer = bufnr,
-            group = aug,
-            callback = vim.lsp.buf.document_highlight,
-          })
-          vim.api.nvim_create_autocmd({ 'CursorMoved', 'BufLeave' }, {
-            buffer = bufnr,
-            group = aug,
-            callback = vim.lsp.buf.clear_references,
-          })
-          vim.api.nvim_create_autocmd('LspDetach', {
-            buffer = bufnr,
-            group = aug,
-            callback = function()
-              vim.lsp.buf.clear_references()
-              pcall(vim.api.nvim_del_augroup_by_id, aug)
-            end,
-          })
-        end
-
-        -- Optional: toggle inlay hints
-        if supports(vim.lsp.protocol.Methods.textDocument_inlayHint) then
-          vim.keymap.set('n', '<leader>th', function()
-            local enabled = vim.lsp.inlay_hint.is_enabled { bufnr = bufnr }
-            vim.lsp.inlay_hint.enable(bufnr, not enabled)
-          end, { buffer = bufnr, desc = 'LSP: [T]oggle Inlay [H]ints' })
-        end
-      end
+          -- Document highlight (CursorHold only, not in Insert)
+          if client.server_capabilities.documentHighlightProvider and small_file(bufnr) then
+            local aug = vim.api.nvim_create_augroup('lsp-doc-hl-' .. bufnr, { clear = true })
+            vim.api.nvim_create_autocmd('CursorHold', {
+              buffer = bufnr,
+              group = aug,
+              callback = vim.lsp.buf.document_highlight,
+            })
+            vim.api.nvim_create_autocmd({ 'CursorMoved', 'BufLeave' }, {
+              buffer = bufnr,
+              group = aug,
+              callback = vim.lsp.buf.clear_references,
+            })
+            vim.api.nvim_create_autocmd('LspDetach', {
+              buffer = bufnr,
+              group = aug,
+              callback = function()
+                vim.lsp.buf.clear_references()
+                pcall(vim.api.nvim_del_augroup_by_id, aug)
+              end,
+            })
+          end
+        end,
+      })
 
       -----------------------------------------------------------------------
       -- Servers
@@ -153,7 +135,12 @@ return {
           settings = {
             Lua = {
               completion = { callSnippet = 'Replace' },
-              -- diagnostics = { disable = { 'missing-fields' } },
+              hint = {
+                enable = true,
+                paramName = 'All',
+                paramType = true,
+                setType = true,
+              },
               workspace = { checkThirdParty = false },
               telemetry = { enable = false },
             },
@@ -176,12 +163,20 @@ return {
       }
 
       -----------------------------------------------------------------------
-      -- Ensure tools via Mason (one-time), then set up servers via handlers
+      -- Ensure tools via Mason (automatically installed on startup)
       -----------------------------------------------------------------------
       local ensure = vim.tbl_keys(servers)
-      vim.list_extend(ensure, { 'stylua' }) -- formatter for Lua
+      vim.list_extend(ensure, {
+        'stylua',        -- Lua Formatter
+        'prettier',      -- Markdown, JSON, HTML, CSS Formatter
+        'sql-formatter', -- SQL Formatter
+      })
 
-      require('mason-tool-installer').setup { ensure_installed = ensure }
+      require('mason-tool-installer').setup {
+        ensure_installed = ensure,
+        auto_update = false,
+        run_on_start = true,
+      }
 
       require('mason-lspconfig').setup {
         ensure_installed = {}, -- we install via mason-tool-installer

@@ -5,12 +5,12 @@ return {
   },
   opts = {}, -- This automatically configures and runs setup()
   keys = {
-    { '<leader>tt', ':TodoList<CR>', desc = 'ToDo List' },
+    { '<leader>tt', ':TodoList<CR>', desc = 'Todo List' },
     { '<leader>tb', ':TodoBoard<CR>', desc = 'Todo Board' },
-    { '<leader>tn', ':TodoNew<CR>', desc = 'New ToDo' },
-    { '<leader>tN', ':TodoLinkNew<CR>', desc = 'New Todo + Refference' },
-    { '<leader>tr', ':TodoLink<CR>', desc = 'Refference Todo' },
+    { '<leader>tn', ':TodoNew<CR>', desc = 'New Todo' },
+    { '<leader>tN', ':TodoLinkNew<CR>', desc = 'New Todo Reference' },
+    { '<leader>tr', ':TodoLink<CR>', desc = 'Reference Todo' },
     { '<leader>tj', ':TodoJump<CR>', desc = 'Jump to Todo' },
-    { '<leader>tl', ':TodoLog<CR>', desc = 'Log' },
+    { '<leader>tl', ':TodoLog<CR>', desc = 'Todo Log' },
   },
 }

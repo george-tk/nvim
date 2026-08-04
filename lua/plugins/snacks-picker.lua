@@ -1,142 +1,174 @@
 return {
   'folke/snacks.nvim',
-  ---@type snacks.Config
+  priority = 1000,
+  lazy = false,
   opts = {
     picker = {
+      enabled = true,
       win = {
         input = {
           keys = {
-            -- to close the picker on ESC instead of going to normal mode,
-            ['<Esc>'] = { 'close', mode = { 'n', 'i' } },
             ['<Tab>'] = { 'list_down', mode = { 'i', 'n' } },
             ['<S-Tab>'] = { 'list_up', mode = { 'i', 'n' } },
+            ['<C-j>'] = { function() vim.cmd('stopinsert'); _G.BottomPanel.toggle_active() end, mode = { 'i', 'n' }, desc = 'Bottom Output' },
+            ['<M-h>'] = { function() _G.smart_resize_width(-3) end, mode = { 'i', 'n' }, desc = 'Expand Explorer' },
+            ['<M-l>'] = { function() _G.smart_resize_width(3) end, mode = { 'i', 'n' }, desc = 'Shrink Explorer' },
+          },
+        },
+        list = {
+          keys = {
+            ['<Tab>'] = { 'list_down', mode = { 'n', 'x' } },
+            ['<S-Tab>'] = { 'list_up', mode = { 'n', 'x' } },
+            ['<C-j>'] = { function() _G.BottomPanel.toggle_active() end, mode = { 'n' }, desc = 'Bottom Output' },
+            ['<M-h>'] = { function() _G.smart_resize_width(-3) end, mode = { 'n' }, desc = 'Expand Explorer' },
+            ['<M-l>'] = { function() _G.smart_resize_width(3) end, mode = { 'n' }, desc = 'Shrink Explorer' },
           },
         },
       },
+      sources = {
+        files = { hidden = true, ignored = true },
+        grep = { hidden = true, ignored = true },
+      },
     },
+    explorer = { enabled = true },
+    dashboard = { enabled = true },
+    terminal = { enabled = true },
   },
   keys = {
+    -- Meta Picker & Notifications
+    {
+      '<leader>fa',
+      function()
+        Snacks.picker.pickers()
+      end,
+      desc = 'All Pickers',
+    },
+    {
+      '<leader>fn',
+      function()
+        Snacks.picker.notifications()
+      end,
+      desc = 'Notifications',
+    },
+
+    -- Core File & Buffer Pickers
     {
       '<leader>ff',
       function()
-        Snacks.picker.files {
-          filter = {
-            paths = {
-              [vim.fn.getcwd()] = true,
-            },
-          },
-        }
+        Snacks.picker.files()
       end,
-      desc = 'files',
+      desc = 'Find Files',
     },
     {
       '<leader>fb',
       function()
         Snacks.picker.buffers()
       end,
-      desc = 'buffers',
-    },
-    {
-      '<leader>ss',
-      function()
-        Snacks.picker.spelling {
-          layout = { layout = { relative = 'cursor', height = 5, min_height = 10, min_width = 18, width = 0.1 }, backdrop = false },
-        }
-      end,
-      desc = 'spelling suggestion',
+      desc = 'Open Buffers',
     },
     {
       '<leader>fr',
       function()
-        Snacks.picker.resume()
+        Snacks.picker.recent()
       end,
-      desc = 'resume',
+      desc = 'Recent Files',
+    },
+    {
+      '<leader>fc',
+      function()
+        Snacks.picker.files { cwd = vim.fn.stdpath 'config' }
+      end,
+      desc = 'Neovim Config',
+    },
+    {
+      '<leader>fp',
+      function()
+        Snacks.picker.projects()
+      end,
+      desc = 'Projects',
     },
     {
       '<leader>fh',
       function()
         Snacks.picker.help()
       end,
-      desc = 'help',
+      desc = 'Help Tags',
     },
     {
       '<leader>fk',
       function()
-        Snacks.picker.keymaps { layout = { preview = false } }
+        Snacks.picker.keymaps()
       end,
-      desc = 'keymaps',
+      desc = 'Keymaps',
     },
+
+    -- Word & Grep Pickers (All Uniform 2-Key Length, Zero Prefix Collisions)
     {
-      '<leader>fp',
-      function()
-        Snacks.picker.pickers()
-      end,
-      desc = 'pickers',
-    },
-    {
-      '<leader>fwb',
-      function()
-        Snacks.picker.lines()
-      end,
-      desc = 'current buffer',
-    },
-    {
-      '<leader>fwB',
-      function()
-        Snacks.picker.grep_buffers()
-      end,
-      desc = 'buffers',
-    },
-    {
-      '<leader>fwd',
+      '<leader>fg',
       function()
         Snacks.picker.grep()
       end,
-      desc = 'directory',
+      desc = 'Word in Workspace',
     },
     {
-      '<leader>fcw',
+      '<leader>fl',
+      function()
+        Snacks.picker.lines()
+      end,
+      desc = 'Word in Current Buffer',
+    },
+    {
+      '<leader>fo',
+      function()
+        Snacks.picker.grep_buffers()
+      end,
+      desc = 'Word in Open Buffers',
+    },
+    {
+      '<leader>fw',
       function()
         Snacks.picker.grep_word()
       end,
-      desc = 'word',
-      mode = { 'n', 'x' },
+      desc = 'Word Under Cursor',
     },
+
+    -- Diagnostics Picker
     {
-      '<leader>fcd',
+      '<leader>fd',
       function()
-        Snacks.picker.lsp_definitions()
+        Snacks.picker.diagnostics()
       end,
-      desc = 'definition',
+      desc = 'Diagnostics',
     },
+
+    -- Spelling Picker (Autocomplete-style clean dropdown at cursor with zero prompt icons or counts)
     {
-      '<leader>fcD',
+      '<leader>ss',
       function()
-        Snacks.picker.lsp_declarations()
+        Snacks.picker.spelling {
+          title = '',
+          prompt = '',
+          icon = '',
+          layout = {
+            backdrop = false,
+            layout = {
+              box = 'vertical',
+              backdrop = false,
+              relative = 'cursor',
+              row = 1,
+              col = 0,
+              width = 22,
+              min_width = 18,
+              height = 7,
+              min_height = 5,
+              border = 'none',
+              { win = 'input', height = 1, border = 'none', title = '', footer = '' },
+              { win = 'list', border = 'none' },
+            },
+          },
+        }
       end,
-      desc = 'declaration',
-    },
-    {
-      '<leader>fcr',
-      function()
-        Snacks.picker.lsp_references()
-      end,
-      nowait = true,
-      desc = 'references',
-    },
-    {
-      '<leader>fci',
-      function()
-        Snacks.picker.lsp_implementations()
-      end,
-      desc = 'implimentation',
-    },
-    {
-      '<leader>fct',
-      function()
-        Snacks.picker.lsp_type_definitions()
-      end,
-      desc = 'type',
+      desc = 'Spelling Suggestions',
     },
   },
 }

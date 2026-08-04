@@ -52,7 +52,7 @@ return {
               vim.notify("Invalid table dimensions. Use 'cols x rows' (e.g., 3x2) or 'cols rows' (e.g., 3 2)", vim.log.levels.ERROR)
             end
           end)
-        end, { buffer = bufnr, desc = 'table' })
+        end, { buffer = bufnr, desc = 'Create Table' })
       end,
       modules = {
         bib = false,
@@ -70,7 +70,7 @@ return {
         completion = false,
       },
       mappings = {
-        MkdnEnter = { { 'n', 'v' }, '<CR>' },
+        MkdnEnter = { 'i', '<CR>' },
         MkdnGoBack = false,
         MkdnGoForward = false,
         MkdnMoveSource = false,
@@ -95,17 +95,17 @@ return {
         MkdnNewListItemAboveInsert = false,
         MkdnExtendList = false,
         MkdnUpdateNumbering = { 'n', '<leader>mu' },
-        MkdnTableNextCell = { 'n', '<Tab>' },
-        MkdnTablePrevCell = { 'n', '<S-Tab>' },
+        MkdnTableNextCell = false,
+        MkdnTablePrevCell = false,
         MkdnTableCellNewLine = { 'i', '<M-CR>' },
         MkdnTableNextRow = false,
         MkdnTablePrevRow = false,
         MkdnTableNewRowBelow = { 'n', '<leader>mr' },
-        MkdnTableNewRowAbove = { 'n', '<leader>mR' },
+        MkdnTableNewRowAbove = { 'n', '<leader>ma' },
         MkdnTableNewColAfter = { 'n', '<leader>mc' },
-        MkdnTableNewColBefore = { 'n', '<leader>mC' },
-        MkdnTableDeleteRow = { 'n', '<leader>mdr' },
-        MkdnTableDeleteCol = { 'n', '<leader>mdc' },
+        MkdnTableNewColBefore = { 'n', '<leader>mb' },
+        MkdnTableDeleteRow = { 'n', '<leader>md' },
+        MkdnTableDeleteCol = { 'n', '<leader>mx' },
         MkdnTableAlignLeft = false,
         MkdnTableAlignRight = false,
         MkdnTableAlignCenter = false,

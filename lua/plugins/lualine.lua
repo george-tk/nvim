@@ -96,8 +96,22 @@ return {
         },
         lualine_c = { buffers_component },
 
-        -- Keep the right side empty for now (cheaper to render)
-        lualine_x = {},
+        -- Show active database when editing SQL buffers
+        lualine_x = {
+          {
+            function()
+              local db_name = vim.b.db_name
+              if not db_name and _G.DatabaseUtils and _G.DatabaseUtils.current_db_name then
+                db_name = _G.DatabaseUtils.current_db_name
+              end
+              return db_name and ('󰆼 ' .. db_name) or ''
+            end,
+            cond = function()
+              return vim.bo.filetype == 'sql' or vim.bo.filetype == 'mysql' or vim.bo.filetype == 'plsql'
+            end,
+            color = { fg = '#fab387', gui = 'bold' },
+          },
+        },
         lualine_y = {},
         lualine_z = {},
       },

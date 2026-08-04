@@ -1,256 +1,384 @@
-# kickstart.nvim
+# Personal Neovim Configuration
 
-## Introduction
+A modern, fast, modular Neovim IDE configuration powered by [`lazy.nvim`](https://github.com/folke/lazy.nvim), [`snacks.nvim`](https://github.com/folke/snacks.nvim), [`vim-dadbod-ui`](https://github.com/kristijanhusak/vim-dadbod-ui), [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim), [`blink.cmp`](https://github.com/saghen/blink.cmp), and [`nvim-origami`](https://github.com/chrisgrieser/nvim-origami).
 
-A starting point for Neovim that is:
+---
 
-- Small
-- Single-file
-- Completely Documented
+## 📦 Prerequisites & Installation
 
-**NOT** a Neovim distribution, but instead a starting point for your configuration.
+### 1. Neovim Installation (>= 0.10.0 Required)
 
-## Installation
+This configuration utilizes Neovim 0.10+ native features (LSP inlay hints, diagnostics structure, `vim.uv`, Treesitter foldexpr, and modern plugin APIs).
 
-### Install Neovim
+| Operating System | Installation Method / Command |
+| :--- | :--- |
+| **Ubuntu / Debian** | `sudo add-apt-repository ppa:neovim-ppa/unstable -y && sudo apt update && sudo apt install -y neovim`<br>*(Or download the official AppImage below)* |
+| **Arch Linux** | `sudo pacman -S neovim` |
+| **Fedora** | `sudo dnf install neovim` |
+| **macOS (Homebrew)** | `brew install neovim` |
+| **Windows (winget)** | `winget install Neovim.Neovim` |
+| **Universal Linux (AppImage)** | ```bash<br>curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage<br>chmod u+x nvim-linux-x86_64.appimage<br>sudo mv nvim-linux-x86_64.appimage /usr/local/bin/nvim<br>``` |
 
-Kickstart.nvim targets _only_ the latest
-['stable'](https://github.com/neovim/neovim/releases/tag/stable) and latest
-['nightly'](https://github.com/neovim/neovim/releases/tag/nightly) of Neovim.
-If you are experiencing issues, please make sure you have the latest versions.
-
-### Install External Dependencies
-
-External Requirements:
-
-- Basic utils: `git`, `make`, `unzip`, C Compiler (`gcc`)
-- [ripgrep](https://github.com/BurntSushi/ripgrep#installation)
-- Clipboard tool (xclip/xsel/win32yank or other depending on platform)
-- A [Nerd Font](https://www.nerdfonts.com/): optional, provides various icons
-  - if you have it set `vim.g.have_nerd_font` in `init.lua` to true
-- Language Setup:
-  - If you want to write Typescript, you need `npm`
-  - If you want to write Golang, you will need `go`
-  - etc.
-
-The following commands may help
-
+Verify your Neovim version:
 ```bash
-apt-get install ripgrep
-apt install -y curl git
-apt install zig
-apt install gcc
-apt install nodejs
-apt install npm
-apt install fd-find
-curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
-tar -C /opt -xzf nvim-linux64.tar.gz
+nvim --version # Must be >= 0.10.0
 ```
 
-> **NOTE**
-> See [Install Recipes](#Install-Recipes) for additional Windows and Linux specific notes
-> and quick install snippets
+---
 
-### Install Kickstart
+### 2. External Dependencies
 
-> **NOTE** > [Backup](#FAQ) your previous configuration (if any exists)
+To enable all features (fuzzy pickers, code completion, Tree-sitter parsers, database tooling, formatters, and AI assistance), install the following tools:
 
-Neovim's configurations are located under the following paths, depending on your OS:
+| Tool | Purpose in Configuration |
+| :--- | :--- |
+| **`git`** | Plugin management via `lazy.nvim`, `neogit`, `diffview`, and `gitsigns` |
+| **`make` & `gcc` / `clang`** | C compiler for Treesitter parsers and LuaSnip regex extensions |
+| **`ripgrep` (`rg`)** | Fast workspace search & live grep in `snacks.picker` |
+| **`fd` / `fd-find`** | Fast file indexing and image search in `snacks.picker` / `snacks.image` |
+| **`unzip`, `tar`, `curl`** | Required by `mason.nvim` to download and unpack LSPs and formatters |
+| **`nodejs` & `npm` / `pnpm`** | Required for Mason formatters & LSPs (`prettier`, `sql-formatter`, etc.) |
+| **`python3` & `pip`** | Python language support and linters |
+| **`sqlite3`** | SQLite CLI engine for `vim-dadbod` and local database testing |
+| **`opencode` CLI** *(Optional)* | AI coding assistant integration (`opencode.nvim`) |
 
-| OS                   | PATH                                      |
-| :------------------- | :---------------------------------------- |
-| Linux, MacOS         | `$XDG_CONFIG_HOME/nvim`, `~/.config/nvim` |
-| Windows (cmd)        | `%localappdata%\nvim\`                    |
-| Windows (powershell) | `$env:LOCALAPPDATA\nvim\`                 |
+#### One-Liner Dependency Installation by OS:
 
-#### Recommended Step
+- **Ubuntu / Debian:**
+  ```bash
+  sudo apt update && sudo apt install -y \
+    git \
+    build-essential \
+    ripgrep \
+    fd-find \
+    unzip \
+    curl \
+    nodejs \
+    npm \
+    python3 \
+    python3-pip \
+    sqlite3
 
-[Fork](https://docs.github.com/en/get-started/quickstart/fork-a-repo) this repo
-so that you have your own copy that you can modify, then install by cloning the
-fork to your machine using one of the commands below, depending on your OS.
+  # Ubuntu packages fd as fdfind; symlink to fd so Neovim/Snacks can discover it:
+  mkdir -p ~/.local/bin
+  ln -sf $(which fdfind) ~/.local/bin/fd
+  ```
 
-> **NOTE**
-> Your fork's url will be something like this:
-> `https://github.com/<your_github_username>/kickstart.nvim.git`
+- **Arch Linux:**
+  ```bash
+  sudo pacman -S --needed \
+    git \
+    base-devel \
+    ripgrep \
+    fd \
+    unzip \
+    curl \
+    nodejs \
+    npm \
+    python \
+    python-pip \
+    sqlite
+  ```
 
-You likely want to remove `lazy-lock.json` from your fork's `.gitignore` file
-too - it's ignored in the kickstart repo to make maintenance easier, but it's
-[recommmended to track it in version control](https://lazy.folke.io/usage/lockfile).
+- **Fedora:**
+  ```bash
+  sudo dnf install -y \
+    git \
+    @development-tools \
+    ripgrep \
+    fd-find \
+    unzip \
+    curl \
+    nodejs \
+    npm \
+    python3 \
+    python3-pip \
+    sqlite
+  ```
 
-#### Clone kickstart.nvim
+- **macOS (Homebrew):**
+  ```bash
+  brew install git ripgrep fd unzip curl node python sqlite
+  ```
 
-> **NOTE**
-> If following the recommended step above (i.e., forking the repo), replace
-> `nvim-lua` with `<your_github_username>` in the commands below
+- **Windows (winget / PowerShell):**
+  ```powershell
+  winget install Git.Git BurntSushi.ripgrep.MSVC sharkdp.fd OpenJS.NodeJS Python.Python.3 SQLite.SQLite
+  ```
 
-<details><summary> Linux and Mac </summary>
-
-```sh
-git clone https://github.com/nvim-lua/kickstart.nvim.git "${XDG_CONFIG_HOME:-$HOME/.config}"/nvim
+#### OpenCode AI CLI Installation (Optional for `<leader>a`):
+```bash
+curl -fsSL https://opencode.ai/install | bash
 ```
 
-</details>
+---
 
-<details><summary> Windows </summary>
+### 3. Nerd Font Installation (Required for UI Icons)
 
-If you're using `cmd.exe`:
+This configuration has `vim.g.have_nerd_font = true` enabled and relies on a [Nerd Font](https://www.nerdfonts.com/) (v3.0+) for:
+- File tree icons (`nvim-web-devicons`, Snacks Explorer)
+- Statusline glyphs and database indicators in `lualine` (`󰆼`)
+- Markdown rendered heading numerals and badges (`render-markdown.nvim`: `󰎤 `, `󰎧 `, `󰎪 `, etc.)
+- Database table and drawer node icons in `vim-dadbod-ui` (``, ``)
+- LSP diagnostic status signs (` `, ` `, ` `, ` `)
+- Blink completion item kind icons
 
+#### Recommended Fonts:
+- **JetBrainsMono Nerd Font** *(Recommended)*
+- **FiraCode Nerd Font**
+- **MesloLGS Nerd Font**
+- **Hack Nerd Font**
+
+#### Installation:
+
+- **Ubuntu / Debian:**
+  ```bash
+  # Ensure fontconfig and curl are installed
+  sudo apt install -y fontconfig curl
+
+  # Download and install JetBrainsMono Nerd Font
+  mkdir -p ~/.local/share/fonts
+  curl -fLO https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz
+  tar -xf JetBrainsMono.tar.xz -C ~/.local/share/fonts/
+  rm JetBrainsMono.tar.xz
+  fc-cache -fv
+  ```
+
+- **Arch Linux:**
+  ```bash
+  sudo pacman -S ttf-jetbrains-mono-nerd
+  ```
+
+- **Fedora:**
+  ```bash
+  sudo dnf copr enable che/nerd-fonts
+  sudo dnf install -y jetbrains-mono-nerd-fonts
+  ```
+
+- **macOS (Homebrew):**
+  ```bash
+  brew install --cask font-jetbrains-mono-nerd-font
+  ```
+
+- **Windows (winget):**
+  ```powershell
+  winget install --id=DEVCOM.JetBrainsMonoNerdFont
+  ```
+
+- **Universal Linux (Manual Download):**
+  Download any font archive from [Nerd Fonts Downloads](https://www.nerdfonts.com/font-downloads) or [GitHub Releases](https://github.com/ryanoasis/nerd-fonts/releases), extract `.ttf`/`.otf` files to `~/.local/share/fonts/`, and run `fc-cache -fv`.
+
+> [!IMPORTANT]
+> **Configure your Terminal Emulator**: After installing the font, open your terminal settings (Alacritty, Kitty, WezTerm, Ghostty, iTerm2, Windows Terminal, etc.) and set the font to **`JetBrainsMono Nerd Font`** (or your chosen Nerd Font).
+
+---
+
+### 4. Setup & First Launch
+
+#### 1. Backup any existing configuration:
+```bash
+# Backup Neovim config and cache
+mv ~/.config/nvim ~/.config/nvim.backup.$(date +%Y%m%d) 2>/dev/null
+mv ~/.local/share/nvim ~/.local/share/nvim.backup.$(date +%Y%m%d) 2>/dev/null
+mv ~/.local/state/nvim ~/.local/state/nvim.backup.$(date +%Y%m%d) 2>/dev/null
+mv ~/.cache/nvim ~/.cache/nvim.backup.$(date +%Y%m%d) 2>/dev/null
 ```
-git clone https://github.com/nvim-lua/kickstart.nvim.git "%localappdata%\nvim"
+
+#### 2. Clone this repository:
+```bash
+# Via HTTPS:
+git clone https://github.com/george-tk/nvim.git ~/.config/nvim
+
+# Or via SSH:
+# git clone git@github.com:george-tk/nvim.git ~/.config/nvim
 ```
 
-If you're using `powershell.exe`
-
-```
-git clone https://github.com/nvim-lua/kickstart.nvim.git "${env:LOCALAPPDATA}\nvim"
-```
-
-</details>
-
-### Post Installation
-
-Start Neovim
-
-```sh
+#### 3. Start Neovim:
+```bash
 nvim
 ```
 
-That's it! Lazy will install all the plugins you have. Use `:Lazy` to view
-current plugin status. Hit `q` to close the window.
+On first launch:
+1. **[`lazy.nvim`](https://github.com/folke/lazy.nvim)** will automatically clone and install all plugins.
+2. **[`mason-tool-installer`](https://github.com/WhoIsSethDaniel/mason-tool-installer.nvim)** will automatically install configured LSPs (`lua_ls`, `marksman`) and formatters (`stylua`, `prettier`, `sql-formatter`).
+3. **[`nvim-treesitter`](https://github.com/nvim-treesitter/nvim-treesitter)** will compile syntax parsers.
 
-Read through the `init.lua` file in your configuration folder for more
-information about extending and exploring Neovim. That also includes
-examples of adding popularly requested plugins.
-
-### Getting Started
-
-[The Only Video You Need to Get Started with Neovim](https://youtu.be/m8C0Cq9Uv9o)
-
-### FAQ
-
-- What should I do if I already have a pre-existing neovim configuration?
-  - You should back it up and then delete all associated files.
-  - This includes your existing init.lua and the neovim files in `~/.local`
-    which can be deleted with `rm -rf ~/.local/share/nvim/`
-- Can I keep my existing configuration in parallel to kickstart?
-  - Yes! You can use [NVIM_APPNAME](https://neovim.io/doc/user/starting.html#%24NVIM_APPNAME)`=nvim-NAME`
-    to maintain multiple configurations. For example, you can install the kickstart
-    configuration in `~/.config/nvim-kickstart` and create an alias:
-    ```
-    alias nvim-kickstart='NVIM_APPNAME="nvim-kickstart" nvim'
-    ```
-    When you run Neovim using `nvim-kickstart` alias it will use the alternative
-    config directory and the matching local directory
-    `~/.local/share/nvim-kickstart`. You can apply this approach to any Neovim
-    distribution that you would like to try out.
-- What if I want to "uninstall" this configuration:
-  - See [lazy.nvim uninstall](https://github.com/folke/lazy.nvim#-uninstalling) information
-- Why is the kickstart `init.lua` a single file? Wouldn't it make sense to split it into multiple files?
-  - The main purpose of kickstart is to serve as a teaching tool and a reference
-    configuration that someone can easily use to `git clone` as a basis for their own.
-    As you progress in learning Neovim and Lua, you might consider splitting `init.lua`
-    into smaller parts. A fork of kickstart that does this while maintaining the
-    same functionality is available here:
-    - [kickstart-modular.nvim](https://github.com/dam9000/kickstart-modular.nvim)
-  - Discussions on this topic can be found here:
-    - [Restructure the configuration](https://github.com/nvim-lua/kickstart.nvim/issues/218)
-    - [Reorganize init.lua into a multi-file setup](https://github.com/nvim-lua/kickstart.nvim/pull/473)
-
-### Install Recipes
-
-Below you can find OS specific install instructions for Neovim and dependencies.
-
-After installing all the dependencies continue with the [Install Kickstart](#Install-Kickstart) step.
-
-#### Windows Installation
-
-<details><summary>Windows with Microsoft C++ Build Tools and CMake</summary>
-Installation may require installing build tools and updating the run command for `telescope-fzf-native`
-
-See `telescope-fzf-native` documentation for [more details](https://github.com/nvim-telescope/telescope-fzf-native.nvim#installation)
-
-This requires:
-
-- Install CMake and the Microsoft C++ Build Tools on Windows
-
-```lua
-{'nvim-telescope/telescope-fzf-native.nvim', build = 'cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release && cmake --install build --prefix build' }
+#### 4. Verify System Health:
+Run the built-in health check to confirm all tools and dependencies are properly detected:
+```vim
+:checkhealth
 ```
 
-</details>
-<details><summary>Windows with gcc/make using chocolatey</summary>
-Alternatively, one can install gcc and make which don't require changing the config,
-the easiest way is to use choco:
+---
 
-1. install [chocolatey](https://chocolatey.org/install)
-   either follow the instructions on the page or use winget,
-   run in cmd as **admin**:
+## 🎯 Unified Spatial IDE Architecture
 
-```
-winget install --accept-source-agreements chocolatey.chocolatey
-```
-
-2. install all requirements using choco, exit previous cmd and
-   open a new one so that choco path is set, and run in cmd as **admin**:
-
-```
-choco install -y neovim git ripgrep wget fd unzip gzip mingw make
-```
-
-</details>
-<details><summary>WSL (Windows Subsystem for Linux)</summary>
-
-```
-wsl --install
-wsl
-sudo add-apt-repository ppa:neovim-ppa/unstable -y
-sudo apt update
-sudo apt install make gcc ripgrep unzip git xclip neovim
+```text
+┌────────────────────────────────────────────────────────┬──────────────────────────┐
+│                                                        │       Right Panel        │
+│                      Code Editor                       │         (<C-l>)          │
+│                        (Center)                        │                          │
+│                                                        │  1. File Explorer (25 w) │
+│                                                        │  2. DB Explorer (25 w)   │
+├────────────────────────────────────────────────────────┤  3. OpenCode AI (38% w)  │
+│            Unified Bottom Output (<C-j>)               │  (Only ONE ever visible) │
+│                                                        │                          │
+│  1. Persistent Multi-Terminals (<leader>/ / [N]<C-j>)  │  * DB Drawer is never    │
+│  2. SQL Query Results Table (<leader>bo / <leader>br)  │    split by queries      │
+│  (Strictly Center-Scoped, never splits the right side) │                          │
+└────────────────────────────────────────────────────────┴──────────────────────────┘
 ```
 
-</details>
+---
 
-#### Linux Install
+## 🧭 Spatial Navigation & Window Management
 
-<details><summary>Ubuntu Install Steps</summary>
+### 1. Panel Toggling
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<C-l>`** | **Right Panel** | Dynamically toggle active right tool (File Explorer, DBUI, AI) |
+| **`<C-j>`** | **Bottom Output** | Dynamically toggle active bottom tool (Terminal, SQL Results) |
+| **`<C-h>`** | **Editor Left** | Return directly to Code Editor from any side panel |
+| **`<C-k>`** | **Editor Up** | Navigate up from bottom output back into Code Editor |
 
-```
-sudo add-apt-repository ppa:neovim-ppa/unstable -y
-sudo apt update
-sudo apt install make gcc ripgrep unzip git xclip neovim
-```
+### 2. Resizing & Layout Reset (`Alt + hjkl` & `<C-w>=`)
+| Keybinding | Mode | Action |
+| :--- | :--- | :--- |
+| **`<M-h>`** | Normal, Insert, Terminal | **Shrink width** by 3 columns |
+| **`<M-l>`** | Normal, Insert, Terminal | **Expand width** by 3 columns |
+| **`<M-k>`** | Normal, Insert, Terminal | **Expand height** by 2 lines |
+| **`<M-j>`** | Normal, Insert, Terminal | **Shrink height** by 2 lines |
+| **`<C-w>=`** | Normal | **Reset all windows** to default IDE dimensions |
 
-</details>
-<details><summary>Debian Install Steps</summary>
+---
 
-```
-sudo apt update
-sudo apt install make gcc ripgrep unzip git xclip curl
+## 📂 Universal Folding & Explorer Controls (`h` / `l`)
 
-# Now we install nvim
-curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
-sudo rm -rf /opt/nvim-linux64
-sudo mkdir -p /opt/nvim-linux64
-sudo chmod a+rX /opt/nvim-linux64
-sudo tar -C /opt -xzf nvim-linux64.tar.gz
-
-# make it available in /usr/local/bin, distro installs to /usr/bin
-sudo ln -sf /opt/nvim-linux64/bin/nvim /usr/local/bin/
-```
-
-</details>
-<details><summary>Fedora Install Steps</summary>
-
-```
-sudo dnf install -y gcc make git ripgrep fd-find unzip neovim
+```text
+┌─────────────────────────┬──────────────────────────────────┬─────────────────────────────────┐
+│ Zone                    │ Left / Collapse (h)              │ Right / Expand (l / CR)         │
+├─────────────────────────┼──────────────────────────────────┼─────────────────────────────────┤
+│ 1. File Explorer        │ Collapse folder / go to parent   │ Expand / Open file              │
+│ 2. Database Explorer    │ Collapse table / go to parent    │ Expand / Open table query       │
+│ 3. Code Editor Buffer   │ Smart collapse fold (origami)    │ Smart expand fold (origami)     │
+└─────────────────────────┴──────────────────────────────────┴─────────────────────────────────┘
 ```
 
-</details>
+---
 
-<details><summary>Arch Install Steps</summary>
+## 📑 Complete Keymap Reference (All Uniform 2-Key, Zero Collisions)
 
-```
-sudo pacman -S --noconfirm --needed gcc make git ripgrep fd unzip neovim
-```
+### 🗂️ Buffer & Window Management
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>1` .. `<leader>9`** | Buffer Jump | Switch to buffer 1 through 9 instantly |
+| **`<leader><Tab>`** | Next Buffer | Navigate to next open buffer |
+| **`<leader><S-Tab>`** | Previous Buffer | Navigate to previous open buffer |
+| **`<leader>q`** | Close Buffer | Delete current buffer |
+| **`<leader>r`** | Alternate Buffer | Switch to previous alternate buffer |
+| **`<leader>d`** | Dashboard | Return to start dashboard |
+| **`<leader>z`** | Zen Mode | Toggle distraction-free centered Zen Mode |
+| **`<leader>e`** | File Explorer | Open/switch right panel to File Explorer (25 cols) |
+| **`<leader>/`** | Terminal | Open/toggle persistent Terminal at bottom |
+| **`<leader>=`** | Format Buffer | Run code formatter via Conform |
 
-</details>
+---
+
+### 🔍 Find & Search (`<leader>f`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>fa`** | **All Pickers** | **Meta-picker to search and launch any Snacks picker** |
+| **`<leader>fn`** | **Notifications** | **Find & view all notification history** |
+| **`<leader>ff`** | Find Files | Search files in workspace |
+| **`<leader>fb`** | Open Buffers | Search active buffers |
+| **`<leader>fg`** | Word in Workspace | Live grep across entire codebase |
+| **`<leader>fl`** | Word in Current Buffer | Fuzzy-find any word on the fly in active buffer |
+| **`<leader>fo`** | Word in Open Buffers | Grep across all open buffers |
+| **`<leader>fw`** | Word Under Cursor | Instant grep for symbol under cursor |
+| **`<leader>fc`** | Neovim Config | Jump to `~/.config/nvim` files |
+| **`<leader>fd`** | Diagnostics | Workspace errors, warnings, and lints |
+| **`<leader>fr`** | Recent Files | Search recently opened files |
+| **`<leader>fp`** | Projects | Project switcher |
+| **`<leader>fs`** | Sessions | Saved workspace sessions |
+| **`<leader>fi`** | Images | Search images in workspace |
+| **`<leader>fh`** | Help Tags | Neovim help documentation |
+| **`<leader>fk`** | Keymaps | Search all registered keymaps |
+
+---
+
+### 🗄️ Database Studio (`<leader>b`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>bq`** | Query Scratchpad | Open clean, blank SQL buffer connected to active DB |
+| **`<leader>br`** | Run Query | Execute statement under cursor, visual block, or file |
+| **`<leader>bo`** | Query Output | Show/hide Query Results Table without re-executing |
+| **`<leader>bc`** | Switch Database | Fast fuzzy picker to switch environments on the fly |
+| **`<leader>ba`** | Add Database | Interactive prompt to add a new connection URL |
+| **`<leader>bt`** | Database Explorer | Open Database Explorer drawer on the right panel (25 cols) |
+| **`<leader>bs`** | Save Query | Bookmark current query |
+
+---
+
+### 📝 Todo List (`<leader>t`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>tt`** | Todo List | Open interactive Todo List |
+| **`<leader>tb`** | Todo Board | Open Kanban-style Todo Board |
+| **`<leader>tn`** | New Todo | Create new Todo item |
+| **`<leader>tr`** | Reference Todo | Add reference to current code location |
+| **`<leader>tj`** | Jump to Todo | Jump directly to Todo location |
+| **`<leader>tl`** | Todo Log | View completed/archived log |
+
+---
+
+### 🌿 Git Suite (`<leader>g`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>gs`** | Status | Neogit status |
+| **`<leader>gc`** | Commit | Open commit editor |
+| **`<leader>gp`** | Push | Git Push *(lowercase)* |
+| **`<leader>gl`** | Pull | Git Pull *(lowercase)* |
+| **`<leader>gb`** | Branch | Branch switcher |
+| **`<leader>gd`** | Diff | Diffview open |
+
+---
+
+### 📊 Markdown Table Editing (`<leader>m`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>mt`** | Create Table | Prompt for table dimensions |
+| **`<leader>mr`** | Row Below | Insert row below cursor |
+| **`<leader>ma`** | Row Above | Insert row above cursor *(replaces Shift+R)* |
+| **`<leader>mc`** | Column Right | Insert column after cursor |
+| **`<leader>mb`** | Column Left | Insert column before cursor *(replaces Shift+C)* |
+| **`<leader>md`** | Delete Row | Delete current table row |
+| **`<leader>mx`** | Delete Column | Delete current table column |
+| **`<leader>mu`** | Update Numbering | Renumber ordered lists |
+| **`<leader>mi`** | Insert Image | Search image & insert relative markdown link |
+
+---
+
+### 🔤 Spelling (`<leader>s`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>st`** | Spelling Toggle | Toggle spell check on/off *(replaces Shift+S)* |
+| **`<leader>ss`** | Spelling Suggestions | Open picker suggestions |
+| **`<leader>sn`** | Next Spell Error | Jump to next error |
+| **`<leader>sp`** | Previous Spell Error | Jump to previous error |
+
+---
+
+### 🤖 OpenCode AI (`<leader>a`)
+| Keybinding | Action | Description |
+| :--- | :--- | :--- |
+| **`<leader>aa`** | Ask AI | Prompt referencing `@this` selection/file |
+| **`<leader>as`** | AI Prompts | Prompt menu (`explain`, `fix`, `test`, `review`) |
+| **`<leader>at`** | AI Panel | Right sidebar panel toggle (38% width) |
+| **`<leader>an`** | New AI Session | Fresh conversation |
+| **`<leader>ac`** | Compact AI Session | Compact history to conserve tokens |
+
+---
+
+## License
+
+MIT License. Feel free to use and adapt for your own Neovim workflow!

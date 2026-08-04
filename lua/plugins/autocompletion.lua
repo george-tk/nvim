@@ -10,22 +10,24 @@ return {
       'L3MON4D3/LuaSnip',
       version = 'v2.*',
       build = (function()
-        if vim.fn.has 'win32' == 1 or vim.fn.executable 'make' == 0 then
-          return
+        if vim.fn.has 'win32' == 0 and vim.fn.executable 'make' == 1 then
+          return 'make install_jsregexp'
         end
-        return 'make install_jsregexp'
       end)(),
       dependencies = {
-        {
-          'rafamadriz/friendly-snippets',
-          config = function()
-            -- Lazy-load VSCode snippets; optionally narrow filetypes to cut load further:
-            require('luasnip.loaders.from_vscode').lazy_load {
-              include = { 'lua', 'markdown' },
-            }
-          end,
-        },
+        'rafamadriz/friendly-snippets',
       },
+      config = function()
+        local ls = require 'luasnip'
+        ls.config.setup {
+          history = true,
+          updateevents = 'TextChanged,TextChangedI',
+        }
+        -- Lazy-load VSCode snippets from friendly-snippets
+        require('luasnip.loaders.from_vscode').lazy_load {
+          include = { 'lua', 'markdown' },
+        }
+      end,
     },
 
     -- Dictionary source: load only in Markdown to avoid startup cost elsewhere
@@ -46,30 +48,38 @@ return {
       -- Snippet engine
       snippets = { preset = 'luasnip' },
 
-      -- Completion behavior: lighter by default, docs on-demand, same UX
+      -- Completion behavior: lighter by default, docs on-demand, clean 2-column UI
       completion = {
         accept = {
           auto_brackets = { enabled = true }, -- () + cursor inside on accept (functions/methods)
         },
         documentation = {
-          auto_show = true, -- open docs when you want (<C-Space> or via keymaps)
+          auto_show = true,
           auto_show_delay_ms = 0,
           update_delay_ms = 50,
+          window = {
+            border = 'rounded',
+          },
         },
         trigger = {
-          -- keep keyword-triggered menu; disable trigger-character churn
           show_on_keyword = true,
-          show_on_trigger_character = false,
+          show_on_trigger_character = true,
+          show_on_blocked_trigger_characters = { ' ', '\n', '\t' },
+          show_on_x_blocked_trigger_characters = {},
         },
         list = {
           selection = {
-            -- avoids auto-select & preview insertion churn on first item
             preselect = false,
             auto_insert = false,
           },
         },
         menu = {
+          border = 'rounded',
           draw = {
+            columns = {
+              { 'kind_icon' },
+              { 'label', gap = 1 },
+            },
             components = {
               kind_icon = {
                 ellipsis = false,
@@ -89,10 +99,44 @@ return {
         },
       },
 
+      -- Fuzzy sorting: prioritize local variables, parameters, and snippets over bare keywords
+      fuzzy = {
+        sorts = {
+          -- 1. Prioritize Variables (6), Parameters (25), Fields (5), Properties (10)
+          function(a, b)
+            local a_var = a.kind == 6 or a.kind == 25 or a.kind == 5 or a.kind == 10
+            local b_var = b.kind == 6 or b.kind == 25 or b.kind == 5 or b.kind == 10
+            if a_var ~= b_var then
+              return a_var
+            end
+          end,
+          -- 2. Prioritize Snippets (15) over bare language Keywords (14)
+          function(a, b)
+            local a_snip = a.kind == 15
+            local b_snip = b.kind == 15
+            local a_kw = a.kind == 14
+            local b_kw = b.kind == 14
+            if a_snip and b_kw then
+              return true
+            end
+            if b_snip and a_kw then
+              return false
+            end
+          end,
+          'exact',
+          'score',
+          'sort_text',
+        },
+      },
+
       -- Sources: keep your defaults; load dictionary only for markdown via plugin ft above
       sources = {
         default = function()
-          if vim.bo.filetype == 'markdown' then
+          if vim.bo.filetype == 'opencode_ask' then
+            return { 'lsp', 'buffer' }
+          elseif vim.bo.filetype == 'sql' or vim.bo.filetype == 'mysql' or vim.bo.filetype == 'plsql' then
+            return { 'dadbod', 'lsp', 'snippets', 'buffer' }
+          elseif vim.bo.filetype == 'markdown' or vim.bo.filetype == 'text' or vim.bo.filetype == 'gitcommit' then
             local ok, node = pcall(vim.treesitter.get_node)
             if ok and node then
               while node do
@@ -109,6 +153,50 @@ return {
           return { 'lsp', 'path', 'snippets', 'buffer' }
         end,
         providers = {
+          -- LSP: boost variables and in-scope parameters; demote deprecated symbols
+          lsp = {
+            name = 'LSP',
+            module = 'blink.cmp.sources.lsp',
+            score_offset = 20,
+            transform_items = function(ctx, items)
+              for _, item in ipairs(items) do
+                if item.kind == 6 or item.kind == 25 or item.kind == 5 or item.kind == 10 then
+                  item.score_offset = (item.score_offset or 0) + 100
+                end
+                if item.deprecated or (item.tags and vim.tbl_contains(item.tags, 1)) then
+                  item.score_offset = (item.score_offset or 0) - 100
+                end
+              end
+              return items
+            end,
+          },
+
+          -- Buffer: quiet fallback (min 3 chars, slight negative offset to prevent noise)
+          buffer = {
+            name = 'Buffer',
+            module = 'blink.cmp.sources.buffer',
+            min_keyword_length = 3,
+            score_offset = -3,
+          },
+
+          -- Path: clean filesystem completion
+          path = {
+            name = 'Path',
+            module = 'blink.cmp.sources.path',
+            score_offset = 0,
+            opts = {
+              trailing_slash = true,
+              show_hidden_files_by_default = false,
+            },
+          },
+
+          -- Database completion via vim-dadbod-completion
+          dadbod = {
+            name = 'Dadbod',
+            module = 'vim_dadbod_completion.blink',
+            score_offset = 100,
+          },
+
           -- keep LazyDev provider
           lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
 
@@ -122,8 +210,31 @@ return {
             },
           },
 
-          -- Optional: show buffer items even when LSP is present (can help in args)
-          -- lsp = { fallbacks = {} },
+          -- Snippets provider: clean human-readable names
+          snippets = {
+            name = 'Snippets',
+            module = 'blink.cmp.sources.snippets',
+            score_offset = 1,
+            opts = {
+              use_label_description = false,
+            },
+            transform_items = function(ctx, items)
+              local ok, luasnip = pcall(require, 'luasnip')
+              if not ok or not luasnip then
+                return items
+              end
+              for _, item in ipairs(items) do
+                if item.data and item.data.snip_id then
+                  local snip = luasnip.get_id_snippet(item.data.snip_id)
+                  if snip and snip.name and snip.name ~= '' then
+                    item.label = snip.name:gsub('-', ' ')
+                    item.labelDetails = nil
+                  end
+                end
+              end
+              return items
+            end,
+          },
         },
       },
 
@@ -174,8 +285,13 @@ return {
           'fallback',
         },
 
-        -- Prefer snippet placeholders over menu navigation for Tab
+        -- Tab: Menu navigation when popup is visible -> Snippet jumping when popup is closed -> Fallback
         ['<Tab>'] = {
+          function(cmp)
+            if cmp.is_visible() then
+              return cmp.select_next()
+            end
+          end,
           'snippet_forward',
           function()
             if vim.bo.filetype == 'markdown' then
@@ -193,10 +309,14 @@ return {
               end
             end
           end,
-          'select_next',
           'fallback',
         },
         ['<S-Tab>'] = {
+          function(cmp)
+            if cmp.is_visible() then
+              return cmp.select_prev()
+            end
+          end,
           'snippet_backward',
           function()
             if vim.bo.filetype == 'markdown' then
@@ -214,7 +334,6 @@ return {
               end
             end
           end,
-          'select_prev',
           'fallback',
         },
 
@@ -227,7 +346,22 @@ return {
       },
 
       -- Signature help (parameter hints) while inside function calls
-      signature = { enabled = true },
+      signature = {
+        enabled = true,
+        trigger = {
+          enabled = true,
+          show_on_keyword = true,
+          show_on_trigger_character = true,
+          show_on_insert = true,
+          show_on_insert_on_trigger_character = true,
+          show_on_accept = true,
+          show_on_accept_on_trigger_character = true,
+        },
+        window = {
+          border = 'rounded',
+          show_documentation = true,
+        },
+      },
 
       -- Icon spacing/alignment
       appearance = { nerd_font_variant = 'mono' },

@@ -1,6 +1,9 @@
 return {
   'chrisgrieser/nvim-origami',
-  enabled = false,
+  enabled = true,
   event = 'VeryLazy',
-  opts = { keepFoldsAcrossSessions = false, foldtext = { enabled = false } },
+  opts = {
+    keepFoldsAcrossSessions = false,
+    foldtext = { enabled = false },
+  },
 }

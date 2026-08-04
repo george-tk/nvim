@@ -5,7 +5,7 @@ return {
     build = ':TSUpdate',
     main = 'nvim-treesitter',
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'python' },
+      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc', 'python', 'sql' },
       auto_install = true,
       highlight = {
         enable = true,
@@ -45,6 +45,8 @@ return {
         ['ii'] = '@conditional.inner',
         ['al'] = '@loop.outer',
         ['il'] = '@loop.inner',
+        ['aa'] = '@parameter.outer',
+        ['ia'] = '@parameter.inner',
       }
       for lhs, rhs in pairs(select_maps) do
         vim.keymap.set({ 'x', 'o' }, lhs, function()
@@ -74,6 +76,11 @@ return {
         [']L'] = { fn = move.goto_next_end, query = '@loop.outer', desc = 'Next loop end' },
         ['[l'] = { fn = move.goto_previous_start, query = '@loop.outer', desc = 'Prev loop start' },
         ['[L'] = { fn = move.goto_previous_end, query = '@loop.outer', desc = 'Prev loop end' },
+
+        [']a'] = { fn = move.goto_next_start, query = '@parameter.inner', desc = 'Next parameter start' },
+        [']A'] = { fn = move.goto_next_end, query = '@parameter.inner', desc = 'Next parameter end' },
+        ['[a'] = { fn = move.goto_previous_start, query = '@parameter.inner', desc = 'Prev parameter start' },
+        ['[A'] = { fn = move.goto_previous_end, query = '@parameter.inner', desc = 'Prev parameter end' },
       }
       for lhs, val in pairs(move_maps) do
         vim.keymap.set({ 'n', 'x', 'o' }, lhs, function()

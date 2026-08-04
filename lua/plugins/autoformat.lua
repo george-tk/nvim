@@ -10,7 +10,7 @@ return {
         require('conform').format { async = true, lsp_format = 'fallback' }
       end,
       mode = 'n',
-      desc = 'format buffer',
+      desc = 'Format Buffer',
     },
   },
   opts = {
@@ -28,6 +28,7 @@ return {
       lua = { 'stylua', 'lua-language-server' },
       -- python = { 'isort', 'black' },
       markdown = { 'prettier' },
+      sql = { 'sql_formatter' },
       -- Example: run the first available
       -- javascript = { "prettierd", "prettier", stop_after_first = true },
     },

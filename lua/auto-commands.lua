@@ -196,7 +196,7 @@ api.nvim_create_autocmd('BufEnter', {
   desc = 'Ensure render-markdown is active on BufEnter for Markdown',
 })
 
--- Function to choose fold level
+-- Function to choose fold level (can be called via :lua require('auto-commands').choose_fold_level(1))
 function M.choose_fold_level(level_to_apply)
   local current_foldmethod = wo[0].foldmethod
   if not (current_foldmethod == 'expr' or current_foldmethod == 'manual' or current_foldmethod == 'syntax') then
@@ -212,10 +212,5 @@ function M.choose_fold_level(level_to_apply)
     cmd('normal! ' .. level_to_apply .. 'zr')
   end
 end
-
--- Keymap for choosing fold level
-vim.keymap.set('n', '<leader>F', function()
-  M.choose_fold_level(vim.v.count1)
-end, { desc = '[f]old level' })
 
 return M

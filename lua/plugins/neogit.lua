@@ -5,18 +5,12 @@ return {
     'sindrets/diffview.nvim', -- optional - Diff integration
     'folke/snacks.nvim',
   },
-  -- opts = { popup = {
-  --   kind = 'tab',
-  -- }, rebase_editor = {
-  --   kind = 'tab',
-  -- } },
   keys = {
-    { '<leader>gs', ':Neogit<CR>', desc = '[s]tatus' },
-    { '<leader>gc', ':Neogit commit <CR>', desc = '[c]ommit' },
-    { '<leader>gr', ':Neogit rebase <CR>', desc = '[r]ebase' },
-    { '<leader>gp', ':Neogit pull <CR>', desc = '[p]ull' },
-    { '<leader>gP', ':Neogit push <CR>', desc = '[P]ush' },
-    { '<leader>gb', ':Neogit branch <CR>', desc = '[b]ranch' },
-    { '<leader>gd', ':DiffviewOpen <CR>', desc = '[d]iff' },
+    { '<leader>gs', ':Neogit<CR>', desc = 'Status' },
+    { '<leader>gc', ':Neogit commit <CR>', desc = 'Commit' },
+    { '<leader>gp', ':Neogit push <CR>', desc = 'Push' },
+    { '<leader>gl', ':Neogit pull <CR>', desc = 'Pull' },
+    { '<leader>gb', ':Neogit branch <CR>', desc = 'Branch' },
+    { '<leader>gd', ':DiffviewOpen <CR>', desc = 'Diff' },
   },
 }

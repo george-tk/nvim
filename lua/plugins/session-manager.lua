@@ -8,5 +8,5 @@ return {
   -- select a session to load
   vim.keymap.set('n', '<leader>fs', function()
     require('persistence').select()
-  end, { desc = 'session' }),
+  end, { desc = 'Sessions' }),
 }
