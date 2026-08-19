@@ -1,6 +1,6 @@
 # Personal Neovim Configuration
 
-A modern, fast, modular Neovim IDE configuration powered by [`lazy.nvim`](https://github.com/folke/lazy.nvim), [`snacks.nvim`](https://github.com/folke/snacks.nvim), [`vim-dadbod-ui`](https://github.com/kristijanhusak/vim-dadbod-ui), [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim), [`blink.cmp`](https://github.com/saghen/blink.cmp), and [`nvim-origami`](https://github.com/chrisgrieser/nvim-origami).
+A modern, fast, modular Neovim IDE configuration powered by [`lazy.nvim`](https://github.com/folke/lazy.nvim), [`snacks.nvim`](https://github.com/folke/snacks.nvim), [`vim-dadbod-ui`](https://github.com/kristijanhusak/vim-dadbod-ui), [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim), [`neocodeium`](https://github.com/monkoose/neocodeium), [`blink.cmp`](https://github.com/saghen/blink.cmp), and [`nvim-origami`](https://github.com/chrisgrieser/nvim-origami).
 
 ---
 
@@ -209,6 +209,13 @@ Run the built-in health check to confirm all tools and dependencies are properly
 :checkhealth
 ```
 
+#### 5. Authenticate Free AI Autocomplete (Codeium / NeoCodeium):
+1. In Neovim, press **`<leader>au`** (or run `:NeoCodeium auth`).
+2. Open the URL shown in your browser to sign in or create your free Codeium account.
+3. Copy the authentication token provided on the webpage.
+4. Paste the token into the Neovim prompt at the bottom and press `Enter`.
+5. *(Done!)* Inline AI ghost text is now ready and will automatically suggest code as you type in Insert mode.
+
 ---
 
 ## 🎯 Unified Spatial IDE Architecture
@@ -368,7 +375,21 @@ Run the built-in health check to confirm all tools and dependencies are properly
 
 ---
 
-### 🤖 OpenCode AI (`<leader>a`)
+### 🤖 AI Suite (`<leader>a` & Insert Alt-Keys)
+
+#### 1. Inline AI Autocomplete (`NeoCodeium`)
+| Keybinding | Mode | Action | Description |
+| :--- | :--- | :--- | :--- |
+| **`<M-a>`** *(Alt+a)* | Insert | Accept Full Suggestion | Accept complete inline AI ghost text |
+| **`<M-w>`** *(Alt+w)* | Insert | Accept Word | Accept AI suggestion one word at a time |
+| **`<M-e>`** *(Alt+e)* | Insert | Accept Line | Accept AI suggestion one line at a time |
+| **`<M-n>`** *(Alt+n)* | Insert | Next Suggestion | Cycle to next alternative AI suggestion |
+| **`<M-p>`** *(Alt+p)* | Insert | Previous Suggestion | Cycle to previous alternative AI suggestion |
+| **`<M-c>`** *(Alt+c)* | Insert | Clear / Dismiss | Dismiss currently visible ghost text |
+| **`<leader>ae`** | Normal | Toggle AI Autocomplete | Enable or disable inline AI completion globally |
+| **`<leader>au`** | Normal | AI Auth / Status | Authenticate with Codeium or check account status |
+
+#### 2. OpenCode AI Assistant (`opencode.nvim`)
 | Keybinding | Action | Description |
 | :--- | :--- | :--- |
 | **`<leader>aa`** | Ask AI | Prompt referencing `@this` selection/file |

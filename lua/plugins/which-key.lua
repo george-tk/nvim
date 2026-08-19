@@ -114,6 +114,8 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>at', desc = 'AI Panel' },
       { '<leader>an', desc = 'New AI Session' },
       { '<leader>ac', desc = 'Compact AI Session' },
+      { '<leader>ae', desc = 'Toggle AI Completion' },
+      { '<leader>au', desc = 'AI Auth / Status' },
     },
   },
 }

@@ -285,7 +285,7 @@ return {
           'fallback',
         },
 
-        -- Tab: Menu navigation when popup is visible -> Snippet jumping when popup is closed -> Fallback
+        -- Tab: Menu navigation when popup is visible -> Snippet jumping when popup is closed -> Markdown Table -> Fallback
         ['<Tab>'] = {
           function(cmp)
             if cmp.is_visible() then

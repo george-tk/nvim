@@ -3,7 +3,6 @@ return {
   enabled = true,
   event = 'VeryLazy',
   opts = {
-    keepFoldsAcrossSessions = false,
     foldtext = { enabled = false },
   },
 }
