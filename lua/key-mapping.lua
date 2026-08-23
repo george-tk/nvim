@@ -112,7 +112,9 @@ local function get_win_info(win)
   local is_dbui = ft == 'dbui'
 
   -- Check OpenCode Terminal
-  local is_opencode = ft:match('opencode') ~= nil or bname:find('opencode') ~= nil
+  local is_opencode = ft:match('opencode') ~= nil
+    or bname:find('opencode') ~= nil
+    or (vim.b[buf].snacks_terminal and tostring(vim.b[buf].snacks_terminal.cmd):find('opencode') ~= nil)
 
   -- Check Terminal / Database Query Results Table (only if NOT opencode)
   local is_terminal = (not is_opencode) and (ft == 'dbout' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://') ~= nil)
@@ -194,11 +196,24 @@ end
 -- Unified Right-Side Panel Manager (File Explorer | DBUI | OpenCode AI)
 -------------------------------------------------------------------------------
 
+local function get_opencode_cmd()
+  local binary = vim.fn.exepath('opencode')
+  if binary == '' then
+    local opencode_path = vim.fn.expand('~/.opencode/bin/opencode')
+    if (vim.uv or vim.loop).fs_stat(opencode_path) then
+      binary = opencode_path
+    else
+      binary = 'opencode'
+    end
+  end
+  return binary .. ' --port'
+end
+
 local RightPanel = {
   active_mode = 'explorer', -- Default mode on startup: 'explorer' ('explorer' | 'dbui' | 'opencode')
 }
 
--- Close any currently open right-side panel
+-- Close any currently open right-side panel (preserves background AI session)
 function RightPanel.close_all()
   local ok, pickers = pcall(function() return Snacks.picker.get({ source = 'explorer' }) end)
   if ok and pickers and #pickers > 0 then
@@ -207,19 +222,28 @@ function RightPanel.close_all()
     end
   end
 
+  -- Hide OpenCode terminal window if visible without killing the persistent AI session
+  local cmd = get_opencode_cmd()
+  local ok_t, term = pcall(function() return Snacks.terminal.get(cmd, { create = false }) end)
+  if ok_t and term and term:win_valid() then
+    pcall(function() term:hide() end)
+  end
+
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       local buf = vim.api.nvim_win_get_buf(win)
       local bname = vim.api.nvim_buf_get_name(buf):lower()
       local ft = vim.bo[buf].filetype
-      if ft == 'dbui' or ft:match('opencode') or bname:find('opencode') then
+      if ft == 'dbui' then
+        pcall(vim.api.nvim_win_close, win, true)
+      elseif (ft:match('opencode') or bname:find('opencode')) and not (ok_t and term and term.win == win) then
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
   end
 end
 
--- Open File Explorer on the right (25 cols) and set active_mode = 'explorer'
+-- Open File Explorer on the right (35 cols) and set active_mode = 'explorer'
 function RightPanel.open_explorer()
   local info = get_win_info()
   if info.is_explorer then
@@ -231,10 +255,10 @@ function RightPanel.open_explorer()
 
   RightPanel.close_all()
   RightPanel.active_mode = 'explorer'
-  Snacks.explorer({ layout = { layout = { position = 'right', width = 25 } } })
+  Snacks.explorer({ layout = { layout = { position = 'right', width = 35 } } })
 end
 
--- Open Database Explorer on the right (25 cols) and set active_mode = 'dbui'
+-- Open Database Explorer on the right (35 cols) and set active_mode = 'dbui'
 function RightPanel.open_dbui()
   local info = get_win_info()
   if info.is_dbui then
@@ -249,7 +273,7 @@ function RightPanel.open_dbui()
   vim.cmd('DBUI')
 end
 
--- Open OpenCode AI on the right (38% width) and set active_mode = 'opencode'
+-- Open OpenCode AI on the right (38% width, persistent background session)
 function RightPanel.open_opencode()
   local info = get_win_info()
   if info.is_opencode then
@@ -261,9 +285,21 @@ function RightPanel.open_opencode()
 
   RightPanel.close_all()
   RightPanel.active_mode = 'opencode'
-  local binary = vim.fn.exepath('opencode')
-  if binary == '' then binary = vim.fn.expand('~/.opencode/bin/opencode') end
-  Snacks.terminal.open(binary .. ' --port', { win = { position = 'right', width = 0.38, relative = 'editor', wo = { winbar = '' } } })
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  local cmd = get_opencode_cmd()
+  Snacks.terminal.toggle(cmd, {
+    win = {
+      position = 'right',
+      width = 0.38,
+      relative = 'editor',
+      wo = { winbar = '' },
+    },
+  })
 end
 
 -- Unified <C-l> Action: Toggle / Move to currently active right-side tool
@@ -325,7 +361,8 @@ local function hide_terminal_if_visible()
       local buf = vim.api.nvim_win_get_buf(win)
       local bname = vim.api.nvim_buf_get_name(buf):lower()
       local ft = vim.bo[buf].filetype
-      if ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://') then
+      local is_opencode = ft:match('opencode') ~= nil or bname:find('opencode') ~= nil or (vim.b[buf].snacks_terminal and tostring(vim.b[buf].snacks_terminal.cmd):find('opencode') ~= nil)
+      if (ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://')) and not is_opencode then
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
@@ -548,10 +585,10 @@ local function reset_window_layout()
       local bname = vim.api.nvim_buf_get_name(buf):lower()
 
       if ft == 'dbui' or vim.b[buf].snacks_type == 'explorer' then
-        pcall(vim.api.nvim_win_set_width, win, 25)
+        pcall(vim.api.nvim_win_set_width, win, 35)
       elseif ft:match('opencode') or bname:find('opencode') then
         pcall(vim.api.nvim_win_set_width, win, math.floor(vim.o.columns * 0.38))
-      elseif ft == 'dbout' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://') then
+      elseif (ft == 'dbout' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://')) and not (ft:match('opencode') or bname:find('opencode')) then
         pcall(vim.api.nvim_win_set_height, win, default_bot_height)
       end
     end

@@ -4,7 +4,7 @@ return {
     picker = {
       sources = {
         explorer = {
-          layout = { layout = { position = 'right', width = 25 } },
+          layout = { layout = { position = 'right', width = 35 } },
           jump = { close = true },
         },
       },
@@ -17,7 +17,7 @@ return {
         if _G.RightPanel then
           _G.RightPanel.open_explorer()
         else
-          Snacks.explorer({ layout = { layout = { position = 'right', width = 25 } } })
+          Snacks.explorer { layout = { layout = { position = 'right', width = 35 } } }
         end
       end,
       desc = 'File Explorer',

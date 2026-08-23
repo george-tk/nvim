@@ -1,7 +1,6 @@
 return {
-  -- Autoformat
+  -- Code Formatter (Manual trigger via <leader>=)
   'stevearc/conform.nvim',
-  event = { 'BufWritePre' }, -- lazy-load on first format-on-save
   cmd = { 'ConformInfo' },
   keys = {
     {
@@ -15,15 +14,7 @@ return {
   },
   opts = {
     notify_on_error = false,
-    -- Conform is the *only* place that formats on save now.
-    format_on_save = function(bufnr)
-      local disable_filetypes = { c = true, cpp = true }
-      local lsp_format_opt = disable_filetypes[vim.bo[bufnr].filetype] and 'never' or 'fallback'
-      return {
-        timeout_ms = 500,
-        lsp_format = lsp_format_opt,
-      }
-    end,
+    format_on_save = false, -- Disabled autoformat on save (manual trigger only via <leader>=)
     formatters_by_ft = {
       lua = { 'stylua', 'lua-language-server' },
       -- python = { 'isort', 'black' },

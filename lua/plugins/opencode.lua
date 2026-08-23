@@ -22,7 +22,7 @@ return {
     local snacks_terminal_opts = {
       win = {
         position = 'right',
-        width = 0.3,
+        width = 0.38,
         enter = false,
         wo = {
           winbar = '',
@@ -34,7 +34,11 @@ return {
     vim.g.opencode_opts = {
       server = {
         start = function()
-          require('snacks.terminal').open(opencode_cmd, snacks_terminal_opts)
+          if _G.RightPanel then
+            _G.RightPanel.open_opencode()
+          else
+            require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+          end
         end,
       },
     }
@@ -52,9 +56,7 @@ return {
       if _G.RightPanel then
         _G.RightPanel.open_opencode()
       else
-        local binary = vim.fn.exepath('opencode')
-        if binary == '' then binary = vim.fn.expand('~/.opencode/bin/opencode') end
-        require('snacks.terminal').toggle(binary .. ' --port', { win = { position = 'right', width = 0.3, relative = 'editor' } })
+        require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
       end
     end, { desc = 'AI Panel' })
 
@@ -84,7 +86,11 @@ return {
 
     -- Toggle OpenCode terminal via Snacks.terminal (<C-.>)
     vim.keymap.set({ 'n', 't' }, '<C-.>', function()
-      require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+      if _G.RightPanel then
+        _G.RightPanel.open_opencode()
+      else
+        require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+      end
     end, { desc = 'AI Panel' })
 
     -- Automatically show terminal when submitting a prompt

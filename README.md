@@ -225,8 +225,8 @@ Run the built-in health check to confirm all tools and dependencies are properly
 │                                                        │       Right Panel        │
 │                      Code Editor                       │         (<C-l>)          │
 │                        (Center)                        │                          │
-│                                                        │  1. File Explorer (25 w) │
-│                                                        │  2. DB Explorer (25 w)   │
+│                                                        │  1. File Explorer (35 w) │
+│                                                        │  2. DB Explorer (35 w)   │
 ├────────────────────────────────────────────────────────┤  3. OpenCode AI (38% w)  │
 │            Unified Bottom Output (<C-j>)               │  (Only ONE ever visible) │
 │                                                        │                          │
@@ -285,7 +285,7 @@ Run the built-in health check to confirm all tools and dependencies are properly
 | **`<leader>r`** | Alternate Buffer | Switch to previous alternate buffer |
 | **`<leader>d`** | Dashboard | Return to start dashboard |
 | **`<leader>z`** | Zen Mode | Toggle distraction-free centered Zen Mode |
-| **`<leader>e`** | File Explorer | Open/switch right panel to File Explorer (25 cols) |
+| **`<leader>e`** | File Explorer | Open/switch right panel to File Explorer (35 cols) |
 | **`<leader>/`** | Terminal | Open/toggle persistent Terminal at bottom |
 | **`<leader>=`** | Format Buffer | Run code formatter via Conform |
 
@@ -321,7 +321,7 @@ Run the built-in health check to confirm all tools and dependencies are properly
 | **`<leader>bo`** | Query Output | Show/hide Query Results Table without re-executing |
 | **`<leader>bc`** | Switch Database | Fast fuzzy picker to switch environments on the fly |
 | **`<leader>ba`** | Add Database | Interactive prompt to add a new connection URL |
-| **`<leader>bt`** | Database Explorer | Open Database Explorer drawer on the right panel (25 cols) |
+| **`<leader>bt`** | Database Explorer | Open Database Explorer drawer on the right panel (35 cols) |
 | **`<leader>bs`** | Save Query | Bookmark current query |
 
 ---
