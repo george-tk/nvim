@@ -6,9 +6,11 @@ return {
       win = {
         position = 'bottom',
         relative = 'win',
-        height = 0.4,
+        height = 0.38,
         wo = {
           winbar = '',
+          winfixheight = true,
+          winfixbuf = true,
         },
       },
     },

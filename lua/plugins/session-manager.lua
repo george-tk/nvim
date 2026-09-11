@@ -1,12 +1,17 @@
 return {
   'folke/persistence.nvim',
-  event = 'BufReadPre', -- this will only start session saving when an actual file was opened
+  event = 'BufReadPre',
   opts = {
-    need = 0,
-    -- add any custom options here
-  }, -- load the session for the current directory
-  -- select a session to load
-  vim.keymap.set('n', '<leader>fs', function()
-    require('persistence').select()
-  end, { desc = 'Sessions' }),
+    need = 1, -- Only save session when at least 1 real file is open
+    branch = true,
+  },
+  keys = {
+    {
+      '<leader>fs',
+      function()
+        require('persistence').select()
+      end,
+      desc = 'Sessions',
+    },
+  },
 }

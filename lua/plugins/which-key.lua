@@ -9,13 +9,15 @@ return { -- Useful plugin to show you pending keybinds.
     },
     spec = {
       -- Core Top-Level Groups (Uniform 2-Key Length, Zero Prefix Collisions)
+      { '<leader>c', group = 'Code', mode = { 'n', 'v' } },
       { '<leader>f', group = 'Find' },
       { '<leader>b', group = 'Database', mode = { 'n', 'v' } },
       { '<leader>a', group = 'Ai', mode = { 'n', 'v' } },
       { '<leader>t', group = 'Todo' },
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
-      { '<leader>s', group = 'Spelling' },
+      { '<leader>s', group = 'Search / Spelling' },
+      { '<leader>w', group = 'Window' },
 
       -- Direct 1-Key Actions
       { '<leader>/', desc = 'Terminal', mode = { 'n', 't' } },
@@ -23,6 +25,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>d', desc = 'Dashboard' },
       { '<leader>z', desc = 'Zen Mode' },
       { '<leader>q', desc = 'Close Buffer' },
+      { '<leader>Q', desc = 'Quit Neovim' },
       { '<leader>r', desc = 'Alternate Buffer' },
       { '<leader>=', desc = 'Format Buffer' },
       { '<leader><Tab>', desc = 'Next Buffer' },
@@ -67,13 +70,14 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>fk', desc = 'Keymaps' },
 
       -- Database Group (<leader>b)
+      { '<leader>be', desc = 'Database Explorer' },
+      { '<leader>bs', desc = 'Switch Database' },
+      { '<leader>bw', desc = 'Save Query' },
+      { '<leader>br', desc = 'Run Query', mode = { 'n', 'v' } },
       { '<leader>bq', desc = 'Query Scratchpad' },
-      { '<leader>br', desc = 'Run Query' },
       { '<leader>bo', desc = 'Query Output' },
-      { '<leader>bc', desc = 'Switch Database' },
       { '<leader>ba', desc = 'Add Database' },
-      { '<leader>bt', desc = 'Database Explorer' },
-      { '<leader>bs', desc = 'Save Query' },
+      { '<leader>bd', desc = 'Delete Database' },
 
       -- Todo Group (<leader>t)
       { '<leader>tt', desc = 'Todo List' },
@@ -102,20 +106,35 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>mu', desc = 'Update Numbering' },
       { '<leader>mi', desc = 'Insert Image' },
 
-      -- Spelling Group (<leader>s)
+      -- Code Group (<leader>c)
+      { '<leader>ca', desc = 'Code Action', mode = { 'n', 'v' } },
+      { '<leader>cr', desc = 'Rename Symbol' },
+      { '<leader>cd', desc = 'Line Diagnostics' },
+      { '<leader>cf', desc = 'Format Buffer' },
+
+      -- Search & Replace / Spelling Group (<leader>s)
+      { '<leader>sr', desc = 'Search & Replace in Project (Grug Far)' },
+      { '<leader>sw', desc = 'Search Word in Project (Grug Far)' },
       { '<leader>st', desc = 'Spelling Toggle' },
       { '<leader>ss', desc = 'Spelling Suggestions' },
       { '<leader>sn', desc = 'Next Spell Error' },
       { '<leader>sp', desc = 'Previous Spell Error' },
 
       -- AI Group (<leader>a)
-      { '<leader>aa', desc = 'Ask AI' },
-      { '<leader>as', desc = 'AI Prompts' },
-      { '<leader>at', desc = 'AI Panel' },
+      { '<leader>ae', desc = 'AI Explorer' },
+      { '<leader>aa', desc = 'Ask AI', mode = { 'n', 'v' } },
+      { '<leader>as', desc = 'AI Prompts', mode = { 'n', 'v' } },
       { '<leader>an', desc = 'New AI Session' },
       { '<leader>ac', desc = 'Compact AI Session' },
-      { '<leader>ae', desc = 'Toggle AI Completion' },
+      { '<leader>ax', desc = 'Stop AI Generation' },
       { '<leader>au', desc = 'AI Auth / Status' },
+
+      -- Window Group (<leader>w)
+      { '<leader>ws', desc = 'Split Horizontally' },
+      { '<leader>wv', desc = 'Split Vertically' },
+      { '<leader>we', desc = 'Balance Splits' },
+      { '<leader>wq', desc = 'Close Window Split' },
+      { '<leader>wo', desc = 'Close Other Splits' },
     },
   },
 }

@@ -39,6 +39,14 @@ o.confirm = true -- Confirm unsaved close
 -------------------------------------------------------------------------------
 o.undofile = true -- Save undo history
 o.swapfile = false -- Disable swap files (no crash recovery)
+o.sessionoptions = { -- Clean session restore (NEVER save blank or terminal splits)
+  'buffers',
+  'curdir',
+  'tabpages',
+  'winsize',
+  'help',
+  'skiprtp',
+}
 
 ---
 -- Visual Layout

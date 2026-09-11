@@ -5,7 +5,8 @@ return {
       sources = {
         explorer = {
           layout = { layout = { position = 'right', width = 35 } },
-          jump = { close = true },
+          jump = { close = false },
+          auto_close = false,
         },
       },
     },

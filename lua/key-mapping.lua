@@ -13,11 +13,7 @@ vim.keymap.set('n', '<leader>st', '<cmd>set spell!<CR>', { desc = 'Spelling Togg
 vim.keymap.set('n', '<leader>sn', ']s <leader>ss', { desc = 'Next Spell Error', remap = true })
 vim.keymap.set('n', '<leader>sp', '[s <leader>ss', { desc = 'Previous Spell Error', remap = true })
 
--- Buffer Management (Preserved 100%)
-vim.keymap.set('n', '<leader><Tab>', ':bn<CR>', { desc = 'Next Buffer' })
-vim.keymap.set('n', '<leader><S-Tab>', ':bp<CR>', { desc = 'Previous Buffer' })
-vim.keymap.set('n', '<leader>q', ':bd<CR>', { desc = 'Close Buffer' })
-vim.keymap.set('n', '<leader>r', '<C-6>', { desc = 'Alternate Buffer' })
+
 
 -- Navigation: Markdown Table Cells & Function Parameters (<Tab> / <S-Tab>)
 vim.keymap.set('n', '<Tab>', function()
@@ -60,20 +56,7 @@ vim.keymap.set('n', '<S-Tab>', function()
   end
 end, { desc = 'Previous Table Cell / Parameter' })
 
--- Snacks Dashboard
-vim.keymap.set('n', '<leader>d', function()
-  if vim.bo.filetype == 'snacks_dashboard' then
-    return
-  end
-  pcall(function() require('persistence').save() end)
-  Snacks.dashboard.open({ win = vim.api.nvim_get_current_win() })
-  local dashboard_buf = vim.api.nvim_get_current_buf()
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if buf ~= dashboard_buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted then
-      vim.cmd('silent! bd ' .. buf)
-    end
-  end
-end, { desc = 'Dashboard' })
+
 
 -- Snacks Zen Mode (Distraction-free mode)
 vim.keymap.set('n', '<leader>z', function()
@@ -93,17 +76,22 @@ local function get_win_info(win)
   local bname = vim.api.nvim_buf_get_name(buf):lower()
 
   -- Check File Explorer (Snacks Explorer)
-  local is_explorer = ft:match('snacks_picker') ~= nil or vim.b[buf].snacks_type == 'explorer'
+  local is_explorer = ft:match('^snacks_picker') ~= nil or ft:match('^snacks_layout') ~= nil
   if not is_explorer then
     local ok, pickers = pcall(function() return Snacks.picker.get({ source = 'explorer' }) end)
     if ok and pickers and #pickers > 0 then
       for _, p in ipairs(pickers) do
-        for _, w in ipairs({ p.win, p.input, p.list, p.preview }) do
-          if type(w) == 'table' and w.win == win then
+        local wins = { p.win, p.input, p.list, p.preview, p.layout and p.layout.root, p.layout and p.layout.box }
+        for _, w in ipairs(wins) do
+          if type(w) == 'table' and (w.win == win or w == win) then
+            is_explorer = true
+            break
+          elseif w == win then
             is_explorer = true
             break
           end
         end
+        if is_explorer then break end
       end
     end
   end
@@ -144,6 +132,44 @@ local function find_win_type(key)
   return nil
 end
 
+local function get_right_sidebar_win()
+  local ok, pickers = pcall(function() return Snacks.picker.get({ source = 'explorer' }) end)
+  if ok and pickers and #pickers > 0 then
+    local p = pickers[1]
+    if p.layout and p.layout.root and p.layout.root.win and vim.api.nvim_win_is_valid(p.layout.root.win) then
+      return p.layout.root.win
+    end
+    if p.win and p.win.win and vim.api.nvim_win_is_valid(p.win.win) then
+      return p.win.win
+    end
+  end
+
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      local ft = vim.bo[buf].filetype
+      local bname = vim.api.nvim_buf_get_name(buf):lower()
+      if ft == 'dbui' or ft:match('opencode') or bname:find('opencode') then
+        return win
+      end
+    end
+  end
+  return nil
+end
+
+local function ensure_right_sidebar_precedence()
+  local r_win = get_right_sidebar_win()
+  if r_win and vim.api.nvim_win_is_valid(r_win) then
+    vim.api.nvim_win_call(r_win, function()
+      vim.cmd('wincmd L')
+      local b = vim.api.nvim_win_get_buf(r_win)
+      local ft = vim.bo[b].filetype
+      local width = (ft == 'dbui' or ft:match('^snacks_')) and 35 or math.max(38, math.floor(vim.o.columns * 0.38))
+      vim.cmd('vertical resize ' .. width)
+    end)
+  end
+end
+
 local function get_editor_win()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
@@ -155,6 +181,7 @@ local function get_editor_win()
       local is_special = (
         ft:match('snacks') ~= nil
         or ft:match('opencode') ~= nil
+        or ft:match('^Neogit') ~= nil
         or ft == 'terminal'
         or ft == 'neo-tree'
         or ft == 'dbui'
@@ -162,6 +189,7 @@ local function get_editor_win()
         or buftype == 'terminal'
         or buftype == 'nofile'
         or bname:find('opencode') ~= nil
+        or bname:find('neogit') ~= nil
         or bname:find('term://') ~= nil
       )
 
@@ -255,7 +283,16 @@ function RightPanel.open_explorer()
 
   RightPanel.close_all()
   RightPanel.active_mode = 'explorer'
-  Snacks.explorer({ layout = { layout = { position = 'right', width = 35 } } })
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  Snacks.explorer({
+    layout = { layout = { position = 'right', width = 35 } },
+    jump = { close = false },
+  })
 end
 
 -- Open Database Explorer on the right (35 cols) and set active_mode = 'dbui'
@@ -270,6 +307,12 @@ function RightPanel.open_dbui()
 
   RightPanel.close_all()
   RightPanel.active_mode = 'dbui'
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
   vim.cmd('DBUI')
 end
 
@@ -297,7 +340,7 @@ function RightPanel.open_opencode()
       position = 'right',
       width = 0.38,
       relative = 'editor',
-      wo = { winbar = '' },
+      wo = { winbar = '', winfixwidth = true, winfixbuf = true },
     },
   })
 end
@@ -315,7 +358,9 @@ function RightPanel.toggle_active()
   end
 
   -- 2. If a right panel is already visible on screen: focus into it!
-  local visible_right = find_win_type('is_explorer') or find_win_type('is_dbui') or find_win_type('is_opencode')
+  local visible_right = find_win_type('is_explorer')
+    or find_win_type('is_dbui')
+    or find_win_type('is_opencode')
   if visible_right and vim.api.nvim_win_is_valid(visible_right) then
     vim.api.nvim_set_current_win(visible_right)
     return
@@ -391,10 +436,15 @@ function BottomPanel.open_terminal(count)
     win = {
       position = 'bottom',
       relative = 'win',
-      height = 0.4,
-      wo = { winbar = '' },
+      height = 0.38,
+      wo = {
+        winbar = '',
+        winfixheight = true,
+        winfixbuf = true,
+      },
     },
   })
+  vim.schedule(ensure_right_sidebar_precedence)
 end
 
 -- Open or toggle the SQL Query Output window (dbout)
@@ -438,6 +488,8 @@ function BottomPanel.open_dbout()
   local win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(win, dbout_buf)
   vim.wo[win].winfixheight = true
+  vim.wo[win].winfixbuf = true
+  vim.schedule(ensure_right_sidebar_precedence)
 end
 
 -- Unified <C-j> Action: Toggle / Focus bottom output zone preserving terminal instances & count
@@ -488,6 +540,311 @@ vim.api.nvim_create_autocmd('FileType', {
     BottomPanel.active_mode = 'dbout'
   end,
 })
+
+-------------------------------------------------------------------------------
+-- Smart Buffer Management & Layout Preservation
+-------------------------------------------------------------------------------
+
+local function smart_close()
+  local cur_win = vim.api.nvim_get_current_win()
+  if not vim.api.nvim_win_is_valid(cur_win) then return end
+
+  local cur_buf = vim.api.nvim_win_get_buf(cur_win)
+  local info = get_win_info(cur_win)
+
+  -- 1. If inside Right Panel (Explorer, DBUI, AI): close/hide the Right Panel
+  if info.is_explorer or info.is_dbui or info.is_opencode then
+    RightPanel.close_all()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  -- 2. If inside Bottom Panel (Terminal, SQL Results): hide the Bottom Panel
+  if info.is_terminal then
+    BottomPanel.close_all()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  -- 3. If inside Snacks Dashboard: do nothing
+  if vim.bo[cur_buf].filetype == 'snacks_dashboard' then
+    return
+  end
+
+  -- 4. In Code Editor: safely close buffer while preserving window splits!
+  local ok, snacks = pcall(require, 'snacks')
+  if ok and snacks.bufdelete then
+    snacks.bufdelete({ buf = cur_buf })
+  else
+    vim.cmd('bprevious')
+    if vim.api.nvim_get_current_buf() ~= cur_buf then
+      pcall(vim.cmd, 'bdelete ' .. cur_buf)
+    else
+      vim.cmd('enew')
+      pcall(vim.cmd, 'bdelete ' .. cur_buf)
+    end
+  end
+end
+
+local function smart_bnext()
+  local info = get_win_info()
+  if not info.is_editor then
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+  end
+  vim.cmd('bnext')
+end
+
+local function smart_bprev()
+  local info = get_win_info()
+  if not info.is_editor then
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+  end
+  vim.cmd('bprevious')
+end
+
+vim.keymap.set('n', '<leader>q', smart_close, { desc = 'Close Buffer' })
+vim.keymap.set('n', '<leader>Q', '<cmd>confirm qa<CR>', { desc = 'Quit Neovim' })
+vim.keymap.set('n', '<leader><Tab>', smart_bnext, { desc = 'Next Buffer' })
+vim.keymap.set('n', '<leader><S-Tab>', smart_bprev, { desc = 'Previous Buffer' })
+vim.keymap.set('n', '<leader>r', '<C-6>', { desc = 'Alternate Buffer' })
+
+-------------------------------------------------------------------------------
+-- Window Split Management (<leader>w)
+-------------------------------------------------------------------------------
+
+local function editor_split(direction)
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+  if direction == 'horizontal' then
+    vim.cmd('split')
+  else
+    vim.cmd('vsplit')
+  end
+end
+
+vim.keymap.set('n', '<leader>ws', function() editor_split('horizontal') end, { desc = 'Split Horizontally' })
+vim.keymap.set('n', '<leader>wv', function() editor_split('vertical') end, { desc = 'Split Vertically' })
+vim.keymap.set('n', '<leader>we', function() _G.reset_window_layout() end, { desc = 'Balance Window Splits' })
+vim.keymap.set('n', '<leader>wq', '<cmd>close<CR>', { desc = 'Close Window Split' })
+vim.keymap.set('n', '<leader>wo', function()
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+    vim.cmd('only')
+  end
+end, { desc = 'Close Other Splits' })
+
+-------------------------------------------------------------------------------
+-- Session Stability & Database Isolation: Save only clean editor files
+-------------------------------------------------------------------------------
+
+local session_stability_group = vim.api.nvim_create_augroup('UserSessionStability', { clear = true })
+
+local function is_database_or_transient_buf(buf)
+  if not vim.api.nvim_buf_is_valid(buf) then return false end
+  local ft = vim.bo[buf].filetype
+  if ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
+  local bname = vim.api.nvim_buf_get_name(buf)
+  if bname:find('/db_ui/') ~= nil then return true end
+  if bname:match('%.sqlite%d?$') or bname:match('%.db$') then return true end
+  if vim.b[buf].dbui_db_key_name ~= nil then return true end
+  return false
+end
+
+local function cleanup_panels_before_save()
+  if _G.RightPanel and _G.RightPanel.close_all then
+    _G.RightPanel.close_all()
+  end
+  if _G.BottomPanel and _G.BottomPanel.close_all then
+    _G.BottomPanel.close_all()
+  end
+
+  -- Close any floating windows or auxiliary windows showing database buffers
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      local cfg = vim.api.nvim_win_get_config(win)
+      if cfg.relative ~= '' then
+        pcall(vim.api.nvim_win_close, win, true)
+      else
+        local buf = vim.api.nvim_win_get_buf(win)
+        if is_database_or_transient_buf(buf) and #vim.api.nvim_list_wins() > 1 then
+          pcall(vim.api.nvim_win_close, win, true)
+        end
+      end
+    end
+  end
+
+  -- Delete all database and transient buffers from memory so mksession never writes them
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if is_database_or_transient_buf(buf) then
+      pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    end
+  end
+end
+
+local function get_real_editor_bufs()
+  local real_bufs = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted and vim.bo[buf].buftype == '' and vim.api.nvim_buf_get_name(buf) ~= '' then
+      if not is_database_or_transient_buf(buf) then
+        table.insert(real_bufs, buf)
+      end
+    end
+  end
+  return real_bufs
+end
+
+-- Snacks Dashboard (Clean transition without corrupting window splits or session)
+vim.keymap.set('n', '<leader>d', function()
+  if vim.bo.filetype == 'snacks_dashboard' then
+    return
+  end
+  cleanup_panels_before_save()
+  local real_bufs = get_real_editor_bufs()
+  if #real_bufs > 0 then
+    pcall(function() require('persistence').save() end)
+  end
+  vim.cmd('only')
+  Snacks.dashboard.open({ win = vim.api.nvim_get_current_win() })
+end, { desc = 'Dashboard' })
+
+-------------------------------------------------------------------------------
+-- Layout Permanence & Window Locking Autocommands
+-------------------------------------------------------------------------------
+
+local layout_lock_group = vim.api.nvim_create_augroup('UserLayoutLock', { clear = true })
+
+vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+  group = layout_lock_group,
+  pattern = '*',
+  callback = function(args)
+    local buf = args.buf
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+
+    local ft = vim.bo[buf].filetype
+    local buftype = vim.bo[buf].buftype
+    local bname = vim.api.nvim_buf_get_name(buf):lower()
+
+    local is_sidebar = ft == 'dbui'
+      or ft:match('opencode') ~= nil
+      or bname:find('opencode') ~= nil
+      or ft:match('^snacks_picker') ~= nil
+      or ft:match('^snacks_layout') ~= nil
+
+    local is_bottom = (not is_sidebar) and (
+      ft == 'dbout'
+      or ft == 'snacks_terminal'
+      or ft == 'terminal'
+      or buftype == 'terminal'
+      or bname:find('term://') ~= nil
+      or ft == 'qf'
+    )
+
+    if is_sidebar then
+      vim.bo[buf].buflisted = false
+      vim.schedule(function()
+        local win = vim.fn.bufwinid(buf)
+        if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          vim.wo[win].winfixbuf = true
+          vim.wo[win].winfixwidth = true
+        end
+      end)
+    elseif is_bottom then
+      vim.bo[buf].buflisted = false
+      vim.schedule(function()
+        local win = vim.fn.bufwinid(buf)
+        if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          vim.wo[win].winfixbuf = true
+          vim.wo[win].winfixheight = true
+          ensure_right_sidebar_precedence()
+        end
+      end)
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd('User', {
+  pattern = 'PersistenceSavePre',
+  group = session_stability_group,
+  callback = cleanup_panels_before_save,
+})
+
+vim.api.nvim_create_autocmd('VimLeavePre', {
+  group = session_stability_group,
+  callback = function()
+    cleanup_panels_before_save()
+    local real_bufs = get_real_editor_bufs()
+    -- If no real project files are open (e.g. only database was opened), prevent saving an empty/corrupted session
+    if #real_bufs == 0 then
+      pcall(function() require('persistence').stop() end)
+    end
+  end,
+})
+
+local function handle_post_session_load()
+  vim.schedule(function()
+    -- Close any ghost panels or database windows restored from old session files
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(win) then
+        local buf = vim.api.nvim_win_get_buf(win)
+        if is_database_or_transient_buf(buf) then
+          if #vim.api.nvim_list_wins() > 1 then
+            pcall(vim.api.nvim_win_close, win, true)
+          end
+          pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+      end
+    end
+
+    -- If any window is stuck on snacks_dashboard or empty [No Name], clean it up
+    local real_bufs = get_real_editor_bufs()
+    if #real_bufs > 0 then
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_is_valid(win) then
+          local b = vim.api.nvim_win_get_buf(win)
+          local ft = vim.bo[b].filetype
+          local bname = vim.api.nvim_buf_get_name(b)
+          if ft == 'snacks_dashboard' then
+            if #vim.api.nvim_list_wins() > 1 then
+              pcall(vim.api.nvim_win_close, win, true)
+            else
+              pcall(vim.api.nvim_win_set_buf, win, real_bufs[1])
+            end
+          elseif bname == '' and not vim.bo[b].modified and vim.bo[b].buftype == '' then
+            pcall(vim.api.nvim_win_set_buf, win, real_bufs[1])
+          end
+        end
+      end
+    end
+  end)
+end
+
+vim.api.nvim_create_autocmd('User', {
+  pattern = 'PersistenceLoadPost',
+  group = session_stability_group,
+  callback = handle_post_session_load,
+})
+
+vim.api.nvim_create_autocmd('SessionLoadPost', {
+  group = session_stability_group,
+  callback = handle_post_session_load,
+})
+
+
 
 -------------------------------------------------------------------------------
 -- Spatial Navigation Keybindings
@@ -584,7 +941,7 @@ local function reset_window_layout()
       local ft = vim.bo[buf].filetype
       local bname = vim.api.nvim_buf_get_name(buf):lower()
 
-      if ft == 'dbui' or vim.b[buf].snacks_type == 'explorer' then
+      if ft == 'dbui' or ft:match('^snacks_') then
         pcall(vim.api.nvim_win_set_width, win, 35)
       elseif ft:match('opencode') or bname:find('opencode') then
         pcall(vim.api.nvim_win_set_width, win, math.floor(vim.o.columns * 0.38))
@@ -593,6 +950,8 @@ local function reset_window_layout()
       end
     end
   end
+
+  ensure_right_sidebar_precedence()
 
   if vim.api.nvim_win_is_valid(cur) then
     vim.api.nvim_set_current_win(cur)

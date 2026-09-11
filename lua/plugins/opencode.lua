@@ -52,13 +52,13 @@ return {
       require('opencode').select()
     end, { desc = 'AI Prompts' })
 
-    vim.keymap.set({ 'n' }, '<leader>at', function()
+    vim.keymap.set({ 'n' }, '<leader>ae', function()
       if _G.RightPanel then
         _G.RightPanel.open_opencode()
       else
         require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
       end
-    end, { desc = 'AI Panel' })
+    end, { desc = 'AI Explorer' })
 
     vim.keymap.set({ 'n' }, '<leader>an', function()
       require('opencode').command('session.new')
@@ -67,6 +67,10 @@ return {
     vim.keymap.set({ 'n' }, '<leader>ac', function()
       require('opencode').command('session.compact')
     end, { desc = 'Compact AI Session' })
+
+    vim.keymap.set({ 'n' }, '<leader>ax', function()
+      require('opencode').command('session.interrupt')
+    end, { desc = 'Stop AI Generation' })
 
     vim.keymap.set({ 'n', 'x' }, 'go', function()
       return require('opencode').operator('@this ')

@@ -97,6 +97,37 @@ return {
             vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
           end
 
+          -- Buffer-local LSP Keymaps (VS Code Parity)
+          local function map(keys, func, desc, mode)
+            mode = mode or 'n'
+            vim.keymap.set(mode, keys, func, { buffer = bufnr, desc = 'LSP: ' .. desc })
+          end
+
+          map('gd', function() Snacks.picker.lsp_definitions() end, 'Goto Definition')
+          map('gD', vim.lsp.buf.declaration, 'Goto Declaration')
+          map('gr', function() Snacks.picker.lsp_references() end, 'Goto References')
+          map('gi', function() Snacks.picker.lsp_implementations() end, 'Goto Implementation')
+          map('gy', function() Snacks.picker.lsp_type_definitions() end, 'Type Definition')
+          map('K', vim.lsp.buf.hover, 'Hover Documentation')
+          map('<C-k>', vim.lsp.buf.signature_help, 'Signature Help', 'i')
+
+          map('<leader>cr', vim.lsp.buf.rename, 'Rename Symbol')
+          map('<F2>', vim.lsp.buf.rename, 'Rename Symbol')
+          map('<leader>ca', vim.lsp.buf.code_action, 'Code Action', { 'n', 'v' })
+          map('<M-.>', vim.lsp.buf.code_action, 'Code Action', { 'n', 'v' })
+          map('<leader>cd', vim.diagnostic.open_float, 'Line Diagnostics')
+          map('gl', vim.diagnostic.open_float, 'Line Diagnostics')
+          map('[d', vim.diagnostic.goto_prev, 'Previous Diagnostic')
+          map(']d', vim.diagnostic.goto_next, 'Next Diagnostic')
+          map('<leader>cf', function()
+            local ok_c, conform = pcall(require, 'conform')
+            if ok_c then
+              conform.format({ async = true, lsp_format = 'fallback' })
+            else
+              vim.lsp.buf.format({ async = true })
+            end
+          end, 'Format Buffer')
+
           -- Document highlight (CursorHold only, not in Insert)
           if client.server_capabilities.documentHighlightProvider and small_file(bufnr) then
             local aug = vim.api.nvim_create_augroup('lsp-doc-hl-' .. bufnr, { clear = true })

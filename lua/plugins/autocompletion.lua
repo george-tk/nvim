@@ -23,6 +23,16 @@ return {
           history = true,
           updateevents = 'TextChanged,TextChangedI',
         }
+        -- Guard luasnip loaders against transient or invalid buffer IDs
+        local ok_loaders, loaders = pcall(require, 'luasnip.loaders')
+        if ok_loaders and loaders.load_lazy_loaded then
+          local orig_load = loaders.load_lazy_loaded
+          loaders.load_lazy_loaded = function(bufnr)
+            if bufnr and not vim.api.nvim_buf_is_valid(bufnr) then return end
+            pcall(orig_load, bufnr)
+          end
+        end
+
         -- Lazy-load VSCode snippets from friendly-snippets
         require('luasnip.loaders.from_vscode').lazy_load {
           include = { 'lua', 'markdown' },
