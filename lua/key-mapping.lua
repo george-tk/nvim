@@ -385,6 +385,7 @@ _G.RightPanel = RightPanel
 local BottomPanel = {
   active_mode = 'terminal', -- 'terminal' | 'dbout'
   last_dbout_buf = nil,
+  active_terminal_count = 1,
 }
 
 -- Helper to close only dbout window if open
@@ -414,6 +415,23 @@ local function hide_terminal_if_visible()
   end
 end
 
+-- Helper to get currently visible bottom terminal window and its instance ID
+local function get_visible_terminal_info()
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      local bname = vim.api.nvim_buf_get_name(buf):lower()
+      local ft = vim.bo[buf].filetype
+      local is_opencode = ft:match('opencode') ~= nil or bname:find('opencode') ~= nil or (vim.b[buf].snacks_terminal and tostring(vim.b[buf].snacks_terminal.cmd):find('opencode') ~= nil)
+      if (ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://')) and not is_opencode then
+        local term_id = vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.id or 1
+        return win, buf, term_id
+      end
+    end
+  end
+  return nil, nil, nil
+end
+
 -- Close any open bottom panel (Terminal or SQL Results)
 function BottomPanel.close_all()
   close_dbout_win()
@@ -422,9 +440,20 @@ end
 
 -- Open or toggle the persistent terminal by count (preserves command history & running processes)
 function BottomPanel.open_terminal(count)
-  count = count or vim.v.count1
+  local explicit = (count and count > 0 and count) or (vim.v.count > 0 and vim.v.count) or nil
+  if explicit then
+    BottomPanel.active_terminal_count = explicit
+  end
+  local target_count = BottomPanel.active_terminal_count or 1
+
   close_dbout_win()
   BottomPanel.active_mode = 'terminal'
+
+  local vis_win, vis_buf, vis_id = get_visible_terminal_info()
+  -- If a DIFFERENT terminal instance is visible, close it first so we don't stack multiple splits
+  if vis_win and vis_id ~= target_count then
+    pcall(vim.api.nvim_win_close, vis_win, true)
+  end
 
   local ed = get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
@@ -432,7 +461,7 @@ function BottomPanel.open_terminal(count)
   end
 
   Snacks.terminal.toggle(nil, {
-    count = count,
+    count = target_count,
     win = {
       position = 'bottom',
       relative = 'win',
@@ -494,7 +523,12 @@ end
 
 -- Unified <C-j> Action: Toggle / Focus bottom output zone preserving terminal instances & count
 function BottomPanel.toggle_active(count)
-  count = count or vim.v.count1
+  local explicit_count = (count and count > 0 and count) or (vim.v.count > 0 and vim.v.count) or nil
+  if explicit_count then
+    BottomPanel.active_terminal_count = explicit_count
+  end
+  local target_count = BottomPanel.active_terminal_count or 1
+
   local info = get_win_info()
 
   -- 1. If currently inside dbout, close it
@@ -507,10 +541,22 @@ function BottomPanel.toggle_active(count)
     return
   end
 
-  -- 2. If currently inside a terminal and count is NOT explicitly passed, toggle/hide it
-  if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' and vim.v.count == 0 then
-    Snacks.terminal.toggle(nil, { count = count })
-    return
+  -- 2. If currently inside a terminal:
+  if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' then
+    local current_term_id = (vim.b[info.buf].snacks_terminal and vim.b[info.buf].snacks_terminal.id) or target_count
+    -- If no explicit count was passed or requested count matches current terminal: hide it!
+    if not explicit_count or explicit_count == current_term_id then
+      hide_terminal_if_visible()
+      local ed = get_editor_win()
+      if ed and vim.api.nvim_win_is_valid(ed) then
+        vim.api.nvim_set_current_win(ed)
+      end
+      return
+    else
+      -- Explicit count for a different terminal passed: switch to it in the single bottom panel
+      BottomPanel.open_terminal(explicit_count)
+      return
+    end
   end
 
   -- 3. If currently in an explorer/sidebar, focus existing bottom output or open it
@@ -521,13 +567,13 @@ function BottomPanel.toggle_active(count)
   end
 
   -- 4. If in editor and dbout mode is active AND no numeric count was given
-  if BottomPanel.active_mode == 'dbout' and vim.v.count == 0 and BottomPanel.last_dbout_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_dbout_buf) then
+  if BottomPanel.active_mode == 'dbout' and not explicit_count and BottomPanel.last_dbout_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_dbout_buf) then
     BottomPanel.open_dbout()
     return
   end
 
-  -- 5. Otherwise, toggle the persistent Snacks terminal with requested count
-  BottomPanel.open_terminal(count)
+  -- 5. Otherwise, toggle the persistent Snacks terminal with target_count
+  BottomPanel.open_terminal(target_count)
 end
 
 _G.BottomPanel = BottomPanel
@@ -538,6 +584,17 @@ vim.api.nvim_create_autocmd('FileType', {
   callback = function(args)
     BottomPanel.last_dbout_buf = args.buf
     BottomPanel.active_mode = 'dbout'
+  end,
+})
+
+-- Track active terminal instance automatically when entering a terminal buffer
+vim.api.nvim_create_autocmd({ 'BufEnter', 'TermOpen' }, {
+  callback = function(args)
+    local st = vim.b[args.buf].snacks_terminal
+    if st and st.id and not tostring(st.cmd or ''):find('opencode') then
+      BottomPanel.active_terminal_count = st.id
+      BottomPanel.active_mode = 'terminal'
+    end
   end,
 })
 
@@ -887,12 +944,14 @@ end, { desc = 'Editor Up' })
 
 -- <C-j>: Bottom Output Focus & Toggle (Terminal | SQL Results)
 vim.keymap.set({ 'n', 't', 'i' }, '<C-j>', function()
-  BottomPanel.toggle_active(vim.v.count1)
+  local count = vim.v.count > 0 and vim.v.count or nil
+  BottomPanel.toggle_active(count)
 end, { desc = 'Bottom Output' })
 
 -- <leader>/: Direct Terminal Toggle & Switch Bottom Mode
 vim.keymap.set({ 'n', 't' }, '<leader>/', function()
-  BottomPanel.open_terminal(vim.v.count1)
+  local count = vim.v.count > 0 and vim.v.count or nil
+  BottomPanel.open_terminal(count)
 end, { desc = 'Terminal' })
 
 -------------------------------------------------------------------------------

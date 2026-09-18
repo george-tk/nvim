@@ -19,10 +19,11 @@ return {
     {
       '<leader>/',
       function()
+        local count = vim.v.count > 0 and vim.v.count or nil
         if _G.BottomPanel then
-          _G.BottomPanel.open_terminal(vim.v.count1)
+          _G.BottomPanel.open_terminal(count)
         else
-          Snacks.terminal.toggle(nil, { count = vim.v.count1 })
+          Snacks.terminal.toggle(nil, { count = count or 1 })
         end
       end,
       desc = 'Terminal',
@@ -31,10 +32,11 @@ return {
     {
       '<C-/>',
       function()
+        local count = vim.v.count > 0 and vim.v.count or nil
         if _G.BottomPanel then
-          _G.BottomPanel.open_terminal(vim.v.count1)
+          _G.BottomPanel.open_terminal(count)
         else
-          Snacks.terminal.toggle(nil, { count = vim.v.count1 })
+          Snacks.terminal.toggle(nil, { count = count or 1 })
         end
       end,
       desc = 'Terminal',
