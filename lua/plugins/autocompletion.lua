@@ -63,9 +63,12 @@ return {
         accept = {
           auto_brackets = { enabled = true }, -- () + cursor inside on accept (functions/methods)
         },
+        ghost_text = {
+          enabled = false,
+        },
         documentation = {
           auto_show = true,
-          auto_show_delay_ms = 0,
+          auto_show_delay_ms = 300,
           update_delay_ms = 50,
           window = {
             border = 'rounded',
@@ -147,6 +150,9 @@ return {
           elseif vim.bo.filetype == 'sql' or vim.bo.filetype == 'mysql' or vim.bo.filetype == 'plsql' then
             return { 'dadbod', 'lsp', 'snippets', 'buffer' }
           elseif vim.bo.filetype == 'markdown' or vim.bo.filetype == 'text' or vim.bo.filetype == 'gitcommit' then
+            if not (vim.g.markdown_autocomplete_enabled or vim.b.markdown_autocomplete_enabled) then
+              return {}
+            end
             local ok, node = pcall(vim.treesitter.get_node)
             if ok and node then
               while node do
@@ -156,7 +162,11 @@ return {
                 node = node:parent()
               end
             end
-            return { 'lsp', 'path', 'snippets', 'buffer', 'dictionary' }
+            local sources = { 'lsp', 'path', 'snippets', 'buffer' }
+            if vim.g.markdown_dict_completion or vim.b.markdown_dict_completion then
+              table.insert(sources, 'dictionary')
+            end
+            return sources
           elseif vim.bo.filetype == 'lua' then
             return { 'lsp', 'path', 'snippets', 'buffer', 'lazydev' }
           end
@@ -181,11 +191,17 @@ return {
             end,
           },
 
-          -- Buffer: quiet fallback (min 3 chars, slight negative offset to prevent noise)
+          -- Buffer: quiet fallback (threshold 5 across the board, max 4 items, manual fallback)
           buffer = {
             name = 'Buffer',
             module = 'blink.cmp.sources.buffer',
-            min_keyword_length = 3,
+            min_keyword_length = function(ctx)
+              if ctx and ctx.trigger and ctx.trigger.initial_kind == 'manual' then
+                return 0
+              end
+              return 5
+            end,
+            max_items = 4,
             score_offset = -3,
           },
 

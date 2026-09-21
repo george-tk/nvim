@@ -15,12 +15,13 @@ return {
         gitcommit = false,
         gitrebase = false,
         opencode_ask = false,
+        markdown = false,
         ['.'] = false,
       },
       filter = function(bufnr)
         local buftype = vim.bo[bufnr].buftype
         local ft = vim.bo[bufnr].filetype
-        if buftype == 'prompt' or buftype == 'terminal' or ft:match '^snacks' or ft == 'dbui' or ft == 'dbout' then
+        if buftype == 'prompt' or buftype == 'terminal' or ft:match '^snacks' or ft == 'dbui' or ft == 'dbout' or ft == 'markdown' then
           return false
         end
         return true

@@ -13,6 +13,27 @@ vim.keymap.set('n', '<leader>st', '<cmd>set spell!<CR>', { desc = 'Spelling Togg
 vim.keymap.set('n', '<leader>sn', ']s <leader>ss', { desc = 'Next Spell Error', remap = true })
 vim.keymap.set('n', '<leader>sp', '[s <leader>ss', { desc = 'Previous Spell Error', remap = true })
 
+-- Toggle Markdown Dictionary Autocomplete in Blink.cmp (Disabled by default to prevent lag)
+local function toggle_markdown_dict()
+  vim.g.markdown_dict_completion = not vim.g.markdown_dict_completion
+  local state = vim.g.markdown_dict_completion and 'Enabled' or 'Disabled'
+  vim.notify('Markdown Dictionary Autocomplete: ' .. state, vim.log.levels.INFO, { title = 'Completion' })
+end
+_G.toggle_markdown_dict = toggle_markdown_dict
+vim.api.nvim_create_user_command('MarkdownDictToggle', toggle_markdown_dict, { desc = 'Toggle Markdown Dictionary Autocomplete' })
+vim.keymap.set('n', '<leader>ms', toggle_markdown_dict, { desc = 'Toggle Dictionary Completion' })
+
+-- Toggle Markdown Autocomplete (Disabled by default)
+vim.g.markdown_autocomplete_enabled = false
+local function toggle_markdown_autocomplete()
+  vim.g.markdown_autocomplete_enabled = not vim.g.markdown_autocomplete_enabled
+  local state = vim.g.markdown_autocomplete_enabled and 'Enabled (Normal Auto-Popups)' or 'Disabled'
+  vim.notify('Markdown Autocomplete: ' .. state, vim.log.levels.INFO, { title = 'Completion' })
+end
+_G.toggle_markdown_autocomplete = toggle_markdown_autocomplete
+vim.api.nvim_create_user_command('MarkdownAutocompleteToggle', toggle_markdown_autocomplete, { desc = 'Toggle Markdown Autocomplete' })
+vim.keymap.set('n', '<leader>mp', toggle_markdown_autocomplete, { desc = 'Toggle Markdown Autocomplete' })
+
 
 
 -- Navigation: Markdown Table Cells & Function Parameters (<Tab> / <S-Tab>)

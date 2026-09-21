@@ -105,6 +105,8 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>mx', desc = 'Delete Column' },
       { '<leader>mu', desc = 'Update Numbering' },
       { '<leader>mi', desc = 'Insert Image' },
+      { '<leader>mp', desc = 'Toggle Markdown Autocomplete' },
+      { '<leader>ms', desc = 'Toggle Dictionary Completion' },
 
       -- Code Group (<leader>c)
       { '<leader>ca', desc = 'Code Action', mode = { 'n', 'v' } },
