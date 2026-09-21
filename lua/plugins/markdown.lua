@@ -14,6 +14,7 @@ return {
         enabled = true,
       },
       heading = {
+        position = 'inline',
         sign = false,
         icons = { '󰎤 ', '󰎧 ', '󰎪 ', '󰎭 ', '󰎱 ', '󰎳 ' },
         backgrounds = {
