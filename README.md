@@ -230,7 +230,7 @@ Run the built-in health check to confirm all tools and dependencies are properly
 ├────────────────────────────────────────────────────────┤  3. OpenCode AI (38% w)  │
 │            Unified Bottom Output (<C-j>)               │  (Only ONE ever visible) │
 │                                                        │                          │
-│  1. Persistent Multi-Terminals (<leader>/ / [N]<C-j>)  │  * DB Drawer is never    │
+│  1. Persistent Multi-Terminals (<leader>T / [N]<C-j>)  │  * DB Drawer is never    │
 │  2. SQL Query Results Table (<leader>bo / <leader>br)  │    split by queries      │
 │  (Strictly Center-Scoped, never splits the right side) │                          │
 └────────────────────────────────────────────────────────┴──────────────────────────┘
@@ -286,7 +286,9 @@ Run the built-in health check to confirm all tools and dependencies are properly
 | **`<leader>d`** | Dashboard | Return to start dashboard |
 | **`<leader>z`** | Zen Mode | Toggle distraction-free centered Zen Mode |
 | **`<leader>e`** | File Explorer | Open/switch right panel to File Explorer (35 cols) |
-| **`<leader>/`** | Terminal | Open/toggle persistent Terminal at bottom |
+| **`<leader>T`** | Terminal | Open/toggle persistent Terminal at bottom |
+| **`<leader>p`** | Git Pull | Direct 1-key Git pull via Neogit |
+| **`<leader>P`** | Git Push | Direct 1-key Git push via Neogit |
 | **`<leader>=`** | Format Buffer | Run code formatter via Conform |
 
 ---
@@ -338,13 +340,15 @@ Run the built-in health check to confirm all tools and dependencies are properly
 
 ---
 
-### 🌿 Git Suite (`<leader>g`)
+### 🌿 Git Suite (`<leader>g` & Direct `<leader>p` / `<leader>P`)
 | Keybinding | Action | Description |
 | :--- | :--- | :--- |
+| **`<leader>p`** | Git Pull | Quick 1-key pull |
+| **`<leader>P`** | Git Push | Quick 1-key push |
 | **`<leader>gs`** | Status | Neogit status |
 | **`<leader>gc`** | Commit | Open commit editor |
-| **`<leader>gp`** | Push | Git Push *(lowercase)* |
-| **`<leader>gl`** | Pull | Git Pull *(lowercase)* |
+| **`<leader>gp`** | Push | Git Push popup *(or `<leader>P` directly)* |
+| **`<leader>gl`** | Pull | Git Pull popup *(or `<leader>p` directly)* |
 | **`<leader>gb`** | Branch | Branch switcher |
 | **`<leader>gd`** | Diff | Diffview open |
 

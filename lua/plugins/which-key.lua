@@ -20,7 +20,9 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>w', group = 'Window' },
 
       -- Direct 1-Key Actions
-      { '<leader>/', desc = 'Terminal', mode = { 'n', 't' } },
+      { '<leader>T', desc = 'Terminal', mode = { 'n', 't' } },
+      { '<leader>p', desc = 'Git Pull' },
+      { '<leader>P', desc = 'Git Push' },
       { '<leader>e', desc = 'File Explorer', mode = { 'n', 'v' } },
       { '<leader>d', desc = 'Dashboard' },
       { '<leader>z', desc = 'Zen Mode' },
@@ -48,7 +50,6 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>W', hidden = true },
       { '<leader>S', hidden = true },
       { '<leader>E', hidden = true },
-      { '<leader>T', hidden = true },
       { '<leader>F', hidden = true },
 
       -- Find Group (<leader>f)

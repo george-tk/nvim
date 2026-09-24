@@ -14,7 +14,7 @@ return {
         enabled = true,
       },
       heading = {
-        position = 'inline',
+        position = 'overlay',
         sign = false,
         icons = { '󰎤 ', '󰎧 ', '󰎪 ', '󰎭 ', '󰎱 ', '󰎳 ' },
         backgrounds = {

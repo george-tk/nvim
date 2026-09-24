@@ -171,20 +171,34 @@ function M.set_active_connection(name, url)
 end
 
 -- Redraw the DBUI drawer if currently open, or reset state for next open
-function M.redraw_dbui()
+function M.redraw_dbui(target_db_name)
   pcall(function()
-    if vim.fn.exists('*db_ui#drawer#get') == 1 then
-      local drawer = vim.fn['db_ui#drawer#get']()
-      if type(drawer) == 'table' and drawer.is_opened and drawer.is_opened() == 1 then
-        if drawer.render then
-          drawer.render({ dbs = 1, queries = 1 })
+    vim.cmd(string.format([[
+      if exists("*db_ui#drawer#get")
+        let s:d = db_ui#drawer#get()
+        let s:is_open = 0
+        for s:w in range(1, winnr('$'))
+          if getwinvar(s:w, '&filetype') ==# 'dbui'
+            let s:is_open = 1
+            break
+          endif
+        endfor
+        if s:is_open
+          for s:db in s:d.dbui.dbs_list
+            if !empty("%s") && s:db.name ==# "%s"
+              let s:d.dbui.dbs[s:db.key_name].expanded = 1
+              let s:d.dbui.dbs[s:db.key_name].saved_queries.expanded = 1
+            endif
+            call s:d.load_saved_queries(s:d.dbui.dbs[s:db.key_name])
+          endfor
+          call s:d.render({ "dbs": 1, "queries": 1 })
           return
-        end
-      end
-    end
-    if vim.fn.exists('*db_ui#reset_state') == 1 then
-      vim.fn['db_ui#reset_state']()
-    end
+        endif
+      endif
+      if exists("*db_ui#reset_state")
+        call db_ui#reset_state()
+      endif
+    ]], target_db_name or '', target_db_name or ''))
   end)
 end
 
@@ -441,37 +455,104 @@ function M.open_query_scratchpad()
   end
 end
 
-function M.save_query()
+function M.save_query(force_prompt)
   local buf = vim.api.nvim_get_current_buf()
-  local current_name = vim.api.nvim_buf_get_name(buf)
-  local is_on_disk = current_name ~= '' and vim.fn.filereadable(current_name) == 1
+  local ft = vim.bo[buf].filetype
+  if ft == 'dbui' or ft == 'dbout' then
+    return
+  end
 
-  -- 1. If already an existing file on disk, simply write changes
-  if is_on_disk and vim.bo[buf].buftype == '' then
+  local current_name = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
+  local conns = M.get_all_connections()
+
+  -- Check if the current buffer is ALREADY an existing saved query file:
+  -- Must be directly inside db_ui_dir/<dbname>/<filename>.sql (NOT scratchpad.sql, NOT in tmp/)
+  local is_existing_saved = false
+  local existing_db_name = nil
+
+  if not force_prompt and current_name ~= '' and vim.fn.filereadable(current_name) == 1 then
+    for _, c in ipairs(conns) do
+      local expected_dir = vim.fs.normalize(db_ui_dir .. '/' .. c.name)
+      local file_dir = vim.fs.normalize(vim.fn.fnamemodify(current_name, ':h'))
+      if file_dir == expected_dir then
+        is_existing_saved = true
+        existing_db_name = c.name
+        break
+      end
+    end
+  end
+
+  -- Case 1: If editing an ALREADY saved query, simple save updates the file on disk
+  if is_existing_saved and vim.bo[buf].buftype == '' then
     local ok, err = pcall(vim.cmd, 'write')
     if ok then
-      vim.notify('Query file saved: ' .. vim.fn.fnamemodify(current_name, ':t'), vim.log.levels.INFO, { title = 'Database' })
-      M.redraw_dbui()
+      vim.notify('Saved query updated: ' .. vim.fn.fnamemodify(current_name, ':t'), vim.log.levels.INFO, { title = 'Database' })
+      M.redraw_dbui(existing_db_name)
     else
       vim.notify('Error saving query: ' .. tostring(err), vim.log.levels.ERROR, { title = 'Database' })
     end
     return
   end
 
-  -- 2. If inside a DBUI managed temporary query buffer with <Plug>(DBUI_SaveQuery) available
-  if vim.b[buf].dbui_db_key_name and vim.fn.maparg('<Plug>(DBUI_SaveQuery)', 'n') ~= '' then
-    local key = vim.api.nvim_replace_termcodes('<Plug>(DBUI_SaveQuery)', true, false, true)
-    vim.api.nvim_feedkeys(key, 'm', false)
+  -- Case 2: Save as a new saved query into the database's saved queries directory
+  local db_url, db_name = M.get_active_db(buf)
+
+  -- Resolve database name from DBUI buffer variables or tmp filename prefix if needed
+  if not db_name or db_name == 'Database' then
+    local key = vim.b[buf].dbui_db_key_name
+    if key and key ~= '' then
+      for _, c in ipairs(conns) do
+        if key:find('^' .. c.name) then
+          db_name = c.name
+          db_url = c.url
+          break
+        end
+      end
+    end
+
+    if (not db_name or db_name == 'Database') and current_name:find('/db_ui/tmp/') then
+      local tmp_prefix = current_name:match('/db_ui/tmp/([^/-]+)%-')
+      if tmp_prefix then
+        for _, c in ipairs(conns) do
+          if c.name == tmp_prefix then
+            db_name = c.name
+            db_url = c.url
+            break
+          end
+        end
+      end
+    end
+  end
+
+  db_name = db_name or M.current_db_name or (conns[1] and conns[1].name)
+  if not db_name or db_name == '' or db_name == 'Database' then
+    M.select_connection(function(selected_url, selected_name)
+      if selected_name then
+        M.current_db = selected_url
+        M.current_db_name = selected_name
+        pcall(function()
+          vim.b[buf].db = selected_url
+          vim.b[buf].db_name = selected_name
+        end)
+        M.save_query(force_prompt)
+      end
+    end)
     return
   end
 
-  -- 3. Scratchpad or unnamed buffer: save into DBUI's saved queries for active database
-  local _, db_name = M.get_active_db(buf)
-  db_name = db_name or M.current_db_name or 'Database'
+  -- Suggest a reasonable default query name
+  local default_name = ''
+  if vim.b[buf].dbui_table_name and vim.b[buf].dbui_table_name ~= '' then
+    default_name = vim.b[buf].dbui_table_name .. '_query'
+  elseif current_name ~= '' and not current_name:find('scratchpad%.sql$') and not current_name:find('/tmp/') then
+    default_name = vim.fn.fnamemodify(current_name, ':t:r')
+  else
+    default_name = 'query_' .. os.date('%Y%m%d_%H%M%S')
+  end
 
   vim.ui.input({
     prompt = 'Save Query Name (for ' .. db_name .. '): ',
-    default = 'query_' .. os.date('%Y%m%d_%H%M%S'),
+    default = default_name,
   }, function(input_name)
     if not input_name or input_name:match('^%s*$') then return end
     input_name = vim.trim(input_name)
@@ -479,28 +560,40 @@ function M.save_query()
       input_name = input_name .. '.sql'
     end
 
-    local save_dir = db_ui_dir .. '/' .. db_name
+    local save_dir = vim.fs.normalize(db_ui_dir .. '/' .. db_name)
     if vim.fn.isdirectory(save_dir) == 0 then
       vim.fn.mkdir(save_dir, 'p')
     end
 
-    local full_path = save_dir .. '/' .. input_name
-    local ok, err = pcall(function()
-      vim.cmd('write! ' .. vim.fn.fnameescape(full_path))
-      vim.cmd('file ' .. vim.fn.fnameescape(full_path))
-      vim.bo[buf].filetype = 'sql'
-      vim.bo[buf].buftype = ''
-      vim.b[buf].db = M.current_db
-      vim.b[buf].db_name = db_name
+    local full_path = vim.fs.normalize(save_dir .. '/' .. input_name)
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+
+    local write_ok, write_err = pcall(vim.fn.writefile, lines, full_path)
+    if not write_ok then
+      vim.notify('Failed to save query: ' .. tostring(write_err), vim.log.levels.ERROR, { title = 'Database' })
+      return
+    end
+
+    -- Switch current buffer to the newly saved query file
+    pcall(function()
+      vim.cmd('edit ' .. vim.fn.fnameescape(full_path))
+      local new_buf = vim.api.nvim_get_current_buf()
+      vim.bo[new_buf].filetype = 'sql'
+      vim.bo[new_buf].buftype = ''
+      vim.b[new_buf].db = db_url or M.current_db
+      vim.b[new_buf].db_name = db_name
+      vim.b[new_buf].dbui_db_key_name = db_name .. '_file'
     end)
 
-    if ok then
-      vim.notify('Saved query to ' .. db_name .. ': ' .. input_name, vim.log.levels.INFO, { title = 'Database' })
-      M.redraw_dbui()
-    else
-      vim.notify('Failed to save query: ' .. tostring(err), vim.log.levels.ERROR, { title = 'Database' })
-    end
+    vim.notify('Saved query to ' .. db_name .. ': ' .. input_name, vim.log.levels.INFO, { title = 'Database' })
+
+    -- Refresh DBUI drawer and expand the Saved queries section for this database
+    M.redraw_dbui(db_name)
   end)
+end
+
+function M.save_query_as()
+  M.save_query(true)
 end
 
 function M.run_query()
@@ -557,6 +650,10 @@ function M.run_query()
   vim.notify('Executed on ' .. db_name, vim.log.levels.INFO, { title = 'Database' })
 end
 
+vim.api.nvim_create_user_command('SaveQuery', function() M.save_query() end, { desc = 'Save query to database saved queries' })
+vim.api.nvim_create_user_command('SaveQueryAs', function() M.save_query_as() end, { desc = 'Save query as new file in database saved queries' })
+vim.api.nvim_create_user_command('DBSaveQuery', function() M.save_query() end, { desc = 'Save query to database saved queries' })
+
 _G.DatabaseUtils = M
 
 return {
@@ -600,6 +697,7 @@ return {
       vim.g.db_ui_use_nvim_notify = 1
       vim.g.db_ui_default_query = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;'
       vim.g.db_ui_disable_mappings_sql = 1 -- Disable default uppercase <Leader>W, <Leader>E, <Leader>S mappings
+      vim.g.db_ui_use_postgres_views = 1 -- Include PostgreSQL materialized views in schema tables
 
       -- Generate query buffer names ending in .sql so Treesitter, Blink.cmp, and NeoCodeium AI recognize them
       vim.g.Db_ui_buffer_name_generator = function(opts)
@@ -625,36 +723,35 @@ return {
       vim.g.db_ui_table_helpers = {
         sqlite = {
           ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 10'] = 'SELECT * FROM {table} LIMIT 10;',
+          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
           ['List'] = 'SELECT * FROM {table} LIMIT 50;',
           ['Describe'] = 'PRAGMA table_info({table});',
         },
         sqlserver = {
           ['Count'] = 'SELECT count(*) FROM [{table}];',
-          ['Top 10'] = 'SELECT TOP 10 * FROM [{table}];',
-          ['First 10'] = 'SELECT TOP 10 * FROM [{table}];',
+          ['First 1000'] = 'SELECT TOP 1000 * FROM [{table}];',
           ['List'] = 'SELECT TOP 50 * FROM [{table}];',
           ['Describe'] = "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table}';",
         },
         postgresql = {
           ['Count'] = 'SELECT count(*) FROM {optional_schema}"{table}";',
-          ['First 10'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 10;',
+          ['First 1000'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 1000;',
           ['List'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;',
         },
         postgres = {
           ['Count'] = 'SELECT count(*) FROM {optional_schema}"{table}";',
-          ['First 10'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 10;',
+          ['First 1000'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 1000;',
           ['List'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;',
         },
         mysql = {
           ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 10'] = 'SELECT * FROM {table} LIMIT 10;',
+          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
           ['List'] = 'SELECT * FROM {table} LIMIT 50;',
           ['Describe'] = 'DESCRIBE {table};',
         },
         mariadb = {
           ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 10'] = 'SELECT * FROM {table} LIMIT 10;',
+          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
           ['List'] = 'SELECT * FROM {table} LIMIT 50;',
           ['Describe'] = 'DESCRIBE {table};',
         },

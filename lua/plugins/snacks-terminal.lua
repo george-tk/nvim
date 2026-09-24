@@ -17,7 +17,7 @@ return {
   },
   keys = {
     {
-      '<leader>/',
+      '<leader>T',
       function()
         local count = vim.v.count > 0 and vim.v.count or nil
         if _G.BottomPanel then
