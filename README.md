@@ -119,7 +119,7 @@ This configuration has `vim.g.have_nerd_font = true` enabled and relies on a [Ne
 - File tree icons (`nvim-web-devicons`, Snacks Explorer)
 - Statusline glyphs and database indicators in `lualine` (`󰆼`)
 - Markdown rendered heading numerals and badges (`render-markdown.nvim`: `󰎤 `, `󰎧 `, `󰎪 `, etc.)
-- Database table and drawer node icons in `vim-dadbod-ui` (``, ``)
+- Database tree and drawer node icons in `sqmeow.nvim` (``, ``, `󰙅`, `󰓫`, `󰈈`, `󰎠`, `󰊕`, `󰀄`)
 - LSP diagnostic status signs (` `, ` `, ` `, ` `)
 - Blink completion item kind icons
 
@@ -318,13 +318,18 @@ Run the built-in health check to confirm all tools and dependencies are properly
 ### 🗄️ Database Studio (`<leader>b`)
 | Keybinding | Action | Description |
 | :--- | :--- | :--- |
+| **`<leader>be`** | Database Explorer | Open Database Explorer drawer on the right panel (35 cols) with Tables, Views, Sequences, Functions, Procedures, Roles |
+| **`<leader>bs`** | Switch Database | Fast fuzzy picker to switch / bind database environments on the fly |
+| **`<leader>br`** | Run Query | Execute statement under cursor or visual block into bottom result grid |
 | **`<leader>bq`** | Query Scratchpad | Open clean, blank SQL buffer connected to active DB |
-| **`<leader>br`** | Run Query | Execute statement under cursor, visual block, or file |
+| **`<leader>bw`** | Save Query | Bookmark current query to persistent storage |
+| **`<leader>bl`** | Saved Queries | Fuzzy search and open saved queries into editor buffer |
 | **`<leader>bo`** | Query Output | Show/hide Query Results Table without re-executing |
-| **`<leader>bc`** | Switch Database | Fast fuzzy picker to switch environments on the fly |
 | **`<leader>ba`** | Add Database | Interactive prompt to add a new connection URL |
-| **`<leader>bt`** | Database Explorer | Open Database Explorer drawer on the right panel (35 cols) |
-| **`<leader>bs`** | Save Query | Bookmark current query |
+| **`<leader>bd`** | Delete Database | Interactive picker to remove a connection |
+| **`<leader>bf`** | Float Results | Toggle results window between bottom split and centered floating modal |
+| **`<leader>bv`** | Review Edits | Review and commit in-grid cell edits directly to database |
+| **`<leader>bx`** | Export Results | Export query results to CSV, JSON, or SQL insert statements |
 
 ---
 

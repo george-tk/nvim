@@ -95,6 +95,8 @@ o.fillchars = { -- Fold fill characters
 -------------------------------------------------------------------------------
 g.have_nerd_font = true -- Nerd Font flag
 g.markdown_recommended_style = 0 -- prevents rewrite of markdown style
+g.vim_dadbod_completion_disable_notifications = 1 -- Silence dadbod completion connect messages
+g.vim_dadbod_completion_source_limits = { columns = 3000, tables = 1000 } -- Prevent truncating user columns
 
 ---
 -- Custom Window Title

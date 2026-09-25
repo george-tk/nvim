@@ -91,7 +91,7 @@ return {
           draw = {
             columns = {
               { 'kind_icon' },
-              { 'label', gap = 1 },
+              { 'label', 'label_description', gap = 1 },
             },
             components = {
               kind_icon = {
@@ -117,6 +117,10 @@ return {
         sorts = {
           -- 1. Prioritize Variables (6), Parameters (25), Fields (5), Properties (10)
           function(a, b)
+            local ft = vim.bo.filetype
+            if ft == 'sql' or ft == 'mysql' or ft == 'plsql' then
+              return nil
+            end
             local a_var = a.kind == 6 or a.kind == 25 or a.kind == 5 or a.kind == 10
             local b_var = b.kind == 6 or b.kind == 25 or b.kind == 5 or b.kind == 10
             if a_var ~= b_var then
@@ -216,10 +220,10 @@ return {
             },
           },
 
-          -- Database completion via vim-dadbod-completion
+          -- Database completion with intelligent table-aware prioritization
           dadbod = {
             name = 'Dadbod',
-            module = 'vim_dadbod_completion.blink',
+            module = 'utils.dadbod-blink',
             score_offset = 100,
           },
 

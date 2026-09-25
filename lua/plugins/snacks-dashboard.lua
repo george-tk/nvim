@@ -81,7 +81,7 @@ return {
             indent = 2,
             padding = 2,
             filter = function(dir)
-              return dir and not dir:find('db_ui') and not dir:find('nvim/assets')
+              return dir and not dir:find('sqmeow') and not dir:find('db_ui') and not dir:find('nvim/assets')
             end,
           },
           {
@@ -92,7 +92,7 @@ return {
             padding = 2,
             filter = function(file)
               if not file then return false end
-              if file:find('/db_ui/') or file:match('%.sqlite%d?$') or file:match('%.db$') then
+              if file:find('/sqmeow/') or file:find('/db_ui/') or file:match('%.sqlite%d?$') or file:match('%.db$') then
                 return false
               end
               return true

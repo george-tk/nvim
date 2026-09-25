@@ -1,35 +1,39 @@
 local M = {}
 
-local db_ui_dir = vim.fs.normalize(vim.fn.stdpath('data') .. '/db_ui')
-local conn_file = db_ui_dir .. '/connections.json'
-local active_file = db_ui_dir .. '/last_active.json'
+-- Silence dadbod completion notifications and redraw prompts
+vim.g.vim_dadbod_completion_disable_notifications = 1
+
+local sqmeow_dir = vim.fs.normalize(vim.fn.stdpath('data') .. '/sqmeow')
+local sqmeow_scratch_dir = vim.fs.normalize(sqmeow_dir .. '/scratch')
+local sqmeow_conn_file = sqmeow_dir .. '/connections.json'
+local active_file = sqmeow_dir .. '/last_active.json'
 
 -- Active connection state across all buffers (nil until a connection is active)
 M.current_db = nil
 M.current_db_name = nil
 
 -------------------------------------------------------------------------------
--- Persistent Connection Storage & DBUI Synchronization
+-- Persistent Connection Storage & Management (sqmeow.nvim)
 -------------------------------------------------------------------------------
 
--- Save connections list to connections.json (Single Source of Truth)
+-- Save connections list to sqmeow connections.json
 function M.save_connections(connections)
-  if vim.fn.isdirectory(db_ui_dir) == 0 then
-    vim.fn.mkdir(db_ui_dir, 'p')
+  if vim.fn.isdirectory(sqmeow_dir) == 0 then
+    vim.fn.mkdir(sqmeow_dir, 'p')
   end
+
   local json_str = vim.fn.json_encode(connections)
-  vim.fn.writefile({ json_str }, conn_file)
+  vim.fn.writefile({ json_str }, sqmeow_conn_file)
   vim.g.dbs = nil
 end
 
--- Read all persistent connections from connections.json
+-- Read all persistent connections from sqmeow connections.json
 function M.get_all_connections()
   local connections = {}
   local seen = {}
 
-  -- 1. Read persistent connections.json
-  if vim.fn.filereadable(conn_file) == 1 then
-    local ok, lines = pcall(vim.fn.readfile, conn_file)
+  if vim.fn.filereadable(sqmeow_conn_file) == 1 then
+    local ok, lines = pcall(vim.fn.readfile, sqmeow_conn_file)
     if ok and lines and #lines > 0 then
       local ok_json, parsed = pcall(vim.fn.json_decode, table.concat(lines, ''))
       if ok_json and type(parsed) == 'table' then
@@ -43,7 +47,7 @@ function M.get_all_connections()
     end
   end
 
-  -- 2. Merge any extra connections from vim.g.dbs if defined
+  -- Merge any extra connections from vim.g.dbs if defined
   if vim.g.dbs and type(vim.g.dbs) == 'table' then
     local updated = false
     for _, entry in ipairs(vim.g.dbs) do
@@ -67,8 +71,8 @@ end
 
 -- Save last active connection so it persists across sessions and restarts
 function M.save_active_connection(name, url)
-  if vim.fn.isdirectory(db_ui_dir) == 0 then
-    vim.fn.mkdir(db_ui_dir, 'p')
+  if vim.fn.isdirectory(sqmeow_dir) == 0 then
+    vim.fn.mkdir(sqmeow_dir, 'p')
   end
   vim.fn.writefile({ vim.fn.json_encode({ name = name, url = url }) }, active_file)
 end
@@ -150,56 +154,154 @@ function M.load_active_connection()
   return nil, nil
 end
 
+function M.get_saved_queries_dir(db_name)
+  if not db_name or db_name == '' then
+    return sqmeow_scratch_dir
+  end
+  return vim.fs.normalize(sqmeow_scratch_dir .. '/' .. db_name)
+end
+
+-- Get saved queries for a specific database (stored in sqmeow/scratch/<db_name>/)
+function M.get_saved_queries_for_db(db_name)
+  if not db_name then return {} end
+  local files = {}
+  local seen = {}
+  local dir = M.get_saved_queries_dir(db_name)
+  if vim.fn.isdirectory(dir) == 1 then
+    local ok, iter = pcall(vim.fs.dir, dir)
+    if ok and iter then
+      for name, kind in iter do
+        if kind == 'file' and name:match('%.sql$') and not seen[name] then
+          seen[name] = true
+          table.insert(files, {
+            name = name,
+            path = dir .. '/' .. name,
+            db_name = db_name,
+          })
+        end
+      end
+    end
+  end
+  table.sort(files, function(a, b) return a.name < b.name end)
+  return files
+end
+
+function M.get_connection_url(name)
+  local conns = M.get_all_connections()
+  for _, c in ipairs(conns) do
+    if c.name == name then
+      return c.url
+    end
+  end
+  return nil
+end
+
+-- Prune duplicate connections from sqmeow's active state
+function M.deduplicate_connections()
+  local ok_state, state = pcall(require, 'sqmeow.state')
+  local ok_api, api = pcall(require, 'sqmeow.api')
+  if not ok_state or not ok_api or not state or not api or not state.connections then
+    return
+  end
+
+  local seen = {}
+  local duplicates = {}
+  for id, conn in pairs(state.connections) do
+    if not conn.parent then
+      if seen[conn.name] then
+        table.insert(duplicates, id)
+      else
+        seen[conn.name] = id
+      end
+    end
+  end
+
+  for _, dup_id in ipairs(duplicates) do
+    pcall(function() api.disconnect(dup_id) end)
+    pcall(function() state.remove_connection(dup_id) end)
+  end
+
+  if #duplicates > 0 then
+    pcall(function() require('sqmeow.ui.drawer').render() end)
+  end
+end
+
+-- Ensure connection is active in sqmeow without creating duplicate entries
+function M.ensure_sqmeow_connection(db_name)
+  if not db_name or db_name == '' then
+    return nil
+  end
+
+  local ok_state, state = pcall(require, 'sqmeow.state')
+  local ok_api, api = pcall(require, 'sqmeow.api')
+  if not ok_state or not ok_api or not state or not api then
+    return nil
+  end
+
+  -- Clean up any duplicates of this connection if they already exist
+  local active_conn = nil
+  local duplicates = {}
+  if state.connections then
+    for id, conn in pairs(state.connections) do
+      if conn.name == db_name and not conn.parent then
+        if not active_conn and conn.state ~= 'closed' then
+          active_conn = conn
+        else
+          table.insert(duplicates, id)
+        end
+      end
+    end
+    for _, dup_id in ipairs(duplicates) do
+      pcall(function() api.disconnect(dup_id) end)
+      pcall(function() state.remove_connection(dup_id) end)
+    end
+    if #duplicates > 0 then
+      pcall(function() require('sqmeow.ui.drawer').render() end)
+    end
+  end
+
+  -- If an open/valid connection already exists, reuse it
+  if active_conn then
+    pcall(function()
+      api.use(active_conn.id)
+    end)
+    return active_conn.id
+  end
+
+  -- Otherwise, open it for the first time
+  local id = nil
+  pcall(function()
+    id = api.connect_named(db_name)
+    if id then
+      api.use(id)
+    end
+  end)
+  return id
+end
+
 -- Set active connection across global state, disk persistence, and all open SQL buffers
 function M.set_active_connection(name, url)
   M.current_db = url
   M.current_db_name = name
   M.save_active_connection(name, url)
 
-  -- Update all active SQL buffers
+  -- Update all active SQL buffers for blink.cmp and sqmeow
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(buf) then
       local ft = vim.bo[buf].filetype
       if ft == 'sql' or ft == 'mysql' or ft == 'plsql' then
         vim.b[buf].db = url
         vim.b[buf].db_name = name
+        vim.b[buf].sqmeow_connection = name
+        pcall(function()
+          vim.cmd('call vim_dadbod_completion#fetch(' .. buf .. ')')
+        end)
       end
     end
   end
 
-  M.redraw_dbui()
-end
-
--- Redraw the DBUI drawer if currently open, or reset state for next open
-function M.redraw_dbui(target_db_name)
-  pcall(function()
-    vim.cmd(string.format([[
-      if exists("*db_ui#drawer#get")
-        let s:d = db_ui#drawer#get()
-        let s:is_open = 0
-        for s:w in range(1, winnr('$'))
-          if getwinvar(s:w, '&filetype') ==# 'dbui'
-            let s:is_open = 1
-            break
-          endif
-        endfor
-        if s:is_open
-          for s:db in s:d.dbui.dbs_list
-            if !empty("%s") && s:db.name ==# "%s"
-              let s:d.dbui.dbs[s:db.key_name].expanded = 1
-              let s:d.dbui.dbs[s:db.key_name].saved_queries.expanded = 1
-            endif
-            call s:d.load_saved_queries(s:d.dbui.dbs[s:db.key_name])
-          endfor
-          call s:d.render({ "dbs": 1, "queries": 1 })
-          return
-        endif
-      endif
-      if exists("*db_ui#reset_state")
-        call db_ui#reset_state()
-      endif
-    ]], target_db_name or '', target_db_name or ''))
-  end)
+  -- Connect & use connection in sqmeow without duplicating
+  M.ensure_sqmeow_connection(name)
 end
 
 -- Initialize persistent connections & state
@@ -208,7 +310,6 @@ function M.init()
   M.load_active_connection()
 end
 
--- Run initialization immediately on load
 M.init()
 
 -- Resolve the active database for any buffer
@@ -218,7 +319,18 @@ function M.get_active_db(buf)
     return nil, nil
   end
 
-  -- 1. Buffer already has an assigned database
+  -- 1. Buffer path belongs to a specific database folder
+  local buf_path = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
+  if buf_path ~= '' then
+    local conns = M.get_all_connections()
+    for _, c in ipairs(conns) do
+      if buf_path:find('/' .. c.name .. '/') or buf_path:find('/' .. c.name .. '_') then
+        return c.url, c.name
+      end
+    end
+  end
+
+  -- 2. Buffer already has an assigned database
   local ok_db, db_val = pcall(function() return vim.b[buf].db end)
   local ok_name, db_name_val = pcall(function() return vim.b[buf].db_name end)
   if ok_db and db_val and db_val ~= '' then
@@ -226,37 +338,609 @@ function M.get_active_db(buf)
     return db_val, name
   end
 
-  -- 2. Buffer is inside db_ui folder for a specific database (e.g. ~/.local/share/nvim/db_ui/<dbname>/...)
-  local bname = vim.api.nvim_buf_get_name(buf)
-  if bname and bname ~= '' and bname:find('/db_ui/') then
+  -- 2. Buffer bound via sqmeow_connection
+  local ok_sq, sq_conn = pcall(function() return vim.b[buf].sqmeow_connection end)
+  if ok_sq and sq_conn and sq_conn ~= '' then
     local conns = M.get_all_connections()
     for _, c in ipairs(conns) do
-      if bname:find('/db_ui/' .. c.name .. '/') then
-        if M.is_accessible(c.url) then
-          pcall(function()
-            vim.b[buf].db = c.url
-            vim.b[buf].db_name = c.name
-          end)
-          return c.url, c.name
-        end
+      if c.name == sq_conn then
+        return c.url, c.name
       end
     end
+  end
 
-    -- Scratchpad inside db_ui directory
-    if bname:find('scratchpad.sql') and M.current_db and M.is_accessible(M.current_db) then
-      pcall(function()
-        vim.b[buf].db = M.current_db
-        vim.b[buf].db_name = M.current_db_name
-      end)
-      return M.current_db, M.current_db_name
-    end
+  -- 3. Fallback to active connection
+  if M.current_db and M.is_accessible(M.current_db) then
+    return M.current_db, M.current_db_name
   end
 
   return nil, nil
 end
 
 -------------------------------------------------------------------------------
--- Interactive Connection Switcher & Connection Management (<leader>bc, <leader>ba)
+-- Spatial Drawer Docking & Right Panel Management
+-------------------------------------------------------------------------------
+
+function M.open_drawer()
+  local ok, sqmeow_api = pcall(require, 'sqmeow.api')
+  if not ok then
+    vim.notify('sqmeow.nvim is not loaded yet', vim.log.levels.WARN, { title = 'Database' })
+    return
+  end
+
+  M.deduplicate_connections()
+  M.setup_drawer_helpers()
+
+  -- If drawer is already open, toggle it off
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      if vim.bo[buf].filetype == 'sqmeow-drawer' then
+        sqmeow_api.close_drawer()
+        return
+      end
+    end
+  end
+
+  -- Mutually exclusive with other right panels (File Explorer, OpenCode)
+  if _G.RightPanel then
+    if _G.RightPanel.active_mode == 'explorer' then
+      pcall(function() Snacks.picker.pickers.explorer:close() end)
+    end
+    _G.RightPanel.active_mode = 'dbui'
+  end
+
+  sqmeow_api.open_drawer()
+
+  -- Position strictly on the right side at 35 columns and keep drawer focused
+  vim.schedule(function()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(win) then
+        local buf = vim.api.nvim_win_get_buf(win)
+        if vim.bo[buf].filetype == 'sqmeow-drawer' then
+          vim.wo[win].spell = false
+          vim.api.nvim_set_current_win(win)
+          vim.cmd('wincmd L')
+          vim.cmd('vertical resize 35')
+          break
+        end
+      end
+    end
+  end)
+end
+
+function M.execute_default_query(conn_id, schema, rel, query_type)
+  local sql_mod = require('sqmeow.sql')
+  local st = require('sqmeow.state').connections[conn_id]
+  local dialect = st and st.dialect
+  local parts = { schema, rel }
+  local query = ''
+
+  if query_type == 'first_1000' then
+    query = sql_mod.select_from(dialect, parts, 1000) .. ';'
+  elseif query_type == 'count' then
+    query = ('select count(*) as count from %s;'):format(sql_mod.qualify(dialect, parts))
+  else
+    query = query_type
+  end
+
+  local conn_name = st and st.name or M.current_db_name
+  local pad_dir = vim.fs.normalize(sqmeow_scratch_dir .. '/' .. (conn_name or 'default'))
+  vim.fn.mkdir(pad_dir, 'p')
+  local pad_path = pad_dir .. '/' .. rel .. '.sql'
+
+  -- Ensure scratchpad file exists with the query content
+  vim.fn.writefile({ query }, pad_path)
+
+  -- Open the scratchpad in the main editor window
+  local editor = require('sqmeow.ui.editor')
+  local buf = editor.open_path(pad_path)
+
+  -- Set active connection context on the buffer for blink.cmp autocompletion
+  local conn_url = (st and st.url) or M.current_db
+  if not conn_url and conn_name then
+    for _, c in ipairs(M.get_all_connections()) do
+      if c.name == conn_name then
+        conn_url = c.url
+        break
+      end
+    end
+  end
+
+  if conn_url then
+    vim.b[buf].db = conn_url
+    vim.b[buf].db_name = conn_name
+    vim.b[buf].sqmeow_connection = conn_name
+    vim.b[buf].sqmeow_table = rel
+    M.current_db = conn_url
+    M.current_db_name = conn_name
+  end
+  vim.bo[buf].filetype = 'sql'
+  vim.opt_local.spell = false
+
+  -- Execute the query so the results grid opens in the bottom panel
+  local api = require('sqmeow.api')
+  api.use(conn_id)
+  api.execute(query)
+
+  -- Ensure bottom panel tracks dbout mode
+  if _G.BottomPanel then
+    _G.BottomPanel.active_mode = 'dbout'
+  end
+
+  -- Position cursor in the editor buffer on the query so user can modify/save
+  local ed_win = vim.fn.bufwinid(buf)
+  if ed_win > 0 and vim.api.nvim_win_is_valid(ed_win) then
+    vim.api.nvim_set_current_win(ed_win)
+    vim.api.nvim_win_set_cursor(ed_win, { 1, #query })
+  end
+
+  -- Redraw drawer so scratchpads list reflects the new scratchpad
+  local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+  if ok_dr and drawer.render then
+    drawer.render()
+  end
+end
+
+function M.setup_drawer_helpers()
+  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
+  if not ok or M._drawer_helpers_initialized then return end
+  M._drawer_helpers_initialized = true
+
+  -- 1. Hook sqmeow.ui.editor so scratchpad list and open are database-scoped
+  local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
+  if ok_ed and editor and not M._editor_list_hooked then
+    M._editor_list_hooked = true
+
+    editor.list = function()
+      local pads = {}
+      local seen = {}
+      local base_dir = require('sqmeow.paths').scratch()
+
+      local function add_pad(display_name, file_path, db_name)
+        if seen[file_path] then return end
+        seen[file_path] = true
+        local stat = vim.uv.fs_stat(file_path)
+        table.insert(pads, {
+          name = display_name,
+          path = file_path,
+          db_name = db_name,
+          modified = stat and stat.mtime.sec or 0,
+        })
+      end
+
+      -- Scan per-database folders
+      local conns = M.get_all_connections()
+      for _, c in ipairs(conns) do
+        local q_list = M.get_saved_queries_for_db(c.name)
+        for _, q in ipairs(q_list) do
+          add_pad(c.name .. ' / ' .. q.name, q.path, c.name)
+        end
+      end
+
+      -- Scan top-level scratch directory (ad-hoc scratchpads)
+      local ok_base, base_iter = pcall(vim.fs.dir, base_dir)
+      if ok_base and base_iter then
+        for file, kind in base_iter do
+          if kind == 'file' and file:match('%.sql$') then
+            add_pad(file, vim.fs.normalize(base_dir .. '/' .. file), nil)
+          end
+        end
+      end
+
+      table.sort(pads, function(a, b)
+        if a.db_name and not b.db_name then return true end
+        if not a.db_name and b.db_name then return false end
+        return a.name < b.name
+      end)
+      return pads
+    end
+
+    local orig_open_path = editor.open_path
+    editor.open_path = function(path)
+      local buf = orig_open_path(path)
+      local norm_path = vim.fs.normalize(path)
+      local conns = M.get_all_connections()
+      for _, c in ipairs(conns) do
+        if norm_path:find('/' .. c.name .. '/') or norm_path:find('/' .. c.name .. '_') then
+          vim.b[buf].sqmeow_connection = c.name
+          vim.b[buf].db = c.url
+          vim.b[buf].db_name = c.name
+          M.ensure_sqmeow_connection(c.name)
+          break
+        end
+      end
+      return buf
+    end
+  end
+
+  -- 2. Hook NuiTree.Node to label the bottom scratchpads section as 'Saved Queries'
+  local ok_nui, NuiTree = pcall(require, 'nui.tree')
+  if ok_nui and NuiTree and not M._nui_tree_hooked then
+    M._nui_tree_hooked = true
+    local orig_node = NuiTree.Node
+    NuiTree.Node = function(data, children)
+      if data and data.id == 'scratchpads' and data.name == 'scratchpads' then
+        data.name = 'All Saved Queries'
+      end
+      return orig_node(data, children)
+    end
+  end
+
+  -- 3. Hook on_nodes to inject 'Saved queries' directly under each database connection,
+  -- and helper queries (* First 1000, * Count (*)) under tables
+  local orig_on_nodes = drawer.on_nodes
+  drawer.on_nodes = function(payload)
+    -- Under connection root: inject Saved queries node for that database
+    if (payload.path == nil or #payload.path == 0) and payload.nodes then
+      local has_sq = false
+      for _, n in ipairs(payload.nodes) do
+        if n.key == '__saved_queries' then
+          has_sq = true
+          break
+        end
+      end
+      if not has_sq then
+        local state = require('sqmeow.state')
+        local conn = (state.connections and state.connections[payload.conn_id])
+        local db_name = conn and conn.name
+        local queries = db_name and M.get_saved_queries_for_db(db_name) or {}
+        local count = #queries
+        table.insert(payload.nodes, 1, {
+          name = 'Saved queries',
+          key = '__saved_queries',
+          kind = 'saved_queries',
+          icon_kind = 'scratchpads',
+          count = count,
+          expandable = true,
+        })
+
+        -- If currently expanded, keep cached query nodes fresh
+        local ok_exp, is_exp = pcall(drawer.is_expanded, payload.conn_id, { '__saved_queries' })
+        if ok_exp and is_exp then
+          local _, node_key = debug.getupvalue(drawer.is_expanded, 2)
+          local _, cache = debug.getupvalue(drawer.invalidate, 2)
+          if node_key and cache then
+            local key = node_key(payload.conn_id, { '__saved_queries' })
+            local q_nodes = {}
+            for _, q in ipairs(queries) do
+              table.insert(q_nodes, {
+                name = q.name,
+                key = q.name,
+                kind = 'scratchpad',
+                file = q.path,
+                expandable = false,
+              })
+            end
+            cache[key] = { nodes = q_nodes }
+          end
+        end
+      end
+    end
+
+    -- Under tables/views: inject * First 1000 and * Count (*)
+    if payload.path and #payload.path == 3 and (payload.path[2] == 'tables' or payload.path[2] == 'views') and payload.nodes then
+      local has_helpers = false
+      for _, n in ipairs(payload.nodes) do
+        if n.key == '__first_1000' then
+          has_helpers = true
+          break
+        end
+      end
+      if not has_helpers then
+        table.insert(payload.nodes, 1, {
+          name = '* First 1000',
+          key = '__first_1000',
+          kind = 'query',
+          expandable = false,
+        })
+        table.insert(payload.nodes, 2, {
+          name = '* Count (*)',
+          key = '__count',
+          kind = 'query',
+          expandable = false,
+        })
+      end
+    end
+    return orig_on_nodes(payload)
+  end
+
+  -- 4. Hook drawer.actions.toggle for per-db saved queries and helper queries
+  local orig_toggle = drawer.actions.toggle
+  drawer.actions.toggle = function()
+    local node = drawer.current_node()
+
+    -- Expanding/collapsing 'Saved queries' directly under a database connection
+    if node and node.path and #node.path == 1 and node.path[1] == '__saved_queries' then
+      local state = require('sqmeow.state')
+      local conn = (state.connections and state.connections[node.conn_id]) or (node.name and state.connection_by_name(node.name))
+      local db_name = conn and conn.name
+      local queries = db_name and M.get_saved_queries_for_db(db_name) or {}
+      local q_nodes = {}
+      for _, q in ipairs(queries) do
+        table.insert(q_nodes, {
+          name = q.name,
+          key = q.name,
+          kind = 'scratchpad',
+          file = q.path,
+          expandable = false,
+        })
+      end
+
+      local _, expanded = debug.getupvalue(drawer.is_expanded, 1)
+      local _, node_key = debug.getupvalue(drawer.is_expanded, 2)
+      local _, cache = debug.getupvalue(drawer.invalidate, 2)
+
+      if expanded and node_key then
+        local key = node_key(node.conn_id, node.path)
+        if expanded[key] then
+          expanded[key] = nil
+        else
+          expanded[key] = true
+          if cache then
+            cache[key] = {
+              nodes = q_nodes,
+            }
+          end
+        end
+        drawer.render()
+      end
+      return
+    end
+
+    -- Opening a saved query directly under a database connection
+    if node and node.path and #node.path == 2 and node.path[1] == '__saved_queries' then
+      local state = require('sqmeow.state')
+      local conn = (state.connections and state.connections[node.conn_id]) or (node.name and state.connection_by_name(node.name))
+      local db_name = conn and conn.name
+      local file_path = node.file
+      if not file_path and db_name then
+        local dir = M.get_saved_queries_dir(db_name)
+        local candidate = dir .. '/' .. node.path[2]
+        if vim.uv.fs_stat(candidate) then
+          file_path = candidate
+        else
+          local queries = M.get_saved_queries_for_db(db_name)
+          for _, q in ipairs(queries) do
+            if q.name == node.path[2] then
+              file_path = q.path
+              break
+            end
+          end
+        end
+      end
+      if file_path then
+        local buf = require('sqmeow.ui.editor').open_path(file_path)
+        if db_name then
+          local db_url = M.get_connection_url(db_name)
+          vim.b[buf].sqmeow_connection = db_name
+          vim.b[buf].db = db_url
+          vim.b[buf].db_name = db_name
+          M.ensure_sqmeow_connection(db_name)
+        end
+        return
+      end
+    end
+
+    -- Helper queries (* First 1000, * Count (*))
+    if node and node.path and #node.path == 4 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+      local key = node.path[4]
+      local schema = node.path[1]
+      local rel = node.path[3]
+
+      if key == '__first_1000' then
+        M.execute_default_query(node.conn_id, schema, rel, 'first_1000')
+        return
+      elseif key == '__count' then
+        M.execute_default_query(node.conn_id, schema, rel, 'count')
+        return
+      end
+    end
+    return orig_toggle()
+  end
+
+  -- 5. Hook drawer.actions.preview for quick 'First 1000' (opens scratchpad in editor & executes)
+  local orig_preview = drawer.actions.preview
+  drawer.actions.preview = function()
+    local node = drawer.current_node()
+    if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+      local schema = node.path[1]
+      local rel = node.path[3]
+      M.execute_default_query(node.conn_id, schema, rel, 'first_1000')
+      return
+    end
+    return orig_preview()
+  end
+end
+
+-------------------------------------------------------------------------------
+-- Query Result Grid Helpers (Column Navigation & Sticky Headers)
+-------------------------------------------------------------------------------
+
+function M.get_result_tbl()
+  local ok, result = pcall(require, 'sqmeow.ui.result')
+  if not ok then return nil end
+  local i = 1
+  while true do
+    local name, val = debug.getupvalue(result.goto_column, i)
+    if not name then break end
+    if name == 'tbl' then return val end
+    i = i + 1
+  end
+  return nil
+end
+
+function M.next_result_column(win)
+  win = win or vim.api.nvim_get_current_win()
+  local tbl = M.get_result_tbl()
+  if not tbl then return end
+  local cell = tbl:goto_cell({ 0, 1 }, win)
+  if not cell and tbl._ and tbl._.columns and #tbl._.columns > 0 then
+    tbl:goto_column(1, win)
+  end
+end
+
+function M.prev_result_column(win)
+  win = win or vim.api.nvim_get_current_win()
+  local tbl = M.get_result_tbl()
+  if not tbl then return end
+  local cell = tbl:goto_cell({ 0, -1 }, win)
+  if not cell and tbl._ and tbl._.columns and #tbl._.columns > 0 then
+    tbl:goto_column(#tbl._.columns, win)
+  end
+end
+
+function M.first_result_column(win)
+  win = win or vim.api.nvim_get_current_win()
+  local tbl = M.get_result_tbl()
+  if tbl and tbl._ and tbl._.columns and #tbl._.columns > 0 then
+    tbl:goto_column(1, win)
+  end
+end
+
+function M.last_result_column(win)
+  win = win or vim.api.nvim_get_current_win()
+  local tbl = M.get_result_tbl()
+  if tbl and tbl._ and tbl._.columns and #tbl._.columns > 0 then
+    tbl:goto_column(#tbl._.columns, win)
+  end
+end
+
+local sticky_buf = nil
+local sticky_win = nil
+
+function M.close_sticky_header()
+  if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
+    pcall(vim.api.nvim_win_close, sticky_win, true)
+  end
+  sticky_win = nil
+  if sticky_buf and vim.api.nvim_buf_is_valid(sticky_buf) then
+    pcall(vim.api.nvim_buf_delete, sticky_buf, { force = true })
+  end
+  sticky_buf = nil
+end
+
+function M.update_sticky_header(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    M.close_sticky_header()
+    return
+  end
+  local buf = vim.api.nvim_win_get_buf(win)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= 'sqmeow-result' then
+    M.close_sticky_header()
+    return
+  end
+
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  if line_count < 3 then
+    if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
+      pcall(vim.api.nvim_win_close, sticky_win, true)
+      sticky_win = nil
+    end
+    return
+  end
+
+  local w0 = vim.fn.line('w0', win)
+  if w0 > 2 then
+    if not sticky_buf or not vim.api.nvim_buf_is_valid(sticky_buf) then
+      sticky_buf = vim.api.nvim_create_buf(false, true)
+      vim.bo[sticky_buf].buftype = 'nofile'
+      vim.bo[sticky_buf].bufhidden = 'hide'
+      vim.bo[sticky_buf].swapfile = false
+    end
+
+    local header_lines = vim.api.nvim_buf_get_lines(buf, 0, 2, false)
+    if #header_lines == 2 then
+      vim.bo[sticky_buf].modifiable = true
+      vim.api.nvim_buf_set_lines(sticky_buf, 0, -1, false, header_lines)
+      vim.bo[sticky_buf].modifiable = false
+
+      -- Transfer extmarks / highlights from original header rows
+      local ns = vim.api.nvim_create_namespace('sqmeow')
+      local hns = vim.api.nvim_create_namespace('sqmeow_sticky')
+      vim.api.nvim_buf_clear_namespace(sticky_buf, hns, 0, -1)
+      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 1, -1 }, { details = true })
+      for _, m in ipairs(marks) do
+        local row, col, details = m[2], m[3], m[4]
+        if details and details.hl_group then
+          pcall(vim.api.nvim_buf_set_extmark, sticky_buf, hns, row, col, {
+            end_col = details.end_col,
+            hl_group = details.hl_group,
+            priority = details.priority,
+          })
+        end
+      end
+
+      local win_w = vim.api.nvim_win_get_width(win)
+      local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+
+      if not sticky_win or not vim.api.nvim_win_is_valid(sticky_win) then
+        sticky_win = vim.api.nvim_open_win(sticky_buf, false, {
+          relative = 'win',
+          win = win,
+          row = 0,
+          col = 0,
+          width = win_w,
+          height = 2,
+          focusable = false,
+          style = 'minimal',
+          zindex = 45,
+        })
+        if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
+          vim.wo[sticky_win].wrap = false
+          vim.wo[sticky_win].spell = false
+        end
+      else
+        vim.api.nvim_win_set_config(sticky_win, {
+          width = win_w,
+          height = 2,
+        })
+      end
+
+      if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
+        vim.api.nvim_win_call(sticky_win, function()
+          vim.fn.winrestview({ leftcol = view.leftcol, topline = 1 })
+        end)
+      end
+    end
+  else
+    if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
+      pcall(vim.api.nvim_win_close, sticky_win, true)
+      sticky_win = nil
+    end
+  end
+end
+
+function M.update_result_winbar(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then return end
+  local ok, result = pcall(require, 'sqmeow.ui.result')
+  if not ok then return end
+
+  local ok_st, state = pcall(require, 'sqmeow.state')
+  local call = ok_st and state.call
+  if not call then return end
+
+  local cell = result.current_cell and result.current_cell()
+  local col_info = ''
+  if cell and cell.name and cell.name ~= '' then
+    local total_cols = call.columns and #call.columns or 0
+    local col_type = call.columns and call.columns[cell.column + 1] and call.columns[cell.column + 1].type_name or ''
+    col_info = ('  %%#SqmeowSignAdded#󰠵 %s%%*'):format(cell.name)
+    if col_type ~= '' then
+      col_info = col_info .. (' %%#SqmeowNull#(%s)%%*'):format(col_type)
+    end
+    if total_cols > 0 then
+      col_info = col_info .. (' %%#SqmeowNull#[%d/%d]%%*'):format(cell.column + 1, total_cols)
+    end
+  end
+
+  local label = call.connection or (state.current_connection() and state.current_connection().name) or 'database'
+  local desc = result.describe and result.describe(call, true) or ''
+  vim.wo[win].winbar = ('%%#SqmeowWinbar# %s  %%*%s%s'):format(label, desc, col_info)
+end
+
+-------------------------------------------------------------------------------
+-- Interactive Connection Switcher & Management (<leader>bs, <leader>ba, <leader>bd)
 -------------------------------------------------------------------------------
 
 function M.select_connection(callback)
@@ -307,6 +991,7 @@ function M.select_connection(callback)
     local cur_buf = vim.api.nvim_get_current_buf()
     vim.b[cur_buf].db = choice.url
     vim.b[cur_buf].db_name = choice.name
+    vim.b[cur_buf].sqmeow_connection = choice.name
 
     vim.notify('Active database: ' .. choice.name, vim.log.levels.INFO, { title = 'Database' })
 
@@ -318,7 +1003,7 @@ end
 
 function M.add_connection(callback)
   vim.ui.input({
-    prompt = 'Connection URL (e.g. postgresql://user:pass@host:5432/db or sqlite:/path/db or sqlserver://...): ',
+    prompt = 'Connection URL (e.g. postgresql://user:pass@host:5432/db or sqlite:/path/db): ',
   }, function(url)
     if not url or url:match('^%s*$') then return end
     url = vim.trim(url)
@@ -394,87 +1079,112 @@ function M.delete_connection()
       M.load_active_connection()
     end
 
-    local conn_dir = db_ui_dir .. '/' .. choice.name
-    if vim.fn.isdirectory(conn_dir) == 1 then
-      local files = vim.fn.glob(conn_dir .. '/*', true, true)
-      if #files == 0 then
-        pcall(vim.fn.delete, conn_dir, 'd')
-      end
-    end
+    pcall(function()
+      require('sqmeow.api').remove(choice.name)
+    end)
 
-    M.redraw_dbui()
     vim.notify('Removed database connection: ' .. choice.name, vim.log.levels.INFO, { title = 'Database' })
   end)
 end
 
 -------------------------------------------------------------------------------
--- Query Scratchpad, Execution, and Save Management (<leader>bq, <leader>br, <leader>bw)
+-- Query Execution, Scratchpad, and Save Management (<leader>br, <leader>bq, <leader>bw)
 -------------------------------------------------------------------------------
 
 function M.open_query_scratchpad()
-  local scratch_file = vim.fs.normalize(db_ui_dir .. '/scratchpad.sql')
-  if vim.fn.isdirectory(db_ui_dir) == 0 then
-    vim.fn.mkdir(db_ui_dir, 'p')
+  local ok, sqmeow_api = pcall(require, 'sqmeow.api')
+  if ok then
+    sqmeow_api.scratchpad()
+    local cur_buf = vim.api.nvim_get_current_buf()
+    if M.current_db then
+      vim.b[cur_buf].db = M.current_db
+      vim.b[cur_buf].db_name = M.current_db_name
+      vim.b[cur_buf].sqmeow_connection = M.current_db_name
+    end
+    vim.b[cur_buf].neocodeium_enabled = true
+    vim.b[cur_buf].neocodeium_allowed_encoding = true
   end
-  if vim.fn.filereadable(scratch_file) == 0 then
-    vim.fn.writefile({ '-- SQL Query Scratchpad', '-- Press <leader>br to execute, <leader>bs to switch DB, <leader>bw to save', '' }, scratch_file)
-  end
+end
 
-  local cur_buf = vim.api.nvim_get_current_buf()
-  if vim.api.nvim_buf_is_valid(cur_buf) and vim.api.nvim_buf_get_name(cur_buf) == scratch_file then
+function M.run_query()
+  local ok, sqmeow_api = pcall(require, 'sqmeow.api')
+  if not ok then
+    vim.notify('sqmeow is not available', vim.log.levels.ERROR, { title = 'Database' })
     return
   end
 
-  local ok, _ = pcall(vim.cmd, 'edit ' .. vim.fn.fnameescape(scratch_file))
-  if not ok then
-    pcall(vim.cmd, 'split ' .. vim.fn.fnameescape(scratch_file))
+  local cur_buf = vim.api.nvim_get_current_buf()
+  local ft = vim.bo[cur_buf].filetype
+  if ft == 'sqmeow-drawer' then
+    local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+    if ok_dr and drawer.current_node then
+      local node = drawer.current_node()
+      if node then
+        if node.path and #node.path == 4 and (node.path[4] == '__first_1000' or node.path[4] == '__count') then
+          drawer.actions.toggle()
+          return
+        elseif node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+          drawer.actions.preview()
+          return
+        end
+      end
+    end
   end
 
-  local buf = vim.api.nvim_get_current_buf()
-  if vim.api.nvim_buf_is_valid(buf) then
-    vim.bo[buf].buflisted = false
-    vim.b[buf].neocodeium_enabled = true
-    vim.b[buf].neocodeium_allowed_encoding = true
+  local db_url, db_name = M.get_active_db(cur_buf)
 
-    local db_url, db_name = M.get_active_db(buf)
-    if not db_url then
-      M.select_connection(function(new_url, new_name)
-        pcall(function()
-          vim.b[buf].db = new_url
-          vim.b[buf].db_name = new_name
-        end)
-        vim.notify('SQL Scratchpad connected to ' .. (new_name or 'Database'), vim.log.levels.INFO, { title = 'Database' })
-      end)
+  if not db_name or db_name == '' then
+    if M.current_db_name then
+      db_name = M.current_db_name
+      db_url = M.current_db
+      vim.b[cur_buf].db = db_url
+      vim.b[cur_buf].db_name = db_name
+      vim.b[cur_buf].sqmeow_connection = db_name
     else
-      pcall(function()
-        vim.b[buf].db = db_url
-        vim.b[buf].db_name = db_name
+      M.select_connection(function(selected_url, selected_name)
+        if selected_name then
+          M.run_query()
+        end
       end)
-      vim.notify('SQL Scratchpad connected to ' .. db_name, vim.log.levels.INFO, { title = 'Database' })
+      return
     end
+  end
+
+  -- Ensure active in sqmeow without duplicating connection
+  M.ensure_sqmeow_connection(db_name)
+
+  local mode = vim.api.nvim_get_mode().mode
+  local is_visual = mode:match('[vV\x16]') ~= nil
+
+  if is_visual then
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+    sqmeow_api.execute_selection()
+  else
+    sqmeow_api.execute_statement()
+  end
+
+  if _G.BottomPanel then
+    _G.BottomPanel.active_mode = 'dbout'
   end
 end
 
 function M.save_query(force_prompt)
   local buf = vim.api.nvim_get_current_buf()
   local ft = vim.bo[buf].filetype
-  if ft == 'dbui' or ft == 'dbout' then
+  if ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'dbui' or ft == 'dbout' then
     return
   end
 
   local current_name = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
   local conns = M.get_all_connections()
-
-  -- Check if the current buffer is ALREADY an existing saved query file:
-  -- Must be directly inside db_ui_dir/<dbname>/<filename>.sql (NOT scratchpad.sql, NOT in tmp/)
   local is_existing_saved = false
   local existing_db_name = nil
 
   if not force_prompt and current_name ~= '' and vim.fn.filereadable(current_name) == 1 then
+    local cur_dir = vim.fs.normalize(vim.fn.fnamemodify(current_name, ':h'))
     for _, c in ipairs(conns) do
-      local expected_dir = vim.fs.normalize(db_ui_dir .. '/' .. c.name)
-      local file_dir = vim.fs.normalize(vim.fn.fnamemodify(current_name, ':h'))
-      if file_dir == expected_dir then
+      local expected_sq = vim.fs.normalize(sqmeow_scratch_dir .. '/' .. c.name)
+      if cur_dir == expected_sq then
         is_existing_saved = true
         existing_db_name = c.name
         break
@@ -482,73 +1192,32 @@ function M.save_query(force_prompt)
     end
   end
 
-  -- Case 1: If editing an ALREADY saved query, simple save updates the file on disk
   if is_existing_saved and vim.bo[buf].buftype == '' then
     local ok, err = pcall(vim.cmd, 'write')
     if ok then
       vim.notify('Saved query updated: ' .. vim.fn.fnamemodify(current_name, ':t'), vim.log.levels.INFO, { title = 'Database' })
-      M.redraw_dbui(existing_db_name)
+      pcall(function() require('sqmeow.ui.drawer').render() end)
     else
       vim.notify('Error saving query: ' .. tostring(err), vim.log.levels.ERROR, { title = 'Database' })
     end
     return
   end
 
-  -- Case 2: Save as a new saved query into the database's saved queries directory
   local db_url, db_name = M.get_active_db(buf)
-
-  -- Resolve database name from DBUI buffer variables or tmp filename prefix if needed
-  if not db_name or db_name == 'Database' then
-    local key = vim.b[buf].dbui_db_key_name
-    if key and key ~= '' then
-      for _, c in ipairs(conns) do
-        if key:find('^' .. c.name) then
-          db_name = c.name
-          db_url = c.url
-          break
-        end
-      end
-    end
-
-    if (not db_name or db_name == 'Database') and current_name:find('/db_ui/tmp/') then
-      local tmp_prefix = current_name:match('/db_ui/tmp/([^/-]+)%-')
-      if tmp_prefix then
-        for _, c in ipairs(conns) do
-          if c.name == tmp_prefix then
-            db_name = c.name
-            db_url = c.url
-            break
-          end
-        end
-      end
-    end
-  end
-
   db_name = db_name or M.current_db_name or (conns[1] and conns[1].name)
   if not db_name or db_name == '' or db_name == 'Database' then
     M.select_connection(function(selected_url, selected_name)
       if selected_name then
         M.current_db = selected_url
         M.current_db_name = selected_name
-        pcall(function()
-          vim.b[buf].db = selected_url
-          vim.b[buf].db_name = selected_name
-        end)
         M.save_query(force_prompt)
       end
     end)
     return
   end
 
-  -- Suggest a reasonable default query name
-  local default_name = ''
-  if vim.b[buf].dbui_table_name and vim.b[buf].dbui_table_name ~= '' then
-    default_name = vim.b[buf].dbui_table_name .. '_query'
-  elseif current_name ~= '' and not current_name:find('scratchpad%.sql$') and not current_name:find('/tmp/') then
-    default_name = vim.fn.fnamemodify(current_name, ':t:r')
-  else
-    default_name = 'query_' .. os.date('%Y%m%d_%H%M%S')
-  end
+  local default_name = (current_name ~= '' and not current_name:find('scratch') and vim.fn.fnamemodify(current_name, ':t:r'))
+    or ('query_' .. os.date('%Y%m%d_%H%M%S'))
 
   vim.ui.input({
     prompt = 'Save Query Name (for ' .. db_name .. '): ',
@@ -560,367 +1229,171 @@ function M.save_query(force_prompt)
       input_name = input_name .. '.sql'
     end
 
-    local save_dir = vim.fs.normalize(db_ui_dir .. '/' .. db_name)
-    if vim.fn.isdirectory(save_dir) == 0 then
-      vim.fn.mkdir(save_dir, 'p')
+    local sqmeow_db_dir = vim.fs.normalize(sqmeow_scratch_dir .. '/' .. db_name)
+    if vim.fn.isdirectory(sqmeow_db_dir) == 0 then
+      vim.fn.mkdir(sqmeow_db_dir, 'p')
     end
 
-    local full_path = vim.fs.normalize(save_dir .. '/' .. input_name)
+    local scratch_path = vim.fs.normalize(sqmeow_db_dir .. '/' .. input_name)
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 
-    local write_ok, write_err = pcall(vim.fn.writefile, lines, full_path)
+    local write_ok, write_err = pcall(vim.fn.writefile, lines, scratch_path)
+
     if not write_ok then
       vim.notify('Failed to save query: ' .. tostring(write_err), vim.log.levels.ERROR, { title = 'Database' })
       return
     end
 
-    -- Switch current buffer to the newly saved query file
     pcall(function()
-      vim.cmd('edit ' .. vim.fn.fnameescape(full_path))
+      vim.cmd('edit ' .. vim.fn.fnameescape(scratch_path))
       local new_buf = vim.api.nvim_get_current_buf()
       vim.bo[new_buf].filetype = 'sql'
       vim.bo[new_buf].buftype = ''
       vim.b[new_buf].db = db_url or M.current_db
       vim.b[new_buf].db_name = db_name
-      vim.b[new_buf].dbui_db_key_name = db_name .. '_file'
+      vim.b[new_buf].sqmeow_connection = db_name
+      local prev_table = vim.b[buf] and vim.b[buf].sqmeow_table
+      if prev_table then
+        vim.b[new_buf].sqmeow_table = prev_table
+      end
     end)
 
-    vim.notify('Saved query to ' .. db_name .. ': ' .. input_name, vim.log.levels.INFO, { title = 'Database' })
+    pcall(function()
+      local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+      if ok_dr then
+        local ok_st, state = pcall(require, 'sqmeow.state')
+        if ok_st and state.connections then
+          local conn = state.connection_by_name(db_name)
+          if conn then
+            local _, node_key = debug.getupvalue(drawer.is_expanded, 2)
+            local _, cache = debug.getupvalue(drawer.invalidate, 2)
+            if node_key and cache then
+              local key = node_key(conn.id, { '__saved_queries' })
+              local queries = M.get_saved_queries_for_db(db_name)
+              local q_nodes = {}
+              for _, q in ipairs(queries) do
+                table.insert(q_nodes, {
+                  name = q.name,
+                  key = q.name,
+                  kind = 'scratchpad',
+                  file = q.path,
+                  expandable = false,
+                })
+              end
+              cache[key] = { nodes = q_nodes }
+            end
+          end
+        end
+        drawer.render()
+      end
+    end)
 
-    -- Refresh DBUI drawer and expand the Saved queries section for this database
-    M.redraw_dbui(db_name)
+    vim.notify('Saved query: ' .. input_name .. ' (saved under ' .. db_name .. ')', vim.log.levels.INFO, { title = 'Database' })
   end)
 end
 
-function M.save_query_as()
-  M.save_query(true)
-end
-
-function M.run_query()
-  local buf = vim.api.nvim_get_current_buf()
-  local db_url, db_name = M.get_active_db(buf)
-
-  if not db_url then
-    if M.current_db and M.is_accessible(M.current_db) then
-      pcall(function()
-        vim.b[buf].db = M.current_db
-        vim.b[buf].db_name = M.current_db_name
-      end)
-      db_url = M.current_db
-      db_name = M.current_db_name
-    else
-      M.select_connection(function(new_url, new_name)
-        pcall(function()
-          vim.b[buf].db = new_url
-          vim.b[buf].db_name = new_name
-        end)
-        M.run_query()
-      end)
-      return
-    end
-  end
-
-  local mode = vim.api.nvim_get_mode().mode
-  local is_visual = mode:match('[vV\x16]') ~= nil
-  if is_visual then
-    -- Exit visual mode immediately so marks '< and '> are set
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
-  end
-
-  -- 1. If inside DBUI managed buffer, trigger native DBUI execute
-  if vim.fn.exists('*db_ui#query#new') == 1 and vim.b[buf].dbui_db_key_name then
-    local plug_name = is_visual and '<Plug>(DBUI_ExecuteQuery)' or '<Plug>(DBUI_ExecuteQuery)'
-    local key = vim.api.nvim_replace_termcodes(plug_name, true, false, true)
-    vim.api.nvim_feedkeys(key, 'm', false)
+function M.select_saved_query()
+  local editor = require('sqmeow.ui.editor')
+  local pads = editor.list()
+  if #pads == 0 then
+    vim.notify('No saved queries found. Save one with <leader>bw', vim.log.levels.INFO, { title = 'Database' })
     return
   end
 
-  -- 2. Save file if on disk
-  if vim.bo[buf].modified and vim.bo[buf].buftype == '' and vim.fn.expand('%') ~= '' then
-    vim.cmd('silent! write')
+  local items = {}
+  for _, p in ipairs(pads) do
+    table.insert(items, {
+      text = p.name,
+      file = p.path,
+      db_name = p.db_name,
+    })
   end
 
-  -- 3. Execute query via vim-dadbod
-  if is_visual then
-    vim.cmd("'<,'>DB " .. db_url)
-  else
-    vim.cmd('%DB ' .. db_url)
-  end
+  local cur_db = vim.b.sqmeow_connection or vim.b.db_name or M.current_db_name
+  table.sort(items, function(a, b)
+    if cur_db then
+      if a.db_name == cur_db and b.db_name ~= cur_db then return true end
+      if a.db_name ~= cur_db and b.db_name == cur_db then return false end
+    end
+    return a.text < b.text
+  end)
 
-  vim.notify('Executed on ' .. db_name, vim.log.levels.INFO, { title = 'Database' })
+  Snacks.picker.select(items, {
+    prompt = 'Select Saved Query' .. (cur_db and (' [' .. cur_db .. ']') or ''),
+    format_item = function(item) return '󰈙 ' .. item.text end,
+  }, function(choice)
+    if not choice then return end
+    local buf = editor.open_path(choice.file)
+    local target_db = choice.db_name or M.current_db_name
+    if target_db then
+      local db_url = M.get_connection_url(target_db) or M.current_db
+      vim.b[buf].db = db_url
+      vim.b[buf].db_name = target_db
+      vim.b[buf].sqmeow_connection = target_db
+      M.ensure_sqmeow_connection(target_db)
+    end
+  end)
 end
 
 vim.api.nvim_create_user_command('SaveQuery', function() M.save_query() end, { desc = 'Save query to database saved queries' })
-vim.api.nvim_create_user_command('SaveQueryAs', function() M.save_query_as() end, { desc = 'Save query as new file in database saved queries' })
-vim.api.nvim_create_user_command('DBSaveQuery', function() M.save_query() end, { desc = 'Save query to database saved queries' })
+vim.api.nvim_create_user_command('DBDeduplicate', function()
+  M.deduplicate_connections()
+  vim.notify('Deduplicated sqmeow connections', vim.log.levels.INFO, { title = 'Database' })
+end, { desc = 'Clean up duplicate connections in sqmeow drawer' })
 
 _G.DatabaseUtils = M
 
 return {
-  -- Core Database Engine (Dadbod)
+  -- Core Database Engine (Dadbod) - provides connection & execution fallback
   {
     'tpope/vim-dadbod',
-    cmd = { 'DB', 'DBUI', 'DBUIToggle', 'DBUIAddConnection', 'DBUIFindBuffer' },
+    cmd = { 'DB' },
     ft = { 'sql', 'mysql', 'plsql' },
   },
 
-  -- Database Completion for Blink.cmp
+  -- Database Completion for Blink.cmp (Fast, buffer-local column & table autocomplete)
   {
     'kristijanhusak/vim-dadbod-completion',
     dependencies = { 'tpope/vim-dadbod' },
     ft = { 'sql', 'mysql', 'plsql' },
   },
 
-  -- Database UI Drawer & Results Explorer (Strictly Right Side)
+  -- UI component library required by sqmeow
   {
-    'kristijanhusak/vim-dadbod-ui',
-    dependencies = {
-      'tpope/vim-dadbod',
-      'kristijanhusak/vim-dadbod-completion',
-    },
-    cmd = {
-      'DBUI',
-      'DBUIToggle',
-      'DBUIClose',
-      'DBUIAddConnection',
-      'DBUIFindBuffer',
-    },
+    'MunifTanjim/nui.nvim',
+    lazy = true,
+  },
+
+  -- Modern Rust-powered Database Client with Schema, Views, Routines, and In-Grid Editing
+  {
+    '2giosangmitom/sqmeow.nvim',
+    dependencies = { 'MunifTanjim/nui.nvim' },
+    cmd = 'Sqmeow',
+    build = function()
+      require('sqmeow').install()
+    end,
     init = function()
-      local data_path = vim.fn.stdpath('data') .. '/db_ui'
-      vim.g.db_ui_save_location = data_path
-      vim.g.db_ui_tmp_query_location = data_path .. '/tmp'
-      vim.g.db_ui_use_nerd_fonts = 1
-      vim.g.db_ui_show_database_icon = 1
-      vim.g.db_ui_auto_execute_table_helpers = 1
-      vim.g.db_ui_winwidth = 35
-      vim.g.db_ui_win_position = 'right' -- Strictly Right Side
-      vim.g.db_ui_use_nvim_notify = 1
-      vim.g.db_ui_default_query = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;'
-      vim.g.db_ui_disable_mappings_sql = 1 -- Disable default uppercase <Leader>W, <Leader>E, <Leader>S mappings
-      vim.g.db_ui_use_postgres_views = 1 -- Include PostgreSQL materialized views in schema tables
-
-      -- Generate query buffer names ending in .sql so Treesitter, Blink.cmp, and NeoCodeium AI recognize them
-      vim.g.Db_ui_buffer_name_generator = function(opts)
-        local time = os.date('%Y%m%d_%H%M%S')
-        local suffix = (opts.table and opts.table ~= '') and (opts.table .. '_' .. (opts.label or 'query')) or 'query'
-        return string.format('%s_%s.sql', suffix, time)
-      end
-
-      -- Automatically recognize any query file inside db_ui directory as SQL
-      vim.filetype.add({
-        pattern = {
-          ['.*/db_ui/.*'] = function(path)
-            if path:match('%.json$') then return 'json' end
-            return 'sql'
-          end,
-        },
-      })
-
-      -- Initialize persistent connections & state from connections.json
-      M.init()
-
-      -- Table helpers for quick queries in the drawer
-      vim.g.db_ui_table_helpers = {
-        sqlite = {
-          ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
-          ['List'] = 'SELECT * FROM {table} LIMIT 50;',
-          ['Describe'] = 'PRAGMA table_info({table});',
-        },
-        sqlserver = {
-          ['Count'] = 'SELECT count(*) FROM [{table}];',
-          ['First 1000'] = 'SELECT TOP 1000 * FROM [{table}];',
-          ['List'] = 'SELECT TOP 50 * FROM [{table}];',
-          ['Describe'] = "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{table}';",
-        },
-        postgresql = {
-          ['Count'] = 'SELECT count(*) FROM {optional_schema}"{table}";',
-          ['First 1000'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 1000;',
-          ['List'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;',
-        },
-        postgres = {
-          ['Count'] = 'SELECT count(*) FROM {optional_schema}"{table}";',
-          ['First 1000'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 1000;',
-          ['List'] = 'SELECT * FROM {optional_schema}"{table}" LIMIT 50;',
-        },
-        mysql = {
-          ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
-          ['List'] = 'SELECT * FROM {table} LIMIT 50;',
-          ['Describe'] = 'DESCRIBE {table};',
-        },
-        mariadb = {
-          ['Count'] = 'SELECT count(*) FROM {table};',
-          ['First 1000'] = 'SELECT * FROM {table} LIMIT 1000;',
-          ['List'] = 'SELECT * FROM {table} LIMIT 50;',
-          ['Describe'] = 'DESCRIBE {table};',
-        },
-      }
-
-      -- Explorer-like navigation in the DBUI drawer: Tab/S-Tab to navigate items, l/CR to open/expand, h to collapse, q to close, <C-j> for bottom output
-      vim.api.nvim_create_autocmd('FileType', {
-        pattern = 'dbui',
-        callback = function(args)
-          vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
-          vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
-          vim.keymap.set('n', 'l', '<Plug>(DBUI_SelectLine)', { buffer = args.buf, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', '<CR>', '<Plug>(DBUI_SelectLine)', { buffer = args.buf, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', 'h', '<Plug>(DBUI_GotoParentNode)', { buffer = args.buf, silent = true, desc = 'Collapse Node' })
-          vim.keymap.set('n', '<C-j>', function() _G.BottomPanel.toggle_active() end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
-          vim.keymap.set('n', 'q', '<cmd>DBUIClose<CR>', { buffer = args.buf, silent = true, desc = 'Close Database Drawer' })
-        end,
-      })
-
-      -- Confine dbout strictly under Code Editor, preserving full-height DBUI right sidebar
-      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
-        pattern = 'dbout',
-        callback = function(args)
-          vim.bo[args.buf].buflisted = false
-          vim.keymap.set('n', 'q', ':close<CR>', { buffer = args.buf, silent = true, desc = 'Close Query Results' })
-
-          -- Smart SQL Table Cell Navigation
-          local function get_segments(l)
-            local pipes = {}
-            local p = 0
-            while true do
-              p = l:find('|', p + 1)
-              if not p then break end
-              table.insert(pipes, p - 1)
-            end
-            if #pipes == 0 then return nil end
-            local segs = {}
-            table.insert(segs, { from = 0, to = pipes[1] - 1 })
-            for i = 1, #pipes - 1 do
-              table.insert(segs, { from = pipes[i] + 1, to = pipes[i + 1] - 1 })
-            end
-            table.insert(segs, { from = pipes[#pipes] + 1, to = #l - 1 })
-            return segs
-          end
-
-          local function jump_cell(direction, wrap)
-            local cur_line = vim.fn.line('.')
-            local total_lines = vim.fn.line('$')
-            local line = vim.api.nvim_get_current_line()
-            local cur_col = vim.api.nvim_win_get_cursor(0)[2]
-
-            local segments = get_segments(line)
-            if not segments then return end
-
-            local cur_seg = 1
-            for i, seg in ipairs(segments) do
-              if cur_col >= seg.from and cur_col <= seg.to then
-                cur_seg = i
-                break
-              end
-            end
-
-            local target_idx = cur_seg + direction
-            if target_idx >= 1 and target_idx <= #segments then
-              local target_seg = segments[target_idx]
-              local seg_text = line:sub(target_seg.from + 1, target_seg.to + 1)
-              local non_space = seg_text:find('%S')
-              local target_col = target_seg.from + (non_space and (non_space - 1) or 0)
-              vim.api.nvim_win_set_cursor(0, { cur_line, target_col })
-            elseif wrap and direction > 0 and cur_line < total_lines then
-              local next_lnum = cur_line + 1
-              while next_lnum <= total_lines do
-                local nl = vim.fn.getline(next_lnum)
-                if nl:find('|') and not nl:match('^[%s%-%+|=]+$') then
-                  local next_segs = get_segments(nl)
-                  if next_segs and #next_segs > 0 then
-                    local seg_text = nl:sub(next_segs[1].from + 1, next_segs[1].to + 1)
-                    local non_space = seg_text:find('%S')
-                    local target_col = next_segs[1].from + (non_space and (non_space - 1) or 0)
-                    vim.api.nvim_win_set_cursor(0, { next_lnum, target_col })
-                    return
-                  end
-                end
-                next_lnum = next_lnum + 1
-              end
-            elseif wrap and direction < 0 and cur_line > 1 then
-              local prev_lnum = cur_line - 1
-              while prev_lnum >= 1 do
-                local pl = vim.fn.getline(prev_lnum)
-                if pl:find('|') and not pl:match('^[%s%-%+|=]+$') then
-                  local prev_segs = get_segments(pl)
-                  if prev_segs and #prev_segs > 0 then
-                    local last_seg = prev_segs[#prev_segs]
-                    local seg_text = pl:sub(last_seg.from + 1, last_seg.to + 1)
-                    local non_space = seg_text:find('%S')
-                    local target_col = last_seg.from + (non_space and (non_space - 1) or 0)
-                    vim.api.nvim_win_set_cursor(0, { prev_lnum, target_col })
-                    return
-                  end
-                end
-                prev_lnum = prev_lnum - 1
-              end
-            end
-          end
-
-          local function jump_row(direction)
-            local cur_line = vim.fn.line('.')
-            local total_lines = vim.fn.line('$')
-            local cur_col = vim.api.nvim_win_get_cursor(0)[2]
-            local target_lnum = cur_line + direction
-
-            while target_lnum >= 1 and target_lnum <= total_lines do
-              local line = vim.fn.getline(target_lnum)
-              if line:find('|') and not line:match('^[%s%-%+|=]+$') then
-                vim.api.nvim_win_set_cursor(0, { target_lnum, math.min(cur_col, #line - 1) })
-                return
-              end
-              target_lnum = target_lnum + direction
-            end
-          end
-
-          vim.keymap.set('n', '<Tab>', function() jump_cell(1, true) end, { buffer = args.buf, silent = true, desc = 'Next Cell' })
-          vim.keymap.set('n', '<S-Tab>', function() jump_cell(-1, true) end, { buffer = args.buf, silent = true, desc = 'Previous Cell' })
-          vim.keymap.set('n', 'L', function() jump_cell(1, false) end, { buffer = args.buf, silent = true, desc = 'Next Column' })
-          vim.keymap.set('n', 'H', function() jump_cell(-1, false) end, { buffer = args.buf, silent = true, desc = 'Previous Column' })
-          vim.keymap.set('n', ']r', function() jump_row(1) end, { buffer = args.buf, silent = true, desc = 'Next Table Row' })
-          vim.keymap.set('n', '[r', function() jump_row(-1) end, { buffer = args.buf, silent = true, desc = 'Previous Table Row' })
-
-          vim.schedule(function()
-            for _, win in ipairs(vim.api.nvim_list_wins()) do
-              if vim.api.nvim_win_is_valid(win) then
-                local buf = vim.api.nvim_win_get_buf(win)
-                local ft = vim.bo[buf].filetype
-                if ft == 'dbui' or ft:match('^Neogit') then
-                  local cur_win = vim.api.nvim_get_current_win()
-                  vim.api.nvim_set_current_win(win)
-                  vim.cmd('wincmd L')
-                  local width = ft == 'dbui' and 25 or math.max(38, math.floor(vim.o.columns * 0.38))
-                  vim.cmd('vertical resize ' .. width)
-                  if vim.api.nvim_win_is_valid(cur_win) then
-                    vim.api.nvim_set_current_win(cur_win)
-                  end
-                  break
-                end
-              end
-            end
-          end)
-        end,
-      })
-
-      -- Automatically bind current active database and enable AI completion for any opened .sql file
+      -- Automatically bind active database and enable AI completion for any opened .sql file
       vim.api.nvim_create_autocmd('FileType', {
         pattern = { 'sql', 'mysql', 'plsql' },
         callback = function(args)
-          -- Never bind or trigger connection fetch during session restoration
-          if vim.g.SessionLoad == 1 then
-            return
-          end
-
+          if vim.g.SessionLoad == 1 then return end
           local buf = args.buf
-          if not buf or not vim.api.nvim_buf_is_valid(buf) then
-            return
-          end
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
 
           local db_url, db_name = M.get_active_db(buf)
+          vim.opt_local.spell = false
           if db_url and M.is_accessible(db_url) then
             pcall(function()
               vim.b[buf].db = db_url
               vim.b[buf].db_name = db_name
+              vim.b[buf].sqmeow_connection = db_name
+            end)
+            vim.schedule(function()
+              pcall(function()
+                require('lazy').load({ plugins = { 'vim-dadbod-completion' } })
+                vim.cmd('call vim_dadbod_completion#fetch(' .. buf .. ')')
+              end)
             end)
           end
           pcall(function()
@@ -930,15 +1403,152 @@ return {
         end,
       })
 
-      -- SQLite binary database files: never treat as text files or save into sessions
-      vim.api.nvim_create_autocmd({ 'BufReadPre', 'BufNewFile' }, {
-        pattern = { '*.db', '*.sqlite', '*.sqlite3' },
+      -- Explorer-like navigation in sqmeow drawer: Tab/S-Tab, l/CR, h, q, <C-j>, p, P, K
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        pattern = 'sqmeow-drawer',
         callback = function(args)
+          vim.opt_local.spell = false
+          local win = vim.fn.bufwinid(args.buf)
+          if win > 0 then
+            vim.wo[win].spell = false
+          end
+
+          vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(args.buf) then
+              local w = vim.fn.bufwinid(args.buf)
+              if w > 0 then
+                vim.wo[w].spell = false
+                vim.api.nvim_set_current_win(w)
+                vim.cmd('wincmd L')
+                vim.cmd('vertical resize 35')
+              end
+            end
+          end)
+          vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
+          vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
+          vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
+          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Run First 1000' })
+          vim.keymap.set('n', 'P', function()
+            local drawer = require('sqmeow.ui.drawer')
+            local node = drawer.current_node()
+            if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+              local schema = node.path[1]
+              local rel = node.path[3]
+              M.execute_default_query(node.conn_id, schema, rel, 'count')
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Run Count (*)' })
+          vim.keymap.set('n', 'K', function() require('sqmeow.ui.drawer').actions.structure() end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
+          vim.keymap.set('n', 'h', function()
+            local cur_line = vim.api.nvim_get_current_line()
+            if cur_line:match('^%s+') then
+              vim.cmd('normal! ^')
+              local col = vim.fn.col('.')
+              while vim.fn.line('.') > 1 and vim.fn.col('.') >= col do
+                vim.cmd('normal! k')
+              end
+            else
+              vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n', false)
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Collapse / Parent Node' })
+          vim.keymap.set('n', '<C-j>', function() _G.BottomPanel.toggle_active() end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
+          vim.keymap.set('n', 'q', function()
+            if _G.RightPanel then
+              _G.RightPanel.close()
+            else
+              require('sqmeow.api').close_drawer()
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Close Database Drawer' })
+        end,
+      })
+
+      -- Result window coordination: keymaps, navigation, sticky headers & winbar
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        pattern = 'sqmeow-result',
+        callback = function(args)
+          vim.opt_local.spell = false
+          local win = vim.fn.bufwinid(args.buf)
+          if win > 0 then
+            vim.wo[win].spell = false
+          end
           vim.bo[args.buf].buflisted = false
-          vim.bo[args.buf].swapfile = false
+          if _G.BottomPanel then
+            _G.BottomPanel.last_dbout_buf = args.buf
+            _G.BottomPanel.active_mode = 'dbout'
+          end
+
+          -- Quick Column Navigation (<Tab>/<S-Tab>, ]c/[c, g0/g$)
+          vim.keymap.set('n', '<Tab>', function() M.next_result_column() end, { buffer = args.buf, silent = true, desc = 'Next Column' })
+          vim.keymap.set('n', '<S-Tab>', function() M.prev_result_column() end, { buffer = args.buf, silent = true, desc = 'Previous Column' })
+          vim.keymap.set('n', ']c', function() M.next_result_column() end, { buffer = args.buf, silent = true, desc = 'Next Column' })
+          vim.keymap.set('n', '[c', function() M.prev_result_column() end, { buffer = args.buf, silent = true, desc = 'Previous Column' })
+          vim.keymap.set('n', 'g0', function() M.first_result_column() end, { buffer = args.buf, silent = true, desc = 'First Column' })
+          vim.keymap.set('n', 'g$', function() M.last_result_column() end, { buffer = args.buf, silent = true, desc = 'Last Column' })
+
+          vim.keymap.set('n', 'q', function()
+            M.close_sticky_header()
+            require('sqmeow.api').close()
+            local ed = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
+            if ed and vim.api.nvim_win_is_valid(ed) then
+              vim.api.nvim_set_current_win(ed)
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Close Query Results' })
+
+          -- Sticky Header & Dynamic Winbar listeners
+          local group = vim.api.nvim_create_augroup('SqmeowResultSticky_' .. args.buf, { clear = true })
+          vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
+            group = group,
+            buffer = args.buf,
+            callback = function()
+              local w = vim.fn.bufwinid(args.buf)
+              if w > 0 then
+                M.update_result_winbar(w)
+                M.update_sticky_header(w)
+              end
+            end,
+          })
+          vim.api.nvim_create_autocmd({ 'WinScrolled' }, {
+            group = group,
+            callback = function()
+              local w = vim.fn.bufwinid(args.buf)
+              if w > 0 then
+                M.update_sticky_header(w)
+              end
+            end,
+          })
+          vim.api.nvim_create_autocmd({ 'BufLeave', 'BufHidden', 'BufDelete', 'BufUnload' }, {
+            group = group,
+            buffer = args.buf,
+            callback = function()
+              M.close_sticky_header()
+            end,
+          })
         end,
       })
     end,
+    config = function(_, opts)
+      require('sqmeow').setup(opts)
+      M.setup_drawer_helpers()
+    end,
+    opts = {
+      ui = {
+        drawer = { width = 35 },
+        result = {
+          height = 16,
+          page_size = 1000,
+          max_column_width = 48,
+          column_icons = true,
+          null_text = 'NULL',
+        },
+      },
+      keymaps = {
+        drawer = {
+          { action = 'toggle', lhs = { '<CR>', 'o', 'l' }, desc = 'Expand or collapse the node' },
+          { action = 'close', lhs = 'q', desc = 'Close the drawer' },
+          { action = 'preview', lhs = 'p', desc = 'Show the first 1000 rows of this relation' },
+          { action = 'structure', lhs = 'K', desc = 'Show structure of table or key' },
+        },
+      },
+    },
     keys = {
       {
         '<leader>be',
@@ -946,7 +1556,7 @@ return {
           if _G.RightPanel then
             _G.RightPanel.open_dbui()
           else
-            vim.cmd('DBUI')
+            M.open_drawer()
           end
         end,
         desc = 'Database Explorer',
@@ -956,7 +1566,7 @@ return {
         function()
           M.select_connection()
         end,
-        desc = 'Switch Database',
+        desc = 'Switch / Bind Database',
       },
       {
         '<leader>bw',
@@ -966,11 +1576,18 @@ return {
         desc = 'Save Query',
       },
       {
+        '<leader>bl',
+        function()
+          M.select_saved_query()
+        end,
+        desc = 'Select Saved Query',
+      },
+      {
         '<leader>br',
         function()
           M.run_query()
         end,
-        desc = 'Run Query',
+        desc = 'Run Query (Statement / Visual)',
         mode = { 'n', 'v' },
       },
       {
@@ -985,6 +1602,8 @@ return {
         function()
           if _G.BottomPanel then
             _G.BottomPanel.open_dbout()
+          else
+            require('sqmeow.api').open()
           end
         end,
         desc = 'Query Output',
@@ -1002,6 +1621,30 @@ return {
           M.delete_connection()
         end,
         desc = 'Delete Database',
+      },
+      {
+        '<leader>bf',
+        function()
+          require('sqmeow.api').toggle_float()
+        end,
+        desc = 'Toggle Float Result',
+      },
+      {
+        '<leader>bv',
+        function()
+          require('sqmeow.api').review()
+        end,
+        desc = 'Review & Apply In-Grid Edits',
+      },
+      {
+        '<leader>bx',
+        function()
+          vim.ui.input({ prompt = 'Export Format (csv, json, sql): ', default = 'csv' }, function(fmt)
+            if not fmt or fmt == '' then return end
+            require('sqmeow.api').export({ format = vim.trim(fmt), clipboard = true })
+          end)
+        end,
+        desc = 'Export Results',
       },
     },
   },

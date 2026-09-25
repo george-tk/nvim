@@ -117,8 +117,8 @@ local function get_win_info(win)
     end
   end
 
-  -- Check DBUI Drawer
-  local is_dbui = ft == 'dbui'
+  -- Check Database Explorer Drawer (DBUI or Sqmeow)
+  local is_dbui = ft == 'dbui' or ft == 'sqmeow-drawer'
 
   -- Check OpenCode Terminal
   local is_opencode = ft:match('opencode') ~= nil
@@ -126,7 +126,7 @@ local function get_win_info(win)
     or (vim.b[buf].snacks_terminal and tostring(vim.b[buf].snacks_terminal.cmd):find('opencode') ~= nil)
 
   -- Check Terminal / Database Query Results Table (only if NOT opencode)
-  local is_terminal = (not is_opencode) and (ft == 'dbout' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://') ~= nil)
+  local is_terminal = (not is_opencode) and (ft == 'dbout' or ft == 'sqmeow-result' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://') ~= nil)
 
   -- Check Editor
   local is_editor = not is_explorer and not is_dbui and not is_terminal and not is_opencode and ft ~= 'snacks_dashboard'
@@ -170,7 +170,7 @@ local function get_right_sidebar_win()
       local buf = vim.api.nvim_win_get_buf(win)
       local ft = vim.bo[buf].filetype
       local bname = vim.api.nvim_buf_get_name(buf):lower()
-      if ft == 'dbui' or ft:match('opencode') or bname:find('opencode') then
+      if ft == 'dbui' or ft == 'sqmeow-drawer' or ft:match('opencode') or bname:find('opencode') then
         return win
       end
     end
@@ -185,7 +185,7 @@ local function ensure_right_sidebar_precedence()
       vim.cmd('wincmd L')
       local b = vim.api.nvim_win_get_buf(r_win)
       local ft = vim.bo[b].filetype
-      local width = (ft == 'dbui' or ft:match('^snacks_')) and 35 or math.max(38, math.floor(vim.o.columns * 0.38))
+      local width = (ft == 'dbui' or ft == 'sqmeow-drawer' or ft:match('^snacks_')) and 35 or math.max(38, math.floor(vim.o.columns * 0.38))
       vim.cmd('vertical resize ' .. width)
     end)
   end
@@ -206,7 +206,9 @@ local function get_editor_win()
         or ft == 'terminal'
         or ft == 'neo-tree'
         or ft == 'dbui'
+        or ft == 'sqmeow-drawer'
         or ft == 'dbout'
+        or ft == 'sqmeow-result'
         or buftype == 'terminal'
         or buftype == 'nofile'
         or bname:find('opencode') ~= nil
@@ -283,7 +285,8 @@ function RightPanel.close_all()
       local buf = vim.api.nvim_win_get_buf(win)
       local bname = vim.api.nvim_buf_get_name(buf):lower()
       local ft = vim.bo[buf].filetype
-      if ft == 'dbui' then
+      if ft == 'dbui' or ft == 'sqmeow-drawer' then
+        pcall(function() require('sqmeow.api').close_drawer() end)
         pcall(vim.api.nvim_win_close, win, true)
       elseif (ft:match('opencode') or bname:find('opencode')) and not (ok_t and term and term.win == win) then
         pcall(vim.api.nvim_win_close, win, true)
@@ -326,15 +329,22 @@ function RightPanel.open_dbui()
     return
   end
 
+  local existing_dbui = find_win_type('is_dbui')
+  if existing_dbui and vim.api.nvim_win_is_valid(existing_dbui) then
+    vim.api.nvim_set_current_win(existing_dbui)
+    return
+  end
+
   RightPanel.close_all()
   RightPanel.active_mode = 'dbui'
 
-  local ed = get_editor_win()
-  if ed and vim.api.nvim_win_is_valid(ed) then
-    vim.api.nvim_set_current_win(ed)
+  if _G.DatabaseUtils and _G.DatabaseUtils.open_drawer then
+    _G.DatabaseUtils.open_drawer()
+  elseif vim.fn.exists(':Sqmeow') == 2 then
+    vim.cmd('Sqmeow drawer')
+  elseif vim.fn.exists(':DBUI') == 2 then
+    vim.cmd('DBUI')
   end
-
-  vim.cmd('DBUI')
 end
 
 -- Open OpenCode AI on the right (38% width, persistent background session)
@@ -414,7 +424,9 @@ local function close_dbout_win()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       local buf = vim.api.nvim_win_get_buf(win)
-      if vim.bo[buf].filetype == 'dbout' then
+      local ft = vim.bo[buf].filetype
+      if ft == 'dbout' or ft == 'sqmeow-result' then
+        pcall(function() require('sqmeow.api').close() end)
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
@@ -497,10 +509,10 @@ function BottomPanel.open_terminal(count)
   vim.schedule(ensure_right_sidebar_precedence)
 end
 
--- Open or toggle the SQL Query Output window (dbout)
+-- Open or toggle the SQL Query Output window (dbout / sqmeow-result)
 function BottomPanel.open_dbout()
   local info = get_win_info()
-  if info.is_terminal and vim.bo[info.buf].filetype == 'dbout' then
+  if info.is_terminal and (vim.bo[info.buf].filetype == 'dbout' or vim.bo[info.buf].filetype == 'sqmeow-result') then
     close_dbout_win()
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -509,11 +521,40 @@ function BottomPanel.open_dbout()
     return
   end
 
+  local ok, sqmeow_api = pcall(require, 'sqmeow.api')
+  if ok then
+    hide_terminal_if_visible()
+    BottomPanel.active_mode = 'dbout'
+    sqmeow_api.open()
+
+    -- Ensure focus moves directly to the query result window instead of remaining in editor
+    local res_win = nil
+    local ok_res, res_mod = pcall(require, 'sqmeow.ui.result')
+    if ok_res and res_mod.window then
+      res_win = res_mod.window()
+    end
+    if not (res_win and vim.api.nvim_win_is_valid(res_win)) then
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_is_valid(w) and vim.bo[vim.api.nvim_win_get_buf(w)].filetype == 'sqmeow-result' then
+          res_win = w
+          break
+        end
+      end
+    end
+    if res_win and vim.api.nvim_win_is_valid(res_win) then
+      vim.api.nvim_set_current_win(res_win)
+      vim.wo[res_win].spell = false
+    end
+
+    vim.schedule(ensure_right_sidebar_precedence)
+    return
+  end
+
   -- Find last dbout buffer
   local dbout_buf = BottomPanel.last_dbout_buf
   if not (dbout_buf and vim.api.nvim_buf_is_valid(dbout_buf)) then
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-      if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].filetype == 'dbout' then
+      if vim.api.nvim_buf_is_valid(buf) and (vim.bo[buf].filetype == 'dbout' or vim.bo[buf].filetype == 'sqmeow-result') then
         dbout_buf = buf
         BottomPanel.last_dbout_buf = buf
         break
@@ -552,8 +593,8 @@ function BottomPanel.toggle_active(count)
 
   local info = get_win_info()
 
-  -- 1. If currently inside dbout, close it
-  if info.is_terminal and vim.bo[info.buf].filetype == 'dbout' then
+  -- 1. If currently inside dbout / sqmeow-result, close it
+  if info.is_terminal and (vim.bo[info.buf].filetype == 'dbout' or vim.bo[info.buf].filetype == 'sqmeow-result') then
     close_dbout_win()
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -563,7 +604,7 @@ function BottomPanel.toggle_active(count)
   end
 
   -- 2. If currently inside a terminal:
-  if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' then
+  if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' and vim.bo[info.buf].filetype ~= 'sqmeow-result' then
     local current_term_id = (vim.b[info.buf].snacks_terminal and vim.b[info.buf].snacks_terminal.id) or target_count
     -- If no explicit count was passed or requested count matches current terminal: hide it!
     if not explicit_count or explicit_count == current_term_id then
@@ -601,7 +642,7 @@ _G.BottomPanel = BottomPanel
 
 -- Track query results buffer automatically
 vim.api.nvim_create_autocmd('FileType', {
-  pattern = 'dbout',
+  pattern = { 'dbout', 'sqmeow-result' },
   callback = function(args)
     BottomPanel.last_dbout_buf = args.buf
     BottomPanel.active_mode = 'dbout'
@@ -735,11 +776,11 @@ local session_stability_group = vim.api.nvim_create_augroup('UserSessionStabilit
 local function is_database_or_transient_buf(buf)
   if not vim.api.nvim_buf_is_valid(buf) then return false end
   local ft = vim.bo[buf].filetype
-  if ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
+  if ft == 'sqmeow-drawer' or ft == 'sqmeow-output' or ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
   local bname = vim.api.nvim_buf_get_name(buf)
-  if bname:find('/db_ui/') ~= nil then return true end
+  if bname:find('/sqmeow/') ~= nil or bname:find('/db_ui/') ~= nil then return true end
   if bname:match('%.sqlite%d?$') or bname:match('%.db$') then return true end
-  if vim.b[buf].dbui_db_key_name ~= nil then return true end
+  if vim.b[buf].sqmeow_connection ~= nil or vim.b[buf].dbui_db_key_name ~= nil then return true end
   return false
 end
 
@@ -818,6 +859,7 @@ vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
     local bname = vim.api.nvim_buf_get_name(buf):lower()
 
     local is_sidebar = ft == 'dbui'
+      or ft == 'sqmeow-drawer'
       or ft:match('opencode') ~= nil
       or bname:find('opencode') ~= nil
       or ft:match('^snacks_picker') ~= nil
@@ -825,6 +867,7 @@ vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
 
     local is_bottom = (not is_sidebar) and (
       ft == 'dbout'
+      or ft == 'sqmeow-result'
       or ft == 'snacks_terminal'
       or ft == 'terminal'
       or buftype == 'terminal'
@@ -1021,11 +1064,11 @@ local function reset_window_layout()
       local ft = vim.bo[buf].filetype
       local bname = vim.api.nvim_buf_get_name(buf):lower()
 
-      if ft == 'dbui' or ft:match('^snacks_') then
+      if ft == 'dbui' or ft == 'sqmeow-drawer' or ft:match('^snacks_') then
         pcall(vim.api.nvim_win_set_width, win, 35)
       elseif ft:match('opencode') or bname:find('opencode') then
         pcall(vim.api.nvim_win_set_width, win, math.floor(vim.o.columns * 0.38))
-      elseif (ft == 'dbout' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://')) and not (ft:match('opencode') or bname:find('opencode')) then
+      elseif (ft == 'dbout' or ft == 'sqmeow-result' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('term://')) and not (ft:match('opencode') or bname:find('opencode')) then
         pcall(vim.api.nvim_win_set_height, win, default_bot_height)
       end
     end

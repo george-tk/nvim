@@ -72,13 +72,17 @@ return { -- Useful plugin to show you pending keybinds.
 
       -- Database Group (<leader>b)
       { '<leader>be', desc = 'Database Explorer' },
-      { '<leader>bs', desc = 'Switch Database' },
+      { '<leader>bs', desc = 'Switch / Bind Database' },
       { '<leader>bw', desc = 'Save Query' },
-      { '<leader>br', desc = 'Run Query', mode = { 'n', 'v' } },
+      { '<leader>bl', desc = 'Select Saved Query' },
+      { '<leader>br', desc = 'Run Query (Statement / Visual)', mode = { 'n', 'v' } },
       { '<leader>bq', desc = 'Query Scratchpad' },
       { '<leader>bo', desc = 'Query Output' },
       { '<leader>ba', desc = 'Add Database' },
       { '<leader>bd', desc = 'Delete Database' },
+      { '<leader>bf', desc = 'Toggle Float Results' },
+      { '<leader>bv', desc = 'Review & Apply In-Grid Edits' },
+      { '<leader>bx', desc = 'Export Results' },
 
       -- Todo Group (<leader>t)
       { '<leader>tt', desc = 'Todo List' },
