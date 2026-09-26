@@ -196,85 +196,24 @@ function M.get_connection_url(name)
   return nil
 end
 
--- Prune duplicate connections from sqmeow's active state
+-- Prune duplicate connections (no-op since upstream branch handles deduplication)
 function M.deduplicate_connections()
-  local ok_state, state = pcall(require, 'sqmeow.state')
-  local ok_api, api = pcall(require, 'sqmeow.api')
-  if not ok_state or not ok_api or not state or not api or not state.connections then
-    return
-  end
-
-  local seen = {}
-  local duplicates = {}
-  for id, conn in pairs(state.connections) do
-    if not conn.parent then
-      if seen[conn.name] then
-        table.insert(duplicates, id)
-      else
-        seen[conn.name] = id
-      end
-    end
-  end
-
-  for _, dup_id in ipairs(duplicates) do
-    pcall(function() api.disconnect(dup_id) end)
-    pcall(function() state.remove_connection(dup_id) end)
-  end
-
-  if #duplicates > 0 then
-    pcall(function() require('sqmeow.ui.drawer').render() end)
-  end
 end
 
--- Ensure connection is active in sqmeow without creating duplicate entries
+-- Ensure connection is active in sqmeow using upstream connect_named
 function M.ensure_sqmeow_connection(db_name)
   if not db_name or db_name == '' then
     return nil
   end
 
-  local ok_state, state = pcall(require, 'sqmeow.state')
   local ok_api, api = pcall(require, 'sqmeow.api')
-  if not ok_state or not ok_api or not state or not api then
+  if not ok_api or not api then
     return nil
   end
 
-  -- Clean up any duplicates of this connection if they already exist
-  local active_conn = nil
-  local duplicates = {}
-  if state.connections then
-    for id, conn in pairs(state.connections) do
-      if conn.name == db_name and not conn.parent then
-        if not active_conn and conn.state ~= 'closed' then
-          active_conn = conn
-        else
-          table.insert(duplicates, id)
-        end
-      end
-    end
-    for _, dup_id in ipairs(duplicates) do
-      pcall(function() api.disconnect(dup_id) end)
-      pcall(function() state.remove_connection(dup_id) end)
-    end
-    if #duplicates > 0 then
-      pcall(function() require('sqmeow.ui.drawer').render() end)
-    end
-  end
-
-  -- If an open/valid connection already exists, reuse it
-  if active_conn then
-    pcall(function()
-      api.use(active_conn.id)
-    end)
-    return active_conn.id
-  end
-
-  -- Otherwise, open it for the first time
   local id = nil
   pcall(function()
     id = api.connect_named(db_name)
-    if id then
-      api.use(id)
-    end
   end)
   return id
 end
@@ -368,7 +307,6 @@ function M.open_drawer()
     return
   end
 
-  M.deduplicate_connections()
   M.setup_drawer_helpers()
 
   -- If drawer is already open, toggle it off

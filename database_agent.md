@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `83d4dd0cb5ec0769b355c96c190ee729d5542058` (`chore: add vim runtime to .luarc.json`, Tue Sep 22 2026)
+- **Baseline Commit Pinned**: `a6e0f8c05aa1a1db576aebbb23da9d9229f3d9d6` (`fix(api): reuse open connection in connect_named (#36)`, Sat Sep 26 2026)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 83d4dd0cb5ec0769b355c96c190ee729d5542058..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log a6e0f8c05aa1a1db576aebbb23da9d9229f3d9d6..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 83d4dd0cb5ec0769b355c96c190ee729d5542058..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff a6e0f8c05aa1a1db576aebbb23da9d9229f3d9d6..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -33,12 +33,15 @@ We separate our code into two distinct buckets:
 
 ```mermaid
 flowchart TD
-    subgraph Upstream Improvements [Candidate for Upstream PRs / Issues]
-        A["Connection Deduplication (api.connect_named)"]
-        B["Drawer Node Scope Separation (kind == 'scratchpads')"]
-        C["Column Navigation Keymaps (goto_cell in table grid)"]
-        D["Sticky Column Headers & Dynamic Winbar Indicator"]
-        I["Native Right-Side Drawer Placement (position = 'right')"]
+    subgraph Resolved Upstream [Merged into Upstream master]
+        A["Connection Deduplication (PR #36 / Issue #31)"]
+    end
+
+    subgraph Upstream Candidates [Pending Upstream PRs / Issues]
+        B["Drawer Node Scope Separation (kind == 'scratchpads') - Issue #32"]
+        C["Column Navigation Keymaps (goto_cell in table grid) - Issue #33"]
+        D["Sticky Column Headers & Dynamic Winbar Indicator - Issue #35"]
+        I["Native Right-Side Drawer Placement (position = 'right') - Issue #34"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -55,7 +58,7 @@ flowchart TD
 
 | Feature / Fix | Local Implementation | Root Cause / Reason | Upstream Status & Redundancy Criteria |
 |---|---|---|---|
-| **1. Connection Reuse** | [`M.ensure_sqmeow_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L225) & [`M.deduplicate_connections`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L193) | `sqmeow.api.connect_named(name)` unconditionally generates a new ID and registers a duplicate connection in `state.connections` even if already active. | **Upstream Candidate (Issue 1)**. If upstream updates `connect_named` to check `state.connection_by_name(name)` and reuse `state.current`, remove our deduplication wrapper. |
+| **1. Connection Reuse** | [`M.ensure_sqmeow_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L204) (direct `api.connect_named` call) | `sqmeow.api.connect_named(name)` previously generated duplicate connections unconditionally. | **RESOLVED & MERGED UPSTREAM ([PR #36](https://github.com/2giosangmitom/sqmeow.nvim/pull/36))**. Merged into master in commit `a6e0f8c`. Local deduplication workarounds have been retired from config. |
 | **2. Per-DB Saved Queries in Drawer** | [`on_nodes` injection with `kind = 'saved_queries'`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L580) & [`drawer.actions.toggle` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L650) | In `drawer.lua`, `toggle()` matched `node.kind == 'scratchpads'` and toggled the global `SCRATCHPADS` container. Nodes under a connection also lacked native grouping. | **Upstream Candidate (Issue 2)**. If upstream adds native per-connection scratchpads/queries or isolates `SCRATCHPADS` checking by ID, our monkey patch on `drawer.actions.toggle` can be dropped. |
 | **3. Result Column Navigation** | [`M.next_result_column`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L770), [`M.prev_result_column`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L780) (`<Tab>`, `<S-Tab>`, `]c`, `[c`) | `sqmeow.ui.table` has `Table:goto_cell({ 0, 1 })` and `goto_column()`, but `sqmeow/keymap.lua` defines zero column motions in `result`. | **Upstream Candidate (Issue 3)**. If upstream maps column navigation actions in `keymap.lua`, drop our custom helper and use standard upstream actions. |
 | **4. Sticky Column Headers on Scroll** | [`M.update_sticky_header`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L818) & [`M.update_result_winbar`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L907) | Result grids with >15 rows lose headers when scrolled down. Users lose context of which column holds which values. | **Upstream Candidate (Issue 4)**. If upstream introduces a sticky header float or pins the active column in the header/winbar, remove our float lifecycle hook. |
