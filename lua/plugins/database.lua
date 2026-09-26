@@ -330,7 +330,7 @@ function M.open_drawer()
 
   sqmeow_api.open_drawer()
 
-  -- Position strictly on the right side at 35 columns and keep drawer focused
+  -- Ensure drawer window is focused and spell is disabled
   vim.schedule(function()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
       if vim.api.nvim_win_is_valid(win) then
@@ -338,8 +338,6 @@ function M.open_drawer()
         if vim.bo[buf].filetype == 'sqmeow-drawer' then
           vim.wo[win].spell = false
           vim.api.nvim_set_current_win(win)
-          vim.cmd('wincmd L')
-          vim.cmd('vertical resize 35')
           break
         end
       end
@@ -708,23 +706,17 @@ function M.get_result_tbl()
   return nil
 end
 
-function M.next_result_column(win)
-  win = win or vim.api.nvim_get_current_win()
-  local tbl = M.get_result_tbl()
-  if not tbl then return end
-  local cell = tbl:goto_cell({ 0, 1 }, win)
-  if not cell and tbl._ and tbl._.columns and #tbl._.columns > 0 then
-    tbl:goto_column(1, win)
+function M.next_result_column()
+  local ok, result = pcall(require, 'sqmeow.ui.result')
+  if ok and result.actions and result.actions.next_column then
+    result.actions.next_column()
   end
 end
 
-function M.prev_result_column(win)
-  win = win or vim.api.nvim_get_current_win()
-  local tbl = M.get_result_tbl()
-  if not tbl then return end
-  local cell = tbl:goto_cell({ 0, -1 }, win)
-  if not cell and tbl._ and tbl._.columns and #tbl._.columns > 0 then
-    tbl:goto_column(#tbl._.columns, win)
+function M.prev_result_column()
+  local ok, result = pcall(require, 'sqmeow.ui.result')
+  if ok and result.actions and result.actions.prev_column then
+    result.actions.prev_column()
   end
 end
 
@@ -1357,8 +1349,6 @@ return {
               if w > 0 then
                 vim.wo[w].spell = false
                 vim.api.nvim_set_current_win(w)
-                vim.cmd('wincmd L')
-                vim.cmd('vertical resize 35')
               end
             end
           end)
@@ -1414,11 +1404,7 @@ return {
             _G.BottomPanel.active_mode = 'dbout'
           end
 
-          -- Quick Column Navigation (<Tab>/<S-Tab>, ]c/[c, g0/g$)
-          vim.keymap.set('n', '<Tab>', function() M.next_result_column() end, { buffer = args.buf, silent = true, desc = 'Next Column' })
-          vim.keymap.set('n', '<S-Tab>', function() M.prev_result_column() end, { buffer = args.buf, silent = true, desc = 'Previous Column' })
-          vim.keymap.set('n', ']c', function() M.next_result_column() end, { buffer = args.buf, silent = true, desc = 'Next Column' })
-          vim.keymap.set('n', '[c', function() M.prev_result_column() end, { buffer = args.buf, silent = true, desc = 'Previous Column' })
+          -- First/Last column navigation (next/prev column are now built-in upstream on <Tab>/<S-Tab> and ]c/[c)
           vim.keymap.set('n', 'g0', function() M.first_result_column() end, { buffer = args.buf, silent = true, desc = 'First Column' })
           vim.keymap.set('n', 'g$', function() M.last_result_column() end, { buffer = args.buf, silent = true, desc = 'Last Column' })
 
@@ -1469,7 +1455,10 @@ return {
     end,
     opts = {
       ui = {
-        drawer = { width = 35 },
+        drawer = {
+          position = 'right',
+          width = 35,
+        },
         result = {
           height = 16,
           page_size = 1000,
