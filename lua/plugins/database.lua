@@ -736,139 +736,6 @@ function M.last_result_column(win)
   end
 end
 
-local sticky_buf = nil
-local sticky_win = nil
-
-function M.close_sticky_header()
-  if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
-    pcall(vim.api.nvim_win_close, sticky_win, true)
-  end
-  sticky_win = nil
-  if sticky_buf and vim.api.nvim_buf_is_valid(sticky_buf) then
-    pcall(vim.api.nvim_buf_delete, sticky_buf, { force = true })
-  end
-  sticky_buf = nil
-end
-
-function M.update_sticky_header(win)
-  if not win or not vim.api.nvim_win_is_valid(win) then
-    M.close_sticky_header()
-    return
-  end
-  local buf = vim.api.nvim_win_get_buf(win)
-  if not buf or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= 'sqmeow-result' then
-    M.close_sticky_header()
-    return
-  end
-
-  local line_count = vim.api.nvim_buf_line_count(buf)
-  if line_count < 3 then
-    if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
-      pcall(vim.api.nvim_win_close, sticky_win, true)
-      sticky_win = nil
-    end
-    return
-  end
-
-  local w0 = vim.fn.line('w0', win)
-  if w0 > 2 then
-    if not sticky_buf or not vim.api.nvim_buf_is_valid(sticky_buf) then
-      sticky_buf = vim.api.nvim_create_buf(false, true)
-      vim.bo[sticky_buf].buftype = 'nofile'
-      vim.bo[sticky_buf].bufhidden = 'hide'
-      vim.bo[sticky_buf].swapfile = false
-    end
-
-    local header_lines = vim.api.nvim_buf_get_lines(buf, 0, 2, false)
-    if #header_lines == 2 then
-      vim.bo[sticky_buf].modifiable = true
-      vim.api.nvim_buf_set_lines(sticky_buf, 0, -1, false, header_lines)
-      vim.bo[sticky_buf].modifiable = false
-
-      -- Transfer extmarks / highlights from original header rows
-      local ns = vim.api.nvim_create_namespace('sqmeow')
-      local hns = vim.api.nvim_create_namespace('sqmeow_sticky')
-      vim.api.nvim_buf_clear_namespace(sticky_buf, hns, 0, -1)
-      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { 0, 0 }, { 1, -1 }, { details = true })
-      for _, m in ipairs(marks) do
-        local row, col, details = m[2], m[3], m[4]
-        if details and details.hl_group then
-          pcall(vim.api.nvim_buf_set_extmark, sticky_buf, hns, row, col, {
-            end_col = details.end_col,
-            hl_group = details.hl_group,
-            priority = details.priority,
-          })
-        end
-      end
-
-      local win_w = vim.api.nvim_win_get_width(win)
-      local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
-
-      if not sticky_win or not vim.api.nvim_win_is_valid(sticky_win) then
-        sticky_win = vim.api.nvim_open_win(sticky_buf, false, {
-          relative = 'win',
-          win = win,
-          row = 0,
-          col = 0,
-          width = win_w,
-          height = 2,
-          focusable = false,
-          style = 'minimal',
-          zindex = 45,
-        })
-        if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
-          vim.wo[sticky_win].wrap = false
-          vim.wo[sticky_win].spell = false
-        end
-      else
-        vim.api.nvim_win_set_config(sticky_win, {
-          width = win_w,
-          height = 2,
-        })
-      end
-
-      if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
-        vim.api.nvim_win_call(sticky_win, function()
-          vim.fn.winrestview({ leftcol = view.leftcol, topline = 1 })
-        end)
-      end
-    end
-  else
-    if sticky_win and vim.api.nvim_win_is_valid(sticky_win) then
-      pcall(vim.api.nvim_win_close, sticky_win, true)
-      sticky_win = nil
-    end
-  end
-end
-
-function M.update_result_winbar(win)
-  if not win or not vim.api.nvim_win_is_valid(win) then return end
-  local ok, result = pcall(require, 'sqmeow.ui.result')
-  if not ok then return end
-
-  local ok_st, state = pcall(require, 'sqmeow.state')
-  local call = ok_st and state.call
-  if not call then return end
-
-  local cell = result.current_cell and result.current_cell()
-  local col_info = ''
-  if cell and cell.name and cell.name ~= '' then
-    local total_cols = call.columns and #call.columns or 0
-    local col_type = call.columns and call.columns[cell.column + 1] and call.columns[cell.column + 1].type_name or ''
-    col_info = ('  %%#SqmeowSignAdded#󰠵 %s%%*'):format(cell.name)
-    if col_type ~= '' then
-      col_info = col_info .. (' %%#SqmeowNull#(%s)%%*'):format(col_type)
-    end
-    if total_cols > 0 then
-      col_info = col_info .. (' %%#SqmeowNull#[%d/%d]%%*'):format(cell.column + 1, total_cols)
-    end
-  end
-
-  local label = call.connection or (state.current_connection() and state.current_connection().name) or 'database'
-  local desc = result.describe and result.describe(call, true) or ''
-  vim.wo[win].winbar = ('%%#SqmeowWinbar# %s  %%*%s%s'):format(label, desc, col_info)
-end
-
 -------------------------------------------------------------------------------
 -- Interactive Connection Switcher & Management (<leader>bs, <leader>ba, <leader>bd)
 -------------------------------------------------------------------------------
@@ -1297,6 +1164,7 @@ return {
   -- Modern Rust-powered Database Client with Schema, Views, Routines, and In-Grid Editing
   {
     '2giosangmitom/sqmeow.nvim',
+    dir = '/home/georgek/sqmeow.nvim',
     dependencies = { 'MunifTanjim/nui.nvim' },
     cmd = 'Sqmeow',
     build = function()
@@ -1409,43 +1277,12 @@ return {
           vim.keymap.set('n', 'g$', function() M.last_result_column() end, { buffer = args.buf, silent = true, desc = 'Last Column' })
 
           vim.keymap.set('n', 'q', function()
-            M.close_sticky_header()
             require('sqmeow.api').close()
             local ed = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
             if ed and vim.api.nvim_win_is_valid(ed) then
               vim.api.nvim_set_current_win(ed)
             end
           end, { buffer = args.buf, silent = true, desc = 'Close Query Results' })
-
-          -- Sticky Header & Dynamic Winbar listeners
-          local group = vim.api.nvim_create_augroup('SqmeowResultSticky_' .. args.buf, { clear = true })
-          vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
-            group = group,
-            buffer = args.buf,
-            callback = function()
-              local w = vim.fn.bufwinid(args.buf)
-              if w > 0 then
-                M.update_result_winbar(w)
-                M.update_sticky_header(w)
-              end
-            end,
-          })
-          vim.api.nvim_create_autocmd({ 'WinScrolled' }, {
-            group = group,
-            callback = function()
-              local w = vim.fn.bufwinid(args.buf)
-              if w > 0 then
-                M.update_sticky_header(w)
-              end
-            end,
-          })
-          vim.api.nvim_create_autocmd({ 'BufLeave', 'BufHidden', 'BufDelete', 'BufUnload' }, {
-            group = group,
-            buffer = args.buf,
-            callback = function()
-              M.close_sticky_header()
-            end,
-          })
         end,
       })
     end,
@@ -1465,6 +1302,8 @@ return {
           max_column_width = 48,
           column_icons = true,
           null_text = 'NULL',
+          sticky_header = true,
+          winbar_column_info = true,
         },
       },
       keymaps = {
