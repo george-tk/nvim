@@ -69,8 +69,8 @@ flowchart TD
 | **6. SQL Table Context Parsing** | [`lua/utils/dadbod-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/dadbod-blink.lua) | `vim-dadbod-completion` locked onto the first table when `b:db_table` was set. AST extraction parses active `FROM`/`JOIN` statements dynamically. | **User Configuration Only**. This bridges `vim-dadbod-completion` with `Saghen/blink.cmp` and is outside `sqmeow.nvim`'s core scope. |
 | **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
 | **8. Multi-DB Cluster Child Connections** | [`setup_drawer_helpers` toggle/use hooks](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L766-L865) | In PostgreSQL clusters, expanding a database node fails to activate child connection sessions, and `actions.use()` on child database / descendant nodes errors with missing conn IDs. | **Pending Upstream ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Once upstream activates child connections on expand and supports `actions.use()` across cluster databases, local hooks can be dropped. |
-| **9. In-Memory Scratchpad Preview** | [`M.open_preview_buffer`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L476-L552) | Built-in `p` only opens bottom result grid, while opening a scratchpad writes `.sql` files to disk on preview, causing disk clutter. Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk files until `:w`. Artificial queries (`First 1000`, `Count (*)`) removed from config. | **Pending Upstream ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46))**. Once upstream provides an in-memory scratchpad preview action for relations, local preview buffer slot hook can be dropped. |
-| **10. Editor Buffer Re-binding on `use` (`u`)** | [`drawer.actions.use` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L795-L865) | Upstream `actions.use()` only sets `state.current` and never updates `b:sqmeow_connection` on active buffers, causing open queries to keep executing against the old database. Rebind hook updates `b:sqmeow_connection`, `b:db`, Dadbod completion, and winbar. | **Pending Upstream ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47))**. Once upstream updates or re-binds active editor buffer on `actions.use()`, local rebinding hook can be dropped. |
+| **9. In-Memory Scratchpad Preview** | [`M.open_preview_buffer`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L476-L552) | Built-in `p` only opens bottom result grid, while opening a scratchpad writes `.sql` files to disk on preview, causing disk clutter. Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk files until `:w`. Artificial queries (`First 1000`, `Count (*)`) removed from config. | **Pending Upstream ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Once upstream provides an in-memory scratchpad preview action for relations, local preview buffer slot hook can be dropped. |
+| **10. Editor Buffer Re-binding on `use` (`u`)** | [`drawer.actions.use` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L795-L865) | Upstream `actions.use()` only sets `state.current` and never updates `b:sqmeow_connection` on active buffers, causing open queries to keep executing against the old database. Rebind hook updates `b:sqmeow_connection`, `b:db`, Dadbod completion, and winbar. | **Pending Upstream ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Once upstream updates or re-binds active editor buffer on `actions.use()`, local rebinding hook can be dropped. |
 
 ---
 
@@ -448,9 +448,9 @@ end
 
 ---
 
-### Issue 7: Preview relation in an in-memory editor buffer for immediate query iteration [SUBMITTED UPSTREAM - Issue #46]
+### Issue 7: Preview relation in an in-memory editor buffer for immediate query iteration [SUBMITTED UPSTREAM - Issue #46 / PR #49]
 
-> **Status**: Submitted Upstream as [Feature Request #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46).
+> **Status**: Submitted Upstream as [Feature Request #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) and implemented in [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49).
 
 **Title**: `feat(drawer): preview relation in an in-memory editor buffer for immediate query iteration`
 
@@ -470,9 +470,9 @@ Opening a scratchpad file per previewed table creates unwanted `.sql` files on d
 
 ---
 
-### Issue 8: Re-bind active editor buffer to selected connection on 'use' (u) [SUBMITTED UPSTREAM - Issue #47]
+### Issue 8: Re-bind active editor buffer to selected connection on 'use' (u) [SUBMITTED UPSTREAM - Issue #47 / PR #50]
 
-> **Status**: Submitted Upstream as [Feature Request #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47).
+> **Status**: Submitted Upstream as [Feature Request #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) and implemented in [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50).
 
 **Title**: `feat(drawer): re-bind active editor buffer to selected connection on 'use' (u)`
 
