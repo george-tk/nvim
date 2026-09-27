@@ -187,6 +187,32 @@ function M.get_saved_queries_for_db(db_name)
 end
 
 function M.get_connection_url(name)
+  if not name or name == '' then return nil end
+
+  -- Check active sqmeow connections first (e.g. child connections like "cluster/testdb")
+  local ok_state, state = pcall(require, 'sqmeow.state')
+  if ok_state and state and state.connections then
+    local conn = state.connection_by_name(name)
+    if conn then
+      if conn.database and conn.url and not conn.url:match('/' .. conn.database .. '$') then
+        local base = conn.url:gsub('/+$', '')
+        return base .. '/' .. conn.database
+      end
+      return conn.url
+    end
+  end
+
+  if name:find('/') then
+    local parent_name, child_db = name:match('^([^/]+)/(.+)$')
+    if parent_name and child_db then
+      local parent_url = M.get_connection_url(parent_name)
+      if parent_url then
+        local base = parent_url:gsub('/+$', '')
+        return base .. '/' .. child_db
+      end
+    end
+  end
+
   local conns = M.get_all_connections()
   for _, c in ipairs(conns) do
     if c.name == name then
@@ -200,15 +226,43 @@ end
 function M.deduplicate_connections()
 end
 
--- Ensure connection is active in sqmeow using upstream connect_named
+-- Ensure connection is active in sqmeow using upstream connect_named or active child connection
 function M.ensure_sqmeow_connection(db_name)
   if not db_name or db_name == '' then
     return nil
   end
 
+  local ok_state, state = pcall(require, 'sqmeow.state')
   local ok_api, api = pcall(require, 'sqmeow.api')
   if not ok_api or not api then
     return nil
+  end
+
+  -- If it is already an active open connection (including child connections like "cluster/testdb"), activate it
+  if ok_state and state and state.connections then
+    local conn = state.connection_by_name(db_name)
+    if conn and conn.state ~= 'closed' then
+      api.use(conn.id)
+      return conn.id
+    end
+  end
+
+  -- If it's a child connection like "parent/child", ensure parent is open and look for child
+  if db_name:find('/') then
+    local parent_name, child_db = db_name:match('^([^/]+)/(.+)$')
+    if parent_name and child_db then
+      local parent_conn = ok_state and state and state.connection_by_name(parent_name)
+      if not parent_conn or parent_conn.state == 'closed' then
+        pcall(function() api.connect_named(parent_name) end)
+      end
+      if ok_state and state and state.child_connection and parent_conn then
+        local child = state.child_connection(parent_conn.id, child_db)
+        if child and child.id then
+          api.use(child.id)
+          return child.id
+        end
+      end
+    end
   end
 
   local id = nil
@@ -258,18 +312,78 @@ function M.get_active_db(buf)
     return nil, nil
   end
 
-  -- 1. Buffer path belongs to a specific database folder
-  local buf_path = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
-  if buf_path ~= '' then
-    local conns = M.get_all_connections()
-    for _, c in ipairs(conns) do
-      if buf_path:find('/' .. c.name .. '/') or buf_path:find('/' .. c.name .. '_') then
+  -- 1. If buffer already has an assigned sqmeow_connection, respect it
+  local ok_sq, sq_conn = pcall(function() return vim.b[buf].sqmeow_connection end)
+  if ok_sq and sq_conn and sq_conn ~= '' then
+    local url = M.get_connection_url(sq_conn)
+    if url then
+      return url, sq_conn
+    end
+    for _, c in ipairs(M.get_all_connections()) do
+      if c.name == sq_conn then
         return c.url, c.name
       end
     end
   end
 
-  -- 2. Buffer already has an assigned database
+  -- 2. Buffer path belongs to a specific database folder
+  local buf_path = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
+  if buf_path ~= '' then
+    -- Collect all known connections (both persistent and active in state)
+    local candidates = {}
+    local seen = {}
+
+    local ok_state, state = pcall(require, 'sqmeow.state')
+    if ok_state and state and state.connections then
+      for _, conn in pairs(state.connections) do
+        if conn and conn.name and not seen[conn.name] then
+          seen[conn.name] = true
+          table.insert(candidates, { name = conn.name, url = conn.url })
+        end
+      end
+    end
+
+    local conns = M.get_all_connections()
+    for _, c in ipairs(conns) do
+      if not seen[c.name] then
+        seen[c.name] = true
+        table.insert(candidates, { name = c.name, url = c.url })
+      end
+    end
+
+    -- Sort candidates by name length descending so child connections match before parent
+    table.sort(candidates, function(a, b) return #a.name > #b.name end)
+
+    for _, c in ipairs(candidates) do
+      local pattern = '/' .. c.name:gsub('([^%w])', '%%%1') .. '/'
+      local pattern_under = '/' .. c.name:gsub('([^%w])', '%%%1') .. '_'
+      if buf_path:find(pattern) or buf_path:find(pattern_under) then
+        -- Check if path contains a child database subfolder (e.g. .../scratch/cluster/testdb/...)
+        local sub_db = buf_path:match('/' .. c.name:gsub('([^%w])', '%%%1') .. '/([^/]+)/')
+        if sub_db then
+          local child_name = c.name .. '/' .. sub_db
+          local child_url = M.get_connection_url(child_name) or (c.url and (c.url:gsub('/+$', '') .. '/' .. sub_db))
+          return child_url, child_name
+        end
+        local conn_url = M.get_connection_url(c.name) or c.url
+        return conn_url, c.name
+      end
+    end
+  end
+
+  -- 3. Buffer already has an assigned database or sqmeow connection
+  if ok_sq and sq_conn and sq_conn ~= '' then
+    local url = M.get_connection_url(sq_conn)
+    if url then
+      return url, sq_conn
+    end
+    for _, c in ipairs(M.get_all_connections()) do
+      if c.name == sq_conn then
+        return c.url, c.name
+      end
+    end
+  end
+
   local ok_db, db_val = pcall(function() return vim.b[buf].db end)
   local ok_name, db_name_val = pcall(function() return vim.b[buf].db_name end)
   if ok_db and db_val and db_val ~= '' then
@@ -277,18 +391,7 @@ function M.get_active_db(buf)
     return db_val, name
   end
 
-  -- 2. Buffer bound via sqmeow_connection
-  local ok_sq, sq_conn = pcall(function() return vim.b[buf].sqmeow_connection end)
-  if ok_sq and sq_conn and sq_conn ~= '' then
-    local conns = M.get_all_connections()
-    for _, c in ipairs(conns) do
-      if c.name == sq_conn then
-        return c.url, c.name
-      end
-    end
-  end
-
-  -- 3. Fallback to active connection
+  -- 4. Fallback to active connection
   if M.current_db and M.is_accessible(M.current_db) then
     return M.current_db, M.current_db_name
   end
@@ -345,35 +448,51 @@ function M.open_drawer()
   end)
 end
 
-function M.execute_default_query(conn_id, schema, rel, query_type)
-  local sql_mod = require('sqmeow.sql')
-  local st = require('sqmeow.state').connections[conn_id]
-  local dialect = st and st.dialect
-  local parts = { schema, rel }
-  local query = ''
+M._preview_buf = nil
 
-  if query_type == 'first_1000' then
-    query = sql_mod.select_from(dialect, parts, 1000) .. ';'
-  elseif query_type == 'count' then
-    query = ('select count(*) as count from %s;'):format(sql_mod.qualify(dialect, parts))
-  else
-    query = query_type
-  end
+function M.open_preview_buffer(node)
+  if not node or not node.conn_id then return end
+
+  local sql_mod = require('sqmeow.sql')
+  local st = require('sqmeow.state').connections[node.conn_id]
+  local dialect = st and st.dialect
+  local rel = node.name or (node.path and node.path[#node.path])
+  if not rel then return end
+
+  local parts = node.path and #node.path >= 2 and { node.path[1], rel } or { rel }
+  local max_rows = require('sqmeow.config').get().query.max_rows
+  local limit = (max_rows and max_rows > 0) and max_rows or 1000
+  local query = sql_mod.select_from(dialect, parts, limit) .. ';'
 
   local conn_name = st and st.name or M.current_db_name
-  local pad_dir = vim.fs.normalize(sqmeow_scratch_dir .. '/' .. (conn_name or 'default'))
-  vim.fn.mkdir(pad_dir, 'p')
-  local pad_path = pad_dir .. '/' .. rel .. '.sql'
 
-  -- Ensure scratchpad file exists with the query content
-  vim.fn.writefile({ query }, pad_path)
+  -- Reuse single preview buffer or create a new in-memory scratch buffer
+  local buf = M._preview_buf
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    buf = vim.api.nvim_create_buf(false, true)
+    M._preview_buf = buf
+  end
 
-  -- Open the scratchpad in the main editor window
+  local preview_title = ('[Preview: %s]'):format(rel)
+  pcall(vim.api.nvim_buf_set_name, buf, preview_title)
+
+  -- Set buffer contents in-memory (no file written to disk)
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'hide'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = 'sql'
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { query })
+  vim.bo[buf].modified = false
+  vim.opt_local.spell = false
+
+  -- Attach editor keymaps and sqmeow metadata
   local editor = require('sqmeow.ui.editor')
-  local buf = editor.open_path(pad_path)
+  editor.attach(buf, conn_name)
+  vim.b[buf].is_preview_buffer = true
+  vim.b[buf].sqmeow_table = rel
 
-  -- Set active connection context on the buffer for blink.cmp autocompletion
-  local conn_url = (st and st.url) or M.current_db
+  -- Connection context for completion (dadbod & blink)
+  local conn_url = M.get_connection_url(conn_name) or (st and st.url) or M.current_db
   if not conn_url and conn_name then
     for _, c in ipairs(M.get_all_connections()) do
       if c.name == conn_name then
@@ -387,35 +506,49 @@ function M.execute_default_query(conn_id, schema, rel, query_type)
     vim.b[buf].db = conn_url
     vim.b[buf].db_name = conn_name
     vim.b[buf].sqmeow_connection = conn_name
-    vim.b[buf].sqmeow_table = rel
     M.current_db = conn_url
     M.current_db_name = conn_name
   end
-  vim.bo[buf].filetype = 'sql'
-  vim.opt_local.spell = false
+
+  -- Hook :w on this preview buffer so typing :w triggers M.save_query(true)
+  pcall(vim.api.nvim_clear_autocmds, { buffer = buf, group = 'SqmeowPreviewSave' })
+  local group = vim.api.nvim_create_augroup('SqmeowPreviewSave', { clear = false })
+  vim.api.nvim_create_autocmd('BufWriteCmd', {
+    group = group,
+    buffer = buf,
+    callback = function()
+      M.save_query(true)
+    end,
+  })
+
+  -- Clear preview buffer reference if deleted
+  vim.api.nvim_create_autocmd('BufDelete', {
+    group = group,
+    buffer = buf,
+    callback = function()
+      if M._preview_buf == buf then
+        M._preview_buf = nil
+      end
+    end,
+  })
+
+  -- Open the preview buffer in the main editing window
+  local ed_win = require('sqmeow.ui.layout').editing_window()
+  vim.api.nvim_win_set_buf(ed_win, buf)
 
   -- Execute the query so the results grid opens in the bottom panel
   local api = require('sqmeow.api')
-  api.use(conn_id)
-  api.execute(query)
+  api.use(node.conn_id)
+  api.execute(query, { conn_id = node.conn_id, source_buf = buf })
 
   -- Ensure bottom panel tracks dbout mode
   if _G.BottomPanel then
     _G.BottomPanel.active_mode = 'dbout'
   end
 
-  -- Position cursor in the editor buffer on the query so user can modify/save
-  local ed_win = vim.fn.bufwinid(buf)
-  if ed_win > 0 and vim.api.nvim_win_is_valid(ed_win) then
-    vim.api.nvim_set_current_win(ed_win)
-    vim.api.nvim_win_set_cursor(ed_win, { 1, #query })
-  end
-
-  -- Redraw drawer so scratchpads list reflects the new scratchpad
-  local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
-  if ok_dr and drawer.render then
-    drawer.render()
-  end
+  -- Position cursor on the query
+  vim.api.nvim_set_current_win(ed_win)
+  vim.api.nvim_win_set_cursor(ed_win, { 1, #query })
 end
 
 function M.setup_drawer_helpers()
@@ -475,16 +608,12 @@ function M.setup_drawer_helpers()
     local orig_open_path = editor.open_path
     editor.open_path = function(path)
       local buf = orig_open_path(path)
-      local norm_path = vim.fs.normalize(path)
-      local conns = M.get_all_connections()
-      for _, c in ipairs(conns) do
-        if norm_path:find('/' .. c.name .. '/') or norm_path:find('/' .. c.name .. '_') then
-          vim.b[buf].sqmeow_connection = c.name
-          vim.b[buf].db = c.url
-          vim.b[buf].db_name = c.name
-          M.ensure_sqmeow_connection(c.name)
-          break
-        end
+      local db_url, db_name = M.get_active_db(buf)
+      if db_name then
+        vim.b[buf].sqmeow_connection = db_name
+        vim.b[buf].db = db_url
+        vim.b[buf].db_name = db_name
+        M.ensure_sqmeow_connection(db_name)
       end
       return buf
     end
@@ -554,34 +683,10 @@ function M.setup_drawer_helpers()
       end
     end
 
-    -- Under tables/views: inject * First 1000 and * Count (*)
-    if payload.path and #payload.path == 3 and (payload.path[2] == 'tables' or payload.path[2] == 'views') and payload.nodes then
-      local has_helpers = false
-      for _, n in ipairs(payload.nodes) do
-        if n.key == '__first_1000' then
-          has_helpers = true
-          break
-        end
-      end
-      if not has_helpers then
-        table.insert(payload.nodes, 1, {
-          name = '* First 1000',
-          key = '__first_1000',
-          kind = 'query',
-          expandable = false,
-        })
-        table.insert(payload.nodes, 2, {
-          name = '* Count (*)',
-          key = '__count',
-          kind = 'query',
-          expandable = false,
-        })
-      end
-    end
     return orig_on_nodes(payload)
   end
 
-  -- 4. Hook drawer.actions.toggle for per-db saved queries and helper queries
+  -- 4. Hook drawer.actions.toggle for per-db saved queries and child connection activation
   local orig_toggle = drawer.actions.toggle
   drawer.actions.toggle = function()
     local node = drawer.current_node()
@@ -658,34 +763,108 @@ function M.setup_drawer_helpers()
       end
     end
 
-    -- Helper queries (* First 1000, * Count (*))
-    if node and node.path and #node.path == 4 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-      local key = node.path[4]
-      local schema = node.path[1]
-      local rel = node.path[3]
-
-      if key == '__first_1000' then
-        M.execute_default_query(node.conn_id, schema, rel, 'first_1000')
-        return
-      elseif key == '__count' then
-        M.execute_default_query(node.conn_id, schema, rel, 'count')
-        return
-      end
+    if node and node.kind == 'database' then
+      local res = orig_toggle()
+      vim.schedule(function()
+        local ok_state, state = pcall(require, 'sqmeow.state')
+        local child = ok_state and state.child_connection and state.child_connection(node.conn_id, node.name)
+        if child and child.id then
+          local ok_api, api = pcall(require, 'sqmeow.api')
+          if ok_api and api then
+            api.use(child.id)
+          end
+        end
+      end)
+      return res
     end
+
     return orig_toggle()
   end
 
-  -- 5. Hook drawer.actions.preview for quick 'First 1000' (opens scratchpad in editor & executes)
+  -- 5. Hook drawer.actions.preview to open relation preview as a SQL buffer in editor & execute
   local orig_preview = drawer.actions.preview
   drawer.actions.preview = function()
     local node = drawer.current_node()
     if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-      local schema = node.path[1]
-      local rel = node.path[3]
-      M.execute_default_query(node.conn_id, schema, rel, 'first_1000')
+      M.open_preview_buffer(node)
       return
     end
     return orig_preview()
+  end
+
+  -- 6. Hook drawer.actions.use to switch active connection AND rebind active editor buffer
+  local orig_use = drawer.actions.use
+  drawer.actions.use = function()
+    local node = drawer.current_node()
+    if node then
+      local target_id = node.conn_id
+      if node.kind == 'database' then
+        local ok_st, state = pcall(require, 'sqmeow.state')
+        local child = ok_st and state.child_connection and state.child_connection(node.conn_id, node.name)
+        if child and child.id then
+          target_id = child.id
+        else
+          local parent_conn = ok_st and state.connections and state.connections[node.conn_id]
+          if parent_conn and parent_conn.name then
+            target_id = M.ensure_sqmeow_connection(parent_conn.name .. '/' .. node.name)
+          end
+        end
+      end
+
+      if target_id then
+        local api = require('sqmeow.api')
+        local conn = api.use(target_id)
+        if conn then
+          local conn_url = M.get_connection_url(conn.name) or conn.url
+          M.current_db = conn_url
+          M.current_db_name = conn.name
+
+          -- Rebind active SQL / editor buffer
+          local ed_buf = nil
+          local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
+          if ed_win and vim.api.nvim_win_is_valid(ed_win) then
+            local b = vim.api.nvim_win_get_buf(ed_win)
+            if vim.api.nvim_buf_is_valid(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
+              ed_buf = b
+            end
+          end
+          if not ed_buf then
+            for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+              if vim.api.nvim_win_is_valid(win) then
+                local b = vim.api.nvim_win_get_buf(win)
+                if vim.api.nvim_buf_is_valid(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
+                  ed_buf = b
+                  break
+                end
+              end
+            end
+          end
+          if not ed_buf then
+            for _, b in ipairs(vim.api.nvim_list_bufs()) do
+              if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_is_loaded(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
+                ed_buf = b
+                break
+              end
+            end
+          end
+
+          if ed_buf then
+            vim.b[ed_buf].sqmeow_connection = conn.name
+            vim.b[ed_buf].db = conn_url
+            vim.b[ed_buf].db_name = conn.name
+            pcall(function()
+              require('sqmeow.ui.editor').update_winbar()
+              vim.cmd('call vim_dadbod_completion#fetch(' .. ed_buf .. ')')
+            end)
+            vim.notify(('Bound `%s` to %s'):format(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(ed_buf), ':t'), conn.name), vim.log.levels.INFO, { title = 'Database' })
+          else
+            vim.notify(('queries now run on %s'):format(conn.name), vim.log.levels.INFO, { title = 'Database' })
+          end
+          return conn
+        end
+      end
+    end
+    return orig_use()
   end
 end
 
@@ -743,15 +922,37 @@ end
 function M.select_connection(callback)
   local connections = M.get_all_connections()
   local items = {}
+  local seen = {}
+
+  -- Include active and child connections from sqmeow state (e.g. docker_cluster/testdb)
+  local ok_st, state = pcall(require, 'sqmeow.state')
+  if ok_st and state and state.connections then
+    for _, conn in pairs(state.connections) do
+      if conn and conn.name and not seen[conn.name] then
+        seen[conn.name] = true
+        local url = M.get_connection_url(conn.name) or conn.url
+        local is_current = (conn.name == M.current_db_name or url == M.current_db)
+        table.insert(items, {
+          text = (is_current and '● ' or '○ ') .. conn.name .. '  (' .. url .. ')',
+          name = conn.name,
+          url = url,
+          action = 'select',
+        })
+      end
+    end
+  end
 
   for _, entry in ipairs(connections) do
-    local is_current = (entry.name == M.current_db_name or entry.url == M.current_db)
-    table.insert(items, {
-      text = (is_current and '● ' or '○ ') .. entry.name .. '  (' .. entry.url .. ')',
-      name = entry.name,
-      url = entry.url,
-      action = 'select',
-    })
+    if not seen[entry.name] then
+      seen[entry.name] = true
+      local is_current = (entry.name == M.current_db_name or entry.url == M.current_db)
+      table.insert(items, {
+        text = (is_current and '● ' or '○ ') .. entry.name .. '  (' .. entry.url .. ')',
+        name = entry.name,
+        url = entry.url,
+        action = 'select',
+      })
+    end
   end
 
   table.insert(items, {
@@ -789,6 +990,10 @@ function M.select_connection(callback)
     vim.b[cur_buf].db = choice.url
     vim.b[cur_buf].db_name = choice.name
     vim.b[cur_buf].sqmeow_connection = choice.name
+    pcall(function()
+      require('sqmeow.ui.editor').update_winbar()
+      vim.cmd('call vim_dadbod_completion#fetch(' .. cur_buf .. ')')
+    end)
 
     vim.notify('Active database: ' .. choice.name, vim.log.levels.INFO, { title = 'Database' })
 
@@ -916,14 +1121,9 @@ function M.run_query()
     local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
     if ok_dr and drawer.current_node then
       local node = drawer.current_node()
-      if node then
-        if node.path and #node.path == 4 and (node.path[4] == '__first_1000' or node.path[4] == '__count') then
-          drawer.actions.toggle()
-          return
-        elseif node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-          drawer.actions.preview()
-          return
-        end
+      if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+        drawer.actions.preview()
+        return
       end
     end
   end
@@ -1013,7 +1213,8 @@ function M.save_query(force_prompt)
     return
   end
 
-  local default_name = (current_name ~= '' and not current_name:find('scratch') and vim.fn.fnamemodify(current_name, ':t:r'))
+  local default_name = (vim.b[buf].sqmeow_table and vim.b[buf].sqmeow_table)
+    or (current_name ~= '' and not current_name:find('scratch') and not current_name:find('Preview') and vim.fn.fnamemodify(current_name, ':t:r'))
     or ('query_' .. os.date('%Y%m%d_%H%M%S'))
 
   vim.ui.input({
@@ -1039,6 +1240,10 @@ function M.save_query(force_prompt)
     if not write_ok then
       vim.notify('Failed to save query: ' .. tostring(write_err), vim.log.levels.ERROR, { title = 'Database' })
       return
+    end
+
+    if M._preview_buf == buf then
+      M._preview_buf = nil
     end
 
     pcall(function()
@@ -1204,6 +1409,7 @@ return {
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
         pattern = 'sqmeow-drawer',
         callback = function(args)
+          M.setup_drawer_helpers()
           vim.opt_local.spell = false
           local win = vim.fn.bufwinid(args.buf)
           if win > 0 then
@@ -1222,17 +1428,11 @@ return {
           vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
           vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Run First 1000' })
-          vim.keymap.set('n', 'P', function()
-            local drawer = require('sqmeow.ui.drawer')
-            local node = drawer.current_node()
-            if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-              local schema = node.path[1]
-              local rel = node.path[3]
-              M.execute_default_query(node.conn_id, schema, rel, 'count')
-            end
-          end, { buffer = args.buf, silent = true, desc = 'Run Count (*)' })
+          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Preview Relation' })
           vim.keymap.set('n', 'K', function() require('sqmeow.ui.drawer').actions.structure() end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
+          vim.keymap.set('n', 'u', function()
+            require('sqmeow.ui.drawer').actions.use()
+          end, { buffer = args.buf, silent = true, desc = 'Run queries against this connection' })
           vim.keymap.set('n', 'h', function()
             local cur_line = vim.api.nvim_get_current_line()
             if cur_line:match('^%s+') then
@@ -1309,7 +1509,7 @@ return {
         drawer = {
           { action = 'toggle', lhs = { '<CR>', 'o', 'l' }, desc = 'Expand or collapse the node' },
           { action = 'close', lhs = 'q', desc = 'Close the drawer' },
-          { action = 'preview', lhs = 'p', desc = 'Show the first 1000 rows of this relation' },
+          { action = 'preview', lhs = 'p', desc = 'Preview this relation' },
           { action = 'structure', lhs = 'K', desc = 'Show structure of table or key' },
         },
       },
