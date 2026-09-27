@@ -42,7 +42,7 @@ flowchart TD
 
     subgraph Upstream Candidates [Pending Upstream PRs / Issues]
         B["Drawer Node Scope Separation (kind == 'scratchpads') - Issue #32"]
-        J["Cluster Child Connection Activation & Use - Issue #45"]
+        J["Cluster Child Connection Activation & Use (PR #48 / Issue #45)"]
         K["In-Memory Scratchpad Preview (Zero Disk Clutter) - Issue #46"]
         L["Buffer Re-binding on Drawer 'use' (u) - Issue #47"]
     end
@@ -68,7 +68,7 @@ flowchart TD
 | **5. Right-Side Drawer Placement** | `opts.ui.drawer.position = 'right'` | `sqmeow.ui.drawer.open` previously hardcoded `topleft vertical %dsplit`. | **RESOLVED & MERGED UPSTREAM ([PR #39](https://github.com/2giosangmitom/sqmeow.nvim/pull/39))**. Merged into master in commit `97ed6ab`. Upstream natively uses `botright vertical %dsplit` when `position = 'right'`. All `wincmd L` and scheduled resize hacks removed. |
 | **6. SQL Table Context Parsing** | [`lua/utils/dadbod-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/dadbod-blink.lua) | `vim-dadbod-completion` locked onto the first table when `b:db_table` was set. AST extraction parses active `FROM`/`JOIN` statements dynamically. | **User Configuration Only**. This bridges `vim-dadbod-completion` with `Saghen/blink.cmp` and is outside `sqmeow.nvim`'s core scope. |
 | **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
-| **8. Multi-DB Cluster Child Connections** | [`setup_drawer_helpers` toggle/use hooks](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L766-L865) | In PostgreSQL clusters, expanding a database node fails to activate child connection sessions, and `actions.use()` on child database / descendant nodes errors with missing conn IDs. | **Pending Upstream ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45))**. Once upstream activates child connections on expand and supports `actions.use()` across cluster databases, local hooks can be dropped. |
+| **8. Multi-DB Cluster Child Connections** | [`setup_drawer_helpers` toggle/use hooks](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L766-L865) | In PostgreSQL clusters, expanding a database node fails to activate child connection sessions, and `actions.use()` on child database / descendant nodes errors with missing conn IDs. | **Pending Upstream ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Once upstream activates child connections on expand and supports `actions.use()` across cluster databases, local hooks can be dropped. |
 | **9. In-Memory Scratchpad Preview** | [`M.open_preview_buffer`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L476-L552) | Built-in `p` only opens bottom result grid, while opening a scratchpad writes `.sql` files to disk on preview, causing disk clutter. Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk files until `:w`. Artificial queries (`First 1000`, `Count (*)`) removed from config. | **Pending Upstream ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46))**. Once upstream provides an in-memory scratchpad preview action for relations, local preview buffer slot hook can be dropped. |
 | **10. Editor Buffer Re-binding on `use` (`u`)** | [`drawer.actions.use` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L795-L865) | Upstream `actions.use()` only sets `state.current` and never updates `b:sqmeow_connection` on active buffers, causing open queries to keep executing against the old database. Rebind hook updates `b:sqmeow_connection`, `b:db`, Dadbod completion, and winbar. | **Pending Upstream ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47))**. Once upstream updates or re-binds active editor buffer on `actions.use()`, local rebinding hook can be dropped. |
 
@@ -420,7 +420,7 @@ vim.cmd(('%s vertical %dsplit'):format(split_cmd, config.width))
 
 ### Issue 6: Cluster child connections fail to activate on expand and 'use' fails on descendant nodes [SUBMITTED UPSTREAM - Issue #45]
 
-> **Status**: Submitted Upstream as [Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45).
+> **Status**: Submitted Upstream as [Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48).
 
 **Title**: `bug(drawer): cluster child connections are not activated on expand and 'use' fails on descendant nodes`
 
