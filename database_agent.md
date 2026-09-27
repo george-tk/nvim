@@ -448,11 +448,11 @@ end
 
 ---
 
-### Issue 7: Action to open relation in an in-memory scratchpad for immediate query iteration [SUBMITTED UPSTREAM - Issue #46]
+### Issue 7: Preview relation in an in-memory editor buffer for immediate query iteration [SUBMITTED UPSTREAM - Issue #46]
 
 > **Status**: Submitted Upstream as [Feature Request #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46).
 
-**Title**: `feat(drawer): action to open relation in an in-memory scratchpad for immediate query iteration`
+**Title**: `feat(drawer): preview relation in an in-memory editor buffer for immediate query iteration`
 
 **Description**:
 Currently, `sqmeow`'s drawer provides two ways to interact with a table or view:
@@ -463,8 +463,9 @@ While `preview` (`p`) is great for a quick read-only peek, in exploratory workfl
 
 Opening a scratchpad file per previewed table creates unwanted `.sql` files on disk. By using an in-memory dedicated buffer (`buftype = 'nofile'`) named `[Preview: relation]`, browsing 20 tables creates zero junk files on disk. The buffer only persists to disk when the user explicitly saves it with `:w`.
 
-**Proposed Implementation**:
-In `lua/sqmeow/ui/drawer.lua`, add `actions.query_relation` using a reusable in-memory buffer (`buftype = 'nofile'`) attached to `editing_window()`.
+**Proposed Approaches**:
+- **Option A (Recommended)**: Upgrade the existing `preview` (`p`) action to open the relation's `SELECT` statement directly in an in-memory editor buffer (`buftype = 'nofile'`) in `editing_window()`, while executing into the result grid. Reuses the preview buffer slot across tables and leaves disk untouched until explicit `:w`. Configurable via `ui.drawer.preview_in_editor = true` (default `true`).
+- **Option B**: Introduce a separate action (e.g. `actions.query_relation` bound to `O` or `P`), keeping `p` strictly as a bottom-grid-only peek.
 
 ---
 
