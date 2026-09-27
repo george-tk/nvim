@@ -1164,7 +1164,6 @@ return {
   -- Modern Rust-powered Database Client with Schema, Views, Routines, and In-Grid Editing
   {
     '2giosangmitom/sqmeow.nvim',
-    dir = '/home/georgek/sqmeow.nvim',
     dependencies = { 'MunifTanjim/nui.nvim' },
     cmd = 'Sqmeow',
     build = function()

@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `97ed6abf11dd119c865cdb673a79a4f634720946` (`feat(drawer): allow configuring drawer placement on the right (#39)`, Sat Sep 26 2026)
+- **Baseline Commit Pinned**: `7787aec9f207f4f8913b53af3de1e7b03d0751d4` (`fix: lint` after `feat(result): sticky header and active column winbar (#44)`, Sun Sep 27 2026)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 97ed6abf11dd119c865cdb673a79a4f634720946..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7787aec9f207f4f8913b53af3de1e7b03d0751d4..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 97ed6abf11dd119c865cdb673a79a4f634720946..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7787aec9f207f4f8913b53af3de1e7b03d0751d4..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -37,11 +37,11 @@ flowchart TD
         A["Connection Deduplication (PR #36 / Issue #31)"]
         C["Column Navigation Keymaps (PR #38 / Issue #33)"]
         I["Native Right-Side Drawer Placement (PR #39 / Issue #34)"]
+        D["Sticky Column Headers & Dynamic Winbar Indicator (PR #44 / Issue #35)"]
     end
 
     subgraph Upstream Candidates [Pending Upstream PRs / Issues]
         B["Drawer Node Scope Separation (kind == 'scratchpads') - Issue #32"]
-        D["Sticky Column Headers & Dynamic Winbar Indicator - Issue #35"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -61,10 +61,8 @@ flowchart TD
 | **1. Connection Reuse** | [`M.ensure_sqmeow_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L204) (direct `api.connect_named` call) | `sqmeow.api.connect_named(name)` previously generated duplicate connections unconditionally. | **RESOLVED & MERGED UPSTREAM ([PR #36](https://github.com/2giosangmitom/sqmeow.nvim/pull/36))**. Merged into master in commit `a6e0f8c`. Local deduplication workarounds retired from config. |
 | **2. Per-DB Saved Queries in Drawer** | [`on_nodes` injection with `kind = 'saved_queries'`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L580) & [`drawer.actions.toggle` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L650) | In `drawer.lua`, `toggle()` matched `node.kind == 'scratchpads'` and toggled the global `SCRATCHPADS` container. Nodes under a connection also lacked native grouping. | **Upstream Candidate (Issue 2 / Issue #32)**. If upstream adds native per-connection scratchpads/queries or isolates `SCRATCHPADS` checking by ID, our monkey patch on `drawer.actions.toggle` can be dropped. |
 | **3. Result Column Navigation** | Native `<Tab>`, `<S-Tab>`, `]c`, `[c` built-ins | `sqmeow/keymap.lua` previously had zero column navigation keymaps in `result`. | **RESOLVED & MERGED UPSTREAM ([PR #38](https://github.com/2giosangmitom/sqmeow.nvim/pull/38))**. Merged into master in commit `c6197ec`. Upstream now natively binds `<Tab>`, `<S-Tab>`, `]c`, and `[c` to `next_column` and `prev_column`. Local keymap overrides removed. |
-| **4. Sticky Column Headers on Scroll** | [`M.update_sticky_header`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L818) & [`M.update_result_winbar`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L907) | Result grids with >15 rows lose headers when scrolled down. Users lose context of which column holds which values. | **Upstream Candidate (Issue 4 / Issue #35)**. If upstream introduces a sticky header float or pins the active column in the header/winbar, remove our float lifecycle hook. |
+| **4. Sticky Column Headers & Dynamic Winbar** | `opts.ui.result.sticky_header = true` & `opts.ui.result.winbar_column_info = true` | Result grids with >15 rows lose headers when scrolled down. Users lose context of which column holds which values. | **RESOLVED & MERGED UPSTREAM ([PR #44](https://github.com/2giosangmitom/sqmeow.nvim/pull/44))**. Merged into master in commit `e2a9d5e` (plus fixes in `bcdd2a5` and `7787aec`). Native sticky headers and active column info in winbar are enabled by default. Local float hooks and manual winbar generation retired from config. |
 | **5. Right-Side Drawer Placement** | `opts.ui.drawer.position = 'right'` | `sqmeow.ui.drawer.open` previously hardcoded `topleft vertical %dsplit`. | **RESOLVED & MERGED UPSTREAM ([PR #39](https://github.com/2giosangmitom/sqmeow.nvim/pull/39))**. Merged into master in commit `97ed6ab`. Upstream natively uses `botright vertical %dsplit` when `position = 'right'`. All `wincmd L` and scheduled resize hacks removed. |
-| **6. SQL Table Context Parsing** | [`lua/utils/dadbod-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/dadbod-blink.lua) | `vim-dadbod-completion` locked onto the first table when `b:db_table` was set. AST extraction parses active `FROM`/`JOIN` statements dynamically. | **User Configuration Only**. This bridges `vim-dadbod-completion` with `Saghen/blink.cmp` and is outside `sqmeow.nvim`'s core scope. |
-| **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
 | **6. SQL Table Context Parsing** | [`lua/utils/dadbod-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/dadbod-blink.lua) | `vim-dadbod-completion` locked onto the first table when `b:db_table` was set. AST extraction parses active `FROM`/`JOIN` statements dynamically. | **User Configuration Only**. This bridges `vim-dadbod-completion` with `Saghen/blink.cmp` and is outside `sqmeow.nvim`'s core scope. |
 | **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
 
@@ -189,7 +187,9 @@ end
 
 ---
 
-### Issue 4: Sticky column headers and active column indicator when scrolling long result sets
+### Issue 4: Sticky column headers and active column indicator when scrolling long result sets [RESOLVED UPSTREAM - PR #44 / Issue #35]
+
+> **Status**: Resolved & Merged Upstream in [PR #44](https://github.com/2giosangmitom/sqmeow.nvim/pull/44) (Commits `e2a9d5e`, `bcdd2a5`, `7787aec`). Available via `ui.result.sticky_header = true` and `ui.result.winbar_column_info = true`.
 
 **Title**: `feat(result): pin column headers when scrolling vertically & show active column in winbar`
 
