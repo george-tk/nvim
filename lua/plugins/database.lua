@@ -450,6 +450,17 @@ end
 
 M._preview_buf = nil
 
+local function dialect_filetype(dialect)
+  if dialect == 'mongodb' then
+    return 'json'
+  elseif dialect == 'surrealdb' then
+    return 'surql'
+  elseif dialect == 'redis' then
+    return 'redis'
+  end
+  return 'sql'
+end
+
 function M.open_preview_buffer(node)
   if not node or not node.conn_id then return end
 
@@ -459,10 +470,25 @@ function M.open_preview_buffer(node)
   local rel = node.name or (node.path and node.path[#node.path])
   if not rel then return end
 
-  local parts = node.path and #node.path >= 2 and { node.path[1], rel } or { rel }
   local max_rows = require('sqmeow.config').get().query.max_rows
   local limit = (max_rows and max_rows > 0) and max_rows or 1000
-  local query = sql_mod.select_from(dialect, parts, limit) .. ';'
+
+  local statement
+  if dialect == 'redis' and node.path and #node.path >= 2 then
+    statement = sql_mod.read_key(node.path[2], node.path[#node.path], limit)
+  else
+    local parts
+    if node.path and #node.path >= 2 then
+      parts = vim.list_extend({ node.path[1] }, vim.list_slice(node.path, 3, #node.path))
+    else
+      parts = { rel }
+    end
+    statement = sql_mod.select_from(dialect, parts, limit)
+  end
+  if not statement then return end
+
+  local ft = dialect_filetype(dialect)
+  local buffer_text = (ft == 'sql' or ft == 'surql') and (statement .. ';') or statement
 
   local conn_name = st and st.name or M.current_db_name
 
@@ -480,8 +506,8 @@ function M.open_preview_buffer(node)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'hide'
   vim.bo[buf].swapfile = false
-  vim.bo[buf].filetype = 'sql'
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { query })
+  vim.bo[buf].filetype = ft
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(buffer_text, '\n'))
   vim.bo[buf].modified = false
   vim.opt_local.spell = false
 
@@ -539,7 +565,7 @@ function M.open_preview_buffer(node)
   -- Execute the query so the results grid opens in the bottom panel
   local api = require('sqmeow.api')
   api.use(node.conn_id)
-  api.execute(query, { conn_id = node.conn_id, source_buf = buf })
+  api.execute(statement, { conn_id = node.conn_id, source_buf = buf, history = false })
 
   -- Ensure bottom panel tracks dbout mode
   if _G.BottomPanel then
@@ -547,8 +573,9 @@ function M.open_preview_buffer(node)
   end
 
   -- Position cursor on the query
+  local first_line = vim.split(buffer_text, '\n')[1] or ''
   vim.api.nvim_set_current_win(ed_win)
-  vim.api.nvim_win_set_cursor(ed_win, { 1, #query })
+  vim.api.nvim_win_set_cursor(ed_win, { 1, #first_line })
 end
 
 function M.setup_drawer_helpers()
@@ -781,11 +808,16 @@ function M.setup_drawer_helpers()
     return orig_toggle()
   end
 
-  -- 5. Hook drawer.actions.preview to open relation preview as a SQL buffer in editor & execute
+  -- 5. Hook drawer.actions.preview to open relation preview as an in-memory buffer in editor & execute
   local orig_preview = drawer.actions.preview
   drawer.actions.preview = function()
     local node = drawer.current_node()
-    if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
+    local is_rel = node and (
+      node.kind == 'table' or node.kind == 'view' or node.kind == 'materialized view'
+      or node.kind == 'relation' or node.kind == 'key'
+      or (node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views'))
+    )
+    if is_rel then
       M.open_preview_buffer(node)
       return
     end

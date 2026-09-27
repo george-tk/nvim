@@ -464,7 +464,8 @@ While `preview` (`p`) is great for a quick read-only peek, in exploratory workfl
 Opening a scratchpad file per previewed table creates unwanted `.sql` files on disk. By using an in-memory dedicated buffer (`buftype = 'nofile'`) named `[Preview: relation]`, browsing 20 tables creates zero junk files on disk. The buffer only persists to disk when the user explicitly saves it with `:w`.
 
 **Proposed Approaches**:
-- **Option A (Recommended)**: Upgrade the existing `preview` (`p`) action to open the relation's `SELECT` statement directly in an in-memory editor buffer (`buftype = 'nofile'`) in `editing_window()`, while executing into the result grid. Reuses the preview buffer slot across tables and leaves disk untouched until explicit `:w`. Configurable via `ui.drawer.preview_in_editor = true` (default `true`).
+- **Option A (Recommended)**: Upgrade the existing `preview` (`p`) action to open the relation's statement directly in an in-memory editor buffer (`buftype = 'nofile'`) in `editing_window()`, while executing into the result grid. Reuses the preview buffer slot across tables and leaves disk untouched until explicit `:w`. Configurable via `ui.drawer.preview_in_editor = true` (default `true`).
+  - **Multi-Dialect Support**: Uses `dialect_of(conn_id)` and maps dialect to buffer filetype (`mongodb` -> `'json'`, `surrealdb` -> `'surql'`, `redis` -> `'redis'`, SQL dialects -> `'sql'`). Statements are generated using `preview_statement` (`sql.read_key` for Redis, `sql.select_from` for MongoDB/SurrealDB/Oracle/SQL). Trailing semicolons are only appended for SQL and SurrealQL (`ft == 'sql' or ft == 'surql'`), leaving JSON and Redis command inputs clean of syntax errors.
 - **Option B**: Introduce a separate action (e.g. `actions.query_relation` bound to `O` or `P`), keeping `p` strictly as a bottom-grid-only peek.
 
 ---
