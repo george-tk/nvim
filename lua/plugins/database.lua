@@ -255,11 +255,32 @@ function M.ensure_sqmeow_connection(db_name)
       if not parent_conn or parent_conn.state == 'closed' then
         pcall(function() api.connect_named(parent_name) end)
       end
-      if ok_state and state and state.child_connection and parent_conn then
-        local child = state.child_connection(parent_conn.id, child_db)
+
+      local waited = 0
+      while waited < 2000 do
+        parent_conn = ok_state and state and state.connection_by_name(parent_name)
+        if parent_conn and parent_conn.state == 'connected' then break end
+        vim.wait(50, function() return false end)
+        waited = waited + 50
+      end
+
+      if ok_state and state and parent_conn and parent_conn.state == 'connected' then
+        local child = state.child_connection and state.child_connection(parent_conn.id, child_db)
         if child and child.id then
           api.use(child.id)
           return child.id
+        else
+          local child_id = api.connect(parent_conn.url, {
+            name = db_name,
+            parent = parent_conn.id,
+            database = child_db,
+            read_only = parent_conn.read_only,
+            ssh = parent_conn.ssh,
+          })
+          if child_id then
+            api.use(child_id)
+            return child_id
+          end
         end
       end
     end
@@ -737,25 +758,156 @@ end
 -- Interactive Connection Switcher & Management (<leader>bs, <leader>ba, <leader>bd)
 -------------------------------------------------------------------------------
 
+M._conn_databases = M._conn_databases or {}
+
+function M.get_url_database(url)
+  if not url or url == '' then return nil end
+  local ok_u, umod = pcall(require, 'sqmeow.url')
+  if ok_u and umod and umod.split then
+    local parts = umod.split(url)
+    if parts then
+      if parts.dialect == 'sqlite' or parts.dialect == 'duckdb' then
+        return vim.fs.basename(parts.path or '')
+      elseif parts.database and parts.database ~= '' then
+        return parts.database
+      end
+    end
+  end
+  return nil
+end
+
+function M.fetch_connection_databases(conn_name, conn_url, callback)
+  -- 1. Check local in-memory cache
+  if M._conn_databases[conn_name] and #M._conn_databases[conn_name] > 0 then
+    callback(M._conn_databases[conn_name])
+    return
+  end
+
+  local ok_api, api = pcall(require, 'sqmeow.api')
+  local ok_state, state = pcall(require, 'sqmeow.state')
+  local ok_rpc, rpc = pcall(require, 'sqmeow.rpc')
+  if not ok_api or not ok_state or not ok_rpc then
+    callback(nil, 'sqmeow core modules not available')
+    return
+  end
+
+  -- 2. Check sqmeow drawer cache if already introspected
+  local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+  if ok_dr and drawer and drawer.load then
+    local _, cache = debug.getupvalue(drawer.load, 2)
+    local conn = state.connection_by_name(conn_name)
+    if conn and type(cache) == 'table' then
+      local entry = cache[conn.id .. ':']
+      if entry and entry.nodes then
+        local dbs = {}
+        for _, n in ipairs(entry.nodes) do
+          if n.kind == 'database' then
+            table.insert(dbs, n.name)
+          end
+        end
+        if #dbs > 0 then
+          table.sort(dbs)
+          M._conn_databases[conn_name] = dbs
+          callback(dbs)
+          return
+        end
+      end
+    end
+  end
+
+  -- 3. Connect parent if needed and request introspection
+  local parent = state.connection_by_name(conn_name)
+  local parent_id = parent and parent.id
+  if not parent_id or parent.state == 'closed' then
+    parent_id = api.connect_named(conn_name)
+  end
+
+  if not parent_id then
+    callback(nil, 'Failed to connect to ' .. conn_name)
+    return
+  end
+
+  local done = false
+  local unsub = nil
+  local timer = nil
+
+  local function finish(dbs, err)
+    if done then return end
+    done = true
+    if unsub then unsub() end
+    if timer and not timer:is_closing() then
+      timer:stop()
+      timer:close()
+    end
+    vim.schedule(function()
+      callback(dbs, err)
+    end)
+  end
+
+  unsub = rpc.on('schema:nodes', function(payload)
+    if payload.conn_id == parent_id and (#(payload.path or {}) == 0) then
+      local dbs = {}
+      for _, n in ipairs(payload.nodes or {}) do
+        if n.kind == 'database' then
+          table.insert(dbs, n.name)
+        end
+      end
+      table.sort(dbs)
+      if #dbs > 0 then
+        M._conn_databases[conn_name] = dbs
+      end
+      finish(dbs)
+    end
+  end)
+
+  timer = vim.defer_fn(function()
+    finish(nil, 'Timed out waiting for database list from ' .. conn_name)
+  end, 3500)
+
+  local conn_now = state.connections[parent_id]
+  if conn_now and conn_now.state == 'connected' then
+    rpc.request('introspect', { conn_id = parent_id, path = {} })
+  else
+    local state_unsub
+    state_unsub = rpc.on('conn:state', function(payload)
+      if payload.id == parent_id and payload.state == 'connected' then
+        if state_unsub then state_unsub() end
+        rpc.request('introspect', { conn_id = parent_id, path = {} })
+      end
+    end)
+  end
+end
+
+function M.activate_connection(name, url, callback)
+  M.set_active_connection(name, url)
+  local cur_buf = vim.api.nvim_get_current_buf()
+  vim.b[cur_buf].db = url
+  vim.b[cur_buf].db_name = name
+  vim.b[cur_buf].sqmeow_connection = name
+  pcall(function()
+    require('sqmeow.ui.editor').update_winbar()
+    vim.cmd('call vim_dadbod_completion#fetch(' .. cur_buf .. ')')
+  end)
+
+  vim.notify('Active database: ' .. name, vim.log.levels.INFO, { title = 'Database' })
+
+  if callback then
+    callback(url, name)
+  end
+end
+
 function M.select_connection(callback)
   local connections = M.get_all_connections()
   local items = {}
   local seen = {}
 
-  -- Include active and child connections from sqmeow state (e.g. docker_cluster/testdb)
+  -- Include top-level active connections from sqmeow state if not already in connections.json
   local ok_st, state = pcall(require, 'sqmeow.state')
   if ok_st and state and state.connections then
     for _, conn in pairs(state.connections) do
-      if conn and conn.name and not seen[conn.name] then
-        seen[conn.name] = true
+      if conn and conn.name and not conn.parent and not seen[conn.name] then
         local url = M.get_connection_url(conn.name) or conn.url
-        local is_current = (conn.name == M.current_db_name or url == M.current_db)
-        table.insert(items, {
-          text = (is_current and '● ' or '○ ') .. conn.name .. '  (' .. url .. ')',
-          name = conn.name,
-          url = url,
-          action = 'select',
-        })
+        table.insert(connections, { name = conn.name, url = url })
       end
     end
   end
@@ -763,11 +915,47 @@ function M.select_connection(callback)
   for _, entry in ipairs(connections) do
     if not seen[entry.name] then
       seen[entry.name] = true
-      local is_current = (entry.name == M.current_db_name or entry.url == M.current_db)
+      local db_in_url = M.get_url_database(entry.url)
+      local is_multi = (db_in_url == nil)
+      local display_name = entry.name
+
+      if not is_multi then
+        display_name = entry.name .. ' / ' .. db_in_url
+      end
+
+      local is_current = false
+      local active_child = nil
+
+      if not is_multi then
+        if M.current_db_name == entry.name or M.current_db_name == (entry.name .. '/' .. db_in_url) then
+          is_current = true
+        elseif not M.current_db_name and entry.url == M.current_db then
+          is_current = true
+        end
+      else
+        if M.current_db_name then
+          if M.current_db_name == entry.name then
+            is_current = true
+          else
+            active_child = M.current_db_name:match('^' .. vim.pesc(entry.name) .. '/(.+)$')
+            if active_child then
+              is_current = true
+            end
+          end
+        end
+      end
+
+      local text = (is_current and '● ' or '○ ') .. display_name
+      if is_multi and active_child then
+        text = text .. ' [' .. active_child .. ']'
+      end
+      text = text .. '  (' .. entry.url .. ')'
+
       table.insert(items, {
-        text = (is_current and '● ' or '○ ') .. entry.name .. '  (' .. entry.url .. ')',
+        text = text,
         name = entry.name,
         url = entry.url,
+        is_multi = is_multi,
         action = 'select',
       })
     end
@@ -803,21 +991,52 @@ function M.select_connection(callback)
       return
     end
 
-    M.set_active_connection(choice.name, choice.url)
-    local cur_buf = vim.api.nvim_get_current_buf()
-    vim.b[cur_buf].db = choice.url
-    vim.b[cur_buf].db_name = choice.name
-    vim.b[cur_buf].sqmeow_connection = choice.name
-    pcall(function()
-      require('sqmeow.ui.editor').update_winbar()
-      vim.cmd('call vim_dadbod_completion#fetch(' .. cur_buf .. ')')
-    end)
-
-    vim.notify('Active database: ' .. choice.name, vim.log.levels.INFO, { title = 'Database' })
-
-    if callback then
-      callback(choice.url, choice.name)
+    if not choice.is_multi then
+      M.activate_connection(choice.name, choice.url, callback)
+      return
     end
+
+    -- Multi-database connection: fetch databases and open second picker
+    M.fetch_connection_databases(choice.name, choice.url, function(dbs, err)
+      if not dbs or #dbs == 0 then
+        vim.notify(
+          'Could not retrieve databases for ' .. choice.name .. (err and (': ' .. err) or ''),
+          vim.log.levels.WARN,
+          { title = 'Database' }
+        )
+        return
+      end
+
+      if #dbs == 1 then
+        local child_name = choice.name .. '/' .. dbs[1]
+        local child_url = choice.url:gsub('/+$', '') .. '/' .. dbs[1]
+        M.activate_connection(child_name, child_url, callback)
+        return
+      end
+
+      local db_items = {}
+      for _, db in ipairs(dbs) do
+        local child_name = choice.name .. '/' .. db
+        local child_url = choice.url:gsub('/+$', '') .. '/' .. db
+        local is_current = (child_name == M.current_db_name or child_url == M.current_db)
+        table.insert(db_items, {
+          text = (is_current and '● ' or '○ ') .. db,
+          name = child_name,
+          url = child_url,
+          db = db,
+        })
+      end
+
+      Snacks.picker.select(db_items, {
+        prompt = 'Select Database [' .. choice.name .. ']',
+        format_item = function(item)
+          return item.text
+        end,
+      }, function(db_choice)
+        if not db_choice then return end
+        M.activate_connection(db_choice.name, db_choice.url, callback)
+      end)
+    end)
   end)
 end
 

@@ -49,6 +49,7 @@ flowchart TD
         F["Dadbod AST table parsing for blink.cmp (dadbod-blink.lua)"]
         G["BottomPanel / RightPanel layout docking and coordinator"]
         H["Per-database directory structure: scratch/{db_name}/*.sql"]
+        M["Two-Step Connection Switcher (<leader>bs)"]
     end
 ```
 
@@ -68,6 +69,7 @@ flowchart TD
 | **8. Multi-DB Cluster Child Connections** | Upstream native `drawer.actions.use` | Expanding a database node previously did not allow pressing `u` on descendant nodes to select that child connection. | **RESOLVED & MERGED UPSTREAM ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Merged into master in commit `c78005a`. Upstream now resolves the owning connection ID when `u` is pressed on any database or descendant row (schemas, tables, views) and switches connection with notification. Local hook retired. |
 | **9. In-Memory Relation Preview in Editor** | Upstream `opts.ui.drawer.preview_in_editor = true` | Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk clutter until explicit `:w`. Multi-dialect support without trailing semicolons on redis/json. | **RESOLVED & MERGED UPSTREAM ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Merged into master in commit `403cef1`. Upstream natively handles relation preview directly in `editing_window()`. Local preview buffer generator retired; light wrapper retains `:w` save hook. |
 | **10. Editor Buffer Re-binding on `use` (`u`)** | Upstream native `drawer.actions.use` & `editor.rebind` | Switching connections in the drawer previously left open editor buffers bound to their old connection, causing queries to hit the previous database. | **RESOLVED & MERGED UPSTREAM ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Merged into master in commit `a299288`. Upstream natively inspects visible editor windows and re-binds them via `editor.rebind(ed_buf, conn.name)`. Local rebind search retired; light hook synchronizes Dadbod completion context. |
+| **11. Multi-DB Connection Switching & Two-Step Picker** | [`M.select_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L900) & [`M.fetch_connection_databases`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L778) | Switching to a multi-db cluster connection via picker previously bound the cluster root without a selected database, causing queries to fail. | **Under Review Upstream ([Issue #52](https://github.com/2giosangmitom/sqmeow.nvim/issues/52))**. Single-DB connections display as `conn / db` and bind immediately; multi-DB connections open a secondary picker to choose the database and bind `conn/db`. Filed upstream for `:Sqmeow use`. |
 
 ---
 
@@ -486,3 +488,25 @@ When a user switches connections in the drawer by pressing `u` (`actions.use()`)
 **Proposed Implementation**:
 1. In `lua/sqmeow/ui/editor.lua`, add `M.rebind(buf, conn_name)` helper to update `b:sqmeow_connection` and call `M.update_winbar()`.
 2. In `lua/sqmeow/ui/drawer.lua`, update `M.actions.use()` to detect the active editor buffer in `editing_window()` / current tab and re-bind it with `editor.rebind`.
+
+---
+
+### Issue 9: :Sqmeow use on multi-database cluster selects root without database, causing queries to fail [FILED - Issue #52]
+
+> **Status**: **FILED & UNDER REVIEW** ([Issue #52](https://github.com/2giosangmitom/sqmeow.nvim/issues/52)).
+
+**Title**: `bug(commands): :Sqmeow use on multi-database cluster selects root without database, causing queries to fail`
+
+**Description**:
+Currently, `:Sqmeow use` (and the menu it renders via `sqmeow.ui.form.menu`) only lists already-connected connections in `api.connections()`.
+
+When connecting to a cluster connection (e.g. `postgresql://user:pass@host:5432/` where no database is specified in the URL):
+1. `:Sqmeow use` only offers the root cluster connection (`docker_cluster`).
+2. Selecting the root cluster connection does not bind a child database. Subsequent queries against the cluster fail because the database is unselected.
+3. Users currently must manually open the drawer, expand the cluster node, navigate to a child database node, and press `u`.
+
+**Proposed Fix / Enhancement**:
+1. If a connection is a cluster connection (has multiple databases or empty database in its URL), selecting it in `:Sqmeow use` or a new `:Sqmeow select` command should query the engine (`schema:nodes` at path `{}`) to list available databases.
+2. Present a secondary menu via `vim.ui.select` (or `sqmeow.ui.form.menu`) to choose the database within that cluster.
+3. Open and activate the child connection (`<parent>/<database>`) via `api.connect(parent.url, { name = ('%s/%s'):format(parent.name, db), parent = parent.id, database = db })` followed by `api.use(child_id)`.
+4. Single-database connections (where URL specifies a database or SQLite/DuckDB) should display as `<conn> / <db>` and bind immediately without a secondary prompt.
