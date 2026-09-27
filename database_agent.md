@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `7952450` (`build(deps): bump scylla from 1.8.0 to 1.9.0 (#25)`, Sun Sep 27 2026, after merging PR #48, PR #49, PR #50)
+- **Baseline Commit Pinned**: `90a4212` (`feat(drawer): add scratchpads grouping (#51)`, Sun Sep 27 2026, closing Issue #32)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7952450..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 90a4212..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7952450..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 90a4212..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -41,10 +41,7 @@ flowchart TD
         J["Cluster Child Connection Use on Descendants (PR #48 / Issue #45)"]
         K["In-Memory Relation Preview in Editor (PR #49 / Issue #46)"]
         L["Buffer Re-binding on Drawer 'use' (u) (PR #50 / Issue #47)"]
-    end
-
-    subgraph Upstream Candidates [Pending Upstream PRs / Issues]
-        B["Drawer Node Scope Separation (kind == 'scratchpads') - Issue #32"]
+        B["Drawer Node Scope Separation & Scratchpad Grouping (PR #51 / Issue #32)"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -62,7 +59,7 @@ flowchart TD
 | Feature / Fix | Local Implementation | Root Cause / Reason | Upstream Status & Redundancy Criteria |
 |---|---|---|---|
 | **1. Connection Reuse** | [`M.ensure_sqmeow_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L204) (direct `api.connect_named` call) | `sqmeow.api.connect_named(name)` previously generated duplicate connections unconditionally. | **RESOLVED & MERGED UPSTREAM ([PR #36](https://github.com/2giosangmitom/sqmeow.nvim/pull/36))**. Merged into master in commit `a6e0f8c`. Local deduplication workarounds retired from config. |
-| **2. Per-DB Saved Queries in Drawer** | [`on_nodes` injection with `kind = 'saved_queries'`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L580) & [`drawer.actions.toggle` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L650) | In `drawer.lua`, `toggle()` matched `node.kind == 'scratchpads'` and toggled the global `SCRATCHPADS` container. Nodes under a connection also lacked native grouping. | **Upstream Candidate (Issue 2 / Issue #32)**. If upstream adds native per-connection scratchpads/queries or isolates `SCRATCHPADS` checking by ID, our monkey patch on `drawer.actions.toggle` can be dropped. |
+| **2. Per-DB Saved Queries & Scratchpad Grouping** | Upstream native folder grouping & `scratchpad_group` | In `drawer.lua`, `toggle()` matched `node.kind == 'scratchpads'` and toggled the global `SCRATCHPADS` container. Nodes under a connection also lacked native grouping. | **RESOLVED & MERGED UPSTREAM ([PR #51](https://github.com/2giosangmitom/sqmeow.nvim/pull/51) / [Issue #32](https://github.com/2giosangmitom/sqmeow.nvim/issues/32))**. Merged into master in commit `90a4212`. Upstream fixed the identity check (`node.id == SCRATCHPADS`), added native folder scanning (`editor.folders()`), and renders expandable folder trees in the drawer with folder-level operations (creation, rename, move, delete). Redundant `editor.list` monkey-patch retired from config. |
 | **3. Result Column Navigation** | Native `<Tab>`, `<S-Tab>`, `]c`, `[c` built-ins | `sqmeow/keymap.lua` previously had zero column navigation keymaps in `result`. | **RESOLVED & MERGED UPSTREAM ([PR #38](https://github.com/2giosangmitom/sqmeow.nvim/pull/38))**. Merged into master in commit `c6197ec`. Upstream now natively binds `<Tab>`, `<S-Tab>`, `]c`, and `[c` to `next_column` and `prev_column`. Local keymap overrides removed. |
 | **4. Sticky Column Headers & Dynamic Winbar** | `opts.ui.result.sticky_header = true` & `opts.ui.result.winbar_column_info = true` | Result grids with >15 rows lose headers when scrolled down. Users lose context of which column holds which values. | **RESOLVED & MERGED UPSTREAM ([PR #44](https://github.com/2giosangmitom/sqmeow.nvim/pull/44))**. Merged into master in commit `e2a9d5e` (plus fixes in `bcdd2a5` and `7787aec`). Native sticky headers and active column info in winbar are enabled by default. Local float hooks and manual winbar generation retired from config. |
 | **5. Right-Side Drawer Placement** | `opts.ui.drawer.position = 'right'` | `sqmeow.ui.drawer.open` previously hardcoded `topleft vertical %dsplit`. | **RESOLVED & MERGED UPSTREAM ([PR #39](https://github.com/2giosangmitom/sqmeow.nvim/pull/39))**. Merged into master in commit `97ed6ab`. Upstream natively uses `botright vertical %dsplit` when `position = 'right'`. All `wincmd L` and scheduled resize hacks removed. |
@@ -129,29 +126,19 @@ end
 
 ---
 
-### Issue 2: Drawer toggle handler conflates any node with `kind == 'scratchpads'` with the global container
+### Issue 2: Drawer toggle handler conflates any node with `kind == 'scratchpads'` with the global container [RESOLVED & MERGED UPSTREAM - Issue #32 / PR #51]
+
+> **Status**: **RESOLVED & MERGED UPSTREAM**. Merged in commit `90a4212` ([PR #51](https://github.com/2giosangmitom/sqmeow.nvim/pull/51) / [Issue #32](https://github.com/2giosangmitom/sqmeow.nvim/issues/32)).
 
 **Title**: `fix(drawer): toggle() checks node.kind == 'scratchpads' instead of node identity, breaking custom tree nodes`
 
-**Description**:
-In `lua/sqmeow/ui/drawer.lua`, the `actions.toggle()` method contains:
-```lua
-if node.kind == 'scratchpads' then
-  expanded[SCRATCHPADS] = not expanded[SCRATCHPADS] or nil
-  return M.render()
-end
-```
-Because `SCRATCHPADS = 'scratchpads'` is a global string constant representing the bottom scratchpad section, any custom child node or extension within the tree that uses `kind = 'scratchpads'` (such as grouping saved queries/scratchpads under an individual database connection) causes `toggle()` to toggle the bottom global scratchpad container instead of the node under the cursor.
+**Description & Upstream Resolution**:
+In `lua/sqmeow/ui/drawer.lua`, the `actions.toggle()` method previously checked `node.kind == 'scratchpads'`, conflating any custom child node that shared this kind with the global scratchpad container.
 
-**Proposed Fix**:
-Match on the specific node ID or check that the node is top-level (not scoped to a connection/path):
-```lua
-if node.id == SCRATCHPADS or (node.kind == 'scratchpads' and not node.conn_id and (#node.path == 0)) then
-  expanded[SCRATCHPADS] = not expanded[SCRATCHPADS] or nil
-  return M.render()
-end
-```
-Additionally, it would be a great feature enhancement if `sqmeow` natively supported grouping scratchpads / saved queries per connection in the drawer tree.
+Upstream resolved this in commit `90a4212`:
+1. Switched `toggle()` to match on identity: `if node.id == SCRATCHPADS then ...` and `if node.id == HISTORY then ...`.
+2. Introduced native folder grouping (`scratchpad_group` node) under the scratchpads section, recursively walking directories (`walk()`, `editor.folders()`, `editor.list()`).
+3. Added full folder management (`rename_dir`, `remove_dir`, and prefilled prompt `api.scratchpad(name, default)`).
 
 ---
 

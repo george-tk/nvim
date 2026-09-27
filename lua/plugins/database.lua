@@ -467,54 +467,10 @@ function M.setup_drawer_helpers()
   if not ok or M._drawer_helpers_initialized then return end
   M._drawer_helpers_initialized = true
 
-  -- 1. Hook sqmeow.ui.editor so scratchpad list and open are database-scoped
+  -- 1. Hook sqmeow.ui.editor so scratchpads opened from database folders attach connection context
   local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
   if ok_ed and editor and not M._editor_list_hooked then
     M._editor_list_hooked = true
-
-    editor.list = function()
-      local pads = {}
-      local seen = {}
-      local base_dir = require('sqmeow.paths').scratch()
-
-      local function add_pad(display_name, file_path, db_name)
-        if seen[file_path] then return end
-        seen[file_path] = true
-        local stat = vim.uv.fs_stat(file_path)
-        table.insert(pads, {
-          name = display_name,
-          path = file_path,
-          db_name = db_name,
-          modified = stat and stat.mtime.sec or 0,
-        })
-      end
-
-      -- Scan per-database folders
-      local conns = M.get_all_connections()
-      for _, c in ipairs(conns) do
-        local q_list = M.get_saved_queries_for_db(c.name)
-        for _, q in ipairs(q_list) do
-          add_pad(c.name .. ' / ' .. q.name, q.path, c.name)
-        end
-      end
-
-      -- Scan top-level scratch directory (ad-hoc scratchpads)
-      local ok_base, base_iter = pcall(vim.fs.dir, base_dir)
-      if ok_base and base_iter then
-        for file, kind in base_iter do
-          if kind == 'file' and file:match('%.sql$') then
-            add_pad(file, vim.fs.normalize(base_dir .. '/' .. file), nil)
-          end
-        end
-      end
-
-      table.sort(pads, function(a, b)
-        if a.db_name and not b.db_name then return true end
-        if not a.db_name and b.db_name then return false end
-        return a.name < b.name
-      end)
-      return pads
-    end
 
     local orig_open_path = editor.open_path
     editor.open_path = function(path)
@@ -958,7 +914,8 @@ end
 function M.open_query_scratchpad()
   local ok, sqmeow_api = pcall(require, 'sqmeow.api')
   if ok then
-    sqmeow_api.scratchpad()
+    local default_prefix = M.current_db_name and (M.current_db_name .. '/') or nil
+    sqmeow_api.scratchpad(nil, default_prefix)
     local cur_buf = vim.api.nvim_get_current_buf()
     if M.current_db then
       vim.b[cur_buf].db = M.current_db
@@ -1166,10 +1123,11 @@ function M.select_saved_query()
 
   local items = {}
   for _, p in ipairs(pads) do
+    local db_name = p.db_name or p.name:match('^([^/]+)/')
     table.insert(items, {
       text = p.name,
       file = p.path,
-      db_name = p.db_name,
+      db_name = db_name,
     })
   end
 
