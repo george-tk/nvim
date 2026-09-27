@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `7787aec9f207f4f8913b53af3de1e7b03d0751d4` (`fix: lint` after `feat(result): sticky header and active column winbar (#44)`, Sun Sep 27 2026)
+- **Baseline Commit Pinned**: `7952450` (`build(deps): bump scylla from 1.8.0 to 1.9.0 (#25)`, Sun Sep 27 2026, after merging PR #48, PR #49, PR #50)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7787aec9f207f4f8913b53af3de1e7b03d0751d4..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7952450..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7787aec9f207f4f8913b53af3de1e7b03d0751d4..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7952450..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -38,13 +38,13 @@ flowchart TD
         C["Column Navigation Keymaps (PR #38 / Issue #33)"]
         I["Native Right-Side Drawer Placement (PR #39 / Issue #34)"]
         D["Sticky Column Headers & Dynamic Winbar Indicator (PR #44 / Issue #35)"]
+        J["Cluster Child Connection Use on Descendants (PR #48 / Issue #45)"]
+        K["In-Memory Relation Preview in Editor (PR #49 / Issue #46)"]
+        L["Buffer Re-binding on Drawer 'use' (u) (PR #50 / Issue #47)"]
     end
 
     subgraph Upstream Candidates [Pending Upstream PRs / Issues]
         B["Drawer Node Scope Separation (kind == 'scratchpads') - Issue #32"]
-        J["Cluster Child Connection Activation & Use (PR #48 / Issue #45)"]
-        K["In-Memory Scratchpad Preview (Zero Disk Clutter) - Issue #46"]
-        L["Buffer Re-binding on Drawer 'use' (u) - Issue #47"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -68,9 +68,9 @@ flowchart TD
 | **5. Right-Side Drawer Placement** | `opts.ui.drawer.position = 'right'` | `sqmeow.ui.drawer.open` previously hardcoded `topleft vertical %dsplit`. | **RESOLVED & MERGED UPSTREAM ([PR #39](https://github.com/2giosangmitom/sqmeow.nvim/pull/39))**. Merged into master in commit `97ed6ab`. Upstream natively uses `botright vertical %dsplit` when `position = 'right'`. All `wincmd L` and scheduled resize hacks removed. |
 | **6. SQL Table Context Parsing** | [`lua/utils/dadbod-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/dadbod-blink.lua) | `vim-dadbod-completion` locked onto the first table when `b:db_table` was set. AST extraction parses active `FROM`/`JOIN` statements dynamically. | **User Configuration Only**. This bridges `vim-dadbod-completion` with `Saghen/blink.cmp` and is outside `sqmeow.nvim`'s core scope. |
 | **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
-| **8. Multi-DB Cluster Child Connections** | [`setup_drawer_helpers` toggle/use hooks](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L766-L865) | In PostgreSQL clusters, expanding a database node fails to activate child connection sessions, and `actions.use()` on child database / descendant nodes errors with missing conn IDs. | **Pending Upstream ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Once upstream activates child connections on expand and supports `actions.use()` across cluster databases, local hooks can be dropped. |
-| **9. In-Memory Scratchpad Preview** | [`M.open_preview_buffer`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L476-L552) | Built-in `p` only opens bottom result grid, while opening a scratchpad writes `.sql` files to disk on preview, causing disk clutter. Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk files until `:w`. Artificial queries (`First 1000`, `Count (*)`) removed from config. | **Pending Upstream ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Once upstream provides an in-memory scratchpad preview action for relations, local preview buffer slot hook can be dropped. |
-| **10. Editor Buffer Re-binding on `use` (`u`)** | [`drawer.actions.use` hook](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L795-L865) | Upstream `actions.use()` only sets `state.current` and never updates `b:sqmeow_connection` on active buffers, causing open queries to keep executing against the old database. Rebind hook updates `b:sqmeow_connection`, `b:db`, Dadbod completion, and winbar. | **Pending Upstream ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Once upstream updates or re-binds active editor buffer on `actions.use()`, local rebinding hook can be dropped. |
+| **8. Multi-DB Cluster Child Connections** | Upstream native `drawer.actions.use` | Expanding a database node previously did not allow pressing `u` on descendant nodes to select that child connection. | **RESOLVED & MERGED UPSTREAM ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Merged into master in commit `c78005a`. Upstream now resolves the owning connection ID when `u` is pressed on any database or descendant row (schemas, tables, views) and switches connection with notification. Local hook retired. |
+| **9. In-Memory Relation Preview in Editor** | Upstream `opts.ui.drawer.preview_in_editor = true` | Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk clutter until explicit `:w`. Multi-dialect support without trailing semicolons on redis/json. | **RESOLVED & MERGED UPSTREAM ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Merged into master in commit `403cef1`. Upstream natively handles relation preview directly in `editing_window()`. Local preview buffer generator retired; light wrapper retains `:w` save hook. |
+| **10. Editor Buffer Re-binding on `use` (`u`)** | Upstream native `drawer.actions.use` & `editor.rebind` | Switching connections in the drawer previously left open editor buffers bound to their old connection, causing queries to hit the previous database. | **RESOLVED & MERGED UPSTREAM ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Merged into master in commit `a299288`. Upstream natively inspects visible editor windows and re-binds them via `editor.rebind(ed_buf, conn.name)`. Local rebind search retired; light hook synchronizes Dadbod completion context. |
 
 ---
 
@@ -418,39 +418,49 @@ vim.cmd(('%s vertical %dsplit'):format(split_cmd, config.width))
 
 ---
 
-### Issue 6: Cluster child connections fail to activate on expand and 'use' fails on descendant nodes [SUBMITTED UPSTREAM - Issue #45]
+### Issue 6: Cluster child connections fail to activate on expand and 'use' fails on descendant nodes [RESOLVED & MERGED UPSTREAM - Issue #45 / PR #48]
 
-> **Status**: Submitted Upstream as [Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48).
+> **Status**: **RESOLVED & MERGED UPSTREAM**. Merged in commit `c78005a` ([PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48)).
 
 **Title**: `bug(drawer): cluster child connections are not activated on expand and 'use' fails on descendant nodes`
 
-**Description**:
-In PostgreSQL clusters (e.g. `postgresql://user:pass@host:5432/` containing databases `db1`, `db2`), expanding a database node in the drawer calls `toggle_database(node)` which calls `connection.connect(...)` for that database child connection.
+**Description & Maintainer Decision**:
+In PostgreSQL/MongoDB/SurrealDB clusters (e.g. `postgresql://user:pass@host:5432/` containing databases `db1`, `db2`), expanding a database node in the drawer calls `toggle_database(node)` which calls `connection.connect(...)` for that database child connection.
 
-However:
-1. The child connection is not automatically activated via `api.use(child.id)`.
-2. Calling `actions.use()` on a child database node or on descendant nodes (schemas, tables, views) fails because `actions.use()` only looks at `node.kind == 'connection'`. For `node.kind == 'database'`, if the child is not already active, `actions.use()` fails with `'not open yet'` or errors out on non-connection descendant nodes.
+Per maintainer review on PR #48:
+1. **Expanding (`o`) is for exploration**: `toggle_database` does NOT automatically switch `state.current` to child connections. Parent cluster connections remain queryable (fallback DBs like `postgres`, `test`, `default`) and scratchpads do not silently follow child connections on mere exploration.
+2. **Explicit `u` (`actions.use`) on database or descendant rows switches connection**: When the user explicitly presses `u` on an open database row or any descendant row (schemas, tables, views), `actions.use()` resolves the owning connection ID and switches to it with a user notification.
 
-**Proposed Implementation**:
-1. When a cluster database node is expanded in `toggle_database`, activate the newly opened child connection session:
+**Implementation in PR #48**:
+In `lua/sqmeow/ui/drawer.lua`:
 ```lua
-if child and child.id then
-  api.use(child.id)
-end
-```
-2. In `actions.use()`, resolve child connection ID when cursor is on a database node:
-```lua
-if node and node.kind == 'database' then
-  local opened = opened_database(node)
-  node = { kind = 'connection', name = node.name, conn_id = opened and opened.id }
+function M.actions.use()
+  local node = M.current_node()
+  if node and node.kind == 'database' then
+    local opened = opened_database(node)
+    node = { kind = 'connection', name = node.name, conn_id = opened and opened.id }
+  elseif node and node.conn_id then
+    local state = require('sqmeow.state')
+    local conn = state.connections[node.conn_id]
+    node = { kind = 'connection', name = conn and conn.name or node.name, conn_id = node.conn_id }
+  end
+  if not node or node.kind ~= 'connection' then
+    return
+  end
+  if not node.conn_id then
+    return utils.notify(('%s is not open'):format(node.name), vim.log.levels.WARN)
+  end
+
+  require('sqmeow.api').use(node.conn_id)
+  M.render()
 end
 ```
 
 ---
 
-### Issue 7: Preview relation in an in-memory editor buffer for immediate query iteration [SUBMITTED UPSTREAM - Issue #46 / PR #49]
+### Issue 7: Preview relation in an in-memory editor buffer for immediate query iteration [RESOLVED & MERGED UPSTREAM - Issue #46 / PR #49]
 
-> **Status**: Submitted Upstream as [Feature Request #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) and implemented in [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49).
+> **Status**: **RESOLVED & MERGED UPSTREAM**. Merged in commit `403cef1` ([PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49)).
 
 **Title**: `feat(drawer): preview relation in an in-memory editor buffer for immediate query iteration`
 
@@ -464,15 +474,15 @@ While `preview` (`p`) is great for a quick read-only peek, in exploratory workfl
 Opening a scratchpad file per previewed table creates unwanted `.sql` files on disk. By using an in-memory dedicated buffer (`buftype = 'nofile'`) named `[Preview: relation]`, browsing 20 tables creates zero junk files on disk. The buffer only persists to disk when the user explicitly saves it with `:w`.
 
 **Proposed Approaches**:
-- **Option A (Recommended)**: Upgrade the existing `preview` (`p`) action to open the relation's statement directly in an in-memory editor buffer (`buftype = 'nofile'`) in `editing_window()`, while executing into the result grid. Reuses the preview buffer slot across tables and leaves disk untouched until explicit `:w`. Configurable via `ui.drawer.preview_in_editor = true` (default `true`).
+- **Option A (Recommended & Implemented)**: Upgrade the existing `preview` (`p`) action to open the relation's statement directly in an in-memory editor buffer (`buftype = 'nofile'`) in `editing_window()`, while executing into the result grid. Reuses the preview buffer slot across tables and leaves disk untouched until explicit `:w`. Configurable via `ui.drawer.preview_in_editor = true` (default `true`).
   - **Multi-Dialect Support**: Uses `dialect_of(conn_id)` and maps dialect to buffer filetype (`mongodb` -> `'json'`, `surrealdb` -> `'surql'`, `redis` -> `'redis'`, SQL dialects -> `'sql'`). Statements are generated using `preview_statement` (`sql.read_key` for Redis, `sql.select_from` for MongoDB/SurrealDB/Oracle/SQL). Trailing semicolons are only appended for SQL and SurrealQL (`ft == 'sql' or ft == 'surql'`), leaving JSON and Redis command inputs clean of syntax errors.
 - **Option B**: Introduce a separate action (e.g. `actions.query_relation` bound to `O` or `P`), keeping `p` strictly as a bottom-grid-only peek.
 
 ---
 
-### Issue 8: Re-bind active editor buffer to selected connection on 'use' (u) [SUBMITTED UPSTREAM - Issue #47 / PR #50]
+### Issue 8: Re-bind active editor buffer to selected connection on 'use' (u) [RESOLVED & MERGED UPSTREAM - Issue #47 / PR #50]
 
-> **Status**: Submitted Upstream as [Feature Request #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) and implemented in [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50).
+> **Status**: **RESOLVED & MERGED UPSTREAM**. Merged in commit `a299288` ([PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50)).
 
 **Title**: `feat(drawer): re-bind active editor buffer to selected connection on 'use' (u)`
 

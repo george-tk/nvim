@@ -448,134 +448,18 @@ function M.open_drawer()
   end)
 end
 
-M._preview_buf = nil
-
-local function dialect_filetype(dialect)
-  if dialect == 'mongodb' then
-    return 'json'
-  elseif dialect == 'surrealdb' then
-    return 'surql'
-  elseif dialect == 'redis' then
-    return 'redis'
-  end
-  return 'sql'
+--- Get the current in-memory preview buffer (provided natively by sqmeow)
+function M.preview_buffer()
+  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
+  return ok and drawer.preview_buffer() or nil
 end
 
+--- Preview the relation under cursor in the in-memory editor buffer
 function M.open_preview_buffer(node)
-  if not node or not node.conn_id then return end
-
-  local sql_mod = require('sqmeow.sql')
-  local st = require('sqmeow.state').connections[node.conn_id]
-  local dialect = st and st.dialect
-  local rel = node.name or (node.path and node.path[#node.path])
-  if not rel then return end
-
-  local max_rows = require('sqmeow.config').get().query.max_rows
-  local limit = (max_rows and max_rows > 0) and max_rows or 1000
-
-  local statement
-  if dialect == 'redis' and node.path and #node.path >= 2 then
-    statement = sql_mod.read_key(node.path[2], node.path[#node.path], limit)
-  else
-    local parts
-    if node.path and #node.path >= 2 then
-      parts = vim.list_extend({ node.path[1] }, vim.list_slice(node.path, 3, #node.path))
-    else
-      parts = { rel }
-    end
-    statement = sql_mod.select_from(dialect, parts, limit)
+  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
+  if ok and drawer.actions and drawer.actions.preview then
+    drawer.actions.preview()
   end
-  if not statement then return end
-
-  local ft = dialect_filetype(dialect)
-  local buffer_text = (ft == 'sql' or ft == 'surql') and (statement .. ';') or statement
-
-  local conn_name = st and st.name or M.current_db_name
-
-  -- Reuse single preview buffer or create a new in-memory scratch buffer
-  local buf = M._preview_buf
-  if not buf or not vim.api.nvim_buf_is_valid(buf) then
-    buf = vim.api.nvim_create_buf(false, true)
-    M._preview_buf = buf
-  end
-
-  local preview_title = ('[Preview: %s]'):format(rel)
-  pcall(vim.api.nvim_buf_set_name, buf, preview_title)
-
-  -- Set buffer contents in-memory (no file written to disk)
-  vim.bo[buf].buftype = 'nofile'
-  vim.bo[buf].bufhidden = 'hide'
-  vim.bo[buf].swapfile = false
-  vim.bo[buf].filetype = ft
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(buffer_text, '\n'))
-  vim.bo[buf].modified = false
-  vim.opt_local.spell = false
-
-  -- Attach editor keymaps and sqmeow metadata
-  local editor = require('sqmeow.ui.editor')
-  editor.attach(buf, conn_name)
-  vim.b[buf].is_preview_buffer = true
-  vim.b[buf].sqmeow_table = rel
-
-  -- Connection context for completion (dadbod & blink)
-  local conn_url = M.get_connection_url(conn_name) or (st and st.url) or M.current_db
-  if not conn_url and conn_name then
-    for _, c in ipairs(M.get_all_connections()) do
-      if c.name == conn_name then
-        conn_url = c.url
-        break
-      end
-    end
-  end
-
-  if conn_url then
-    vim.b[buf].db = conn_url
-    vim.b[buf].db_name = conn_name
-    vim.b[buf].sqmeow_connection = conn_name
-    M.current_db = conn_url
-    M.current_db_name = conn_name
-  end
-
-  -- Hook :w on this preview buffer so typing :w triggers M.save_query(true)
-  pcall(vim.api.nvim_clear_autocmds, { buffer = buf, group = 'SqmeowPreviewSave' })
-  local group = vim.api.nvim_create_augroup('SqmeowPreviewSave', { clear = false })
-  vim.api.nvim_create_autocmd('BufWriteCmd', {
-    group = group,
-    buffer = buf,
-    callback = function()
-      M.save_query(true)
-    end,
-  })
-
-  -- Clear preview buffer reference if deleted
-  vim.api.nvim_create_autocmd('BufDelete', {
-    group = group,
-    buffer = buf,
-    callback = function()
-      if M._preview_buf == buf then
-        M._preview_buf = nil
-      end
-    end,
-  })
-
-  -- Open the preview buffer in the main editing window
-  local ed_win = require('sqmeow.ui.layout').editing_window()
-  vim.api.nvim_win_set_buf(ed_win, buf)
-
-  -- Execute the query so the results grid opens in the bottom panel
-  local api = require('sqmeow.api')
-  api.use(node.conn_id)
-  api.execute(statement, { conn_id = node.conn_id, source_buf = buf, history = false })
-
-  -- Ensure bottom panel tracks dbout mode
-  if _G.BottomPanel then
-    _G.BottomPanel.active_mode = 'dbout'
-  end
-
-  -- Position cursor on the query
-  local first_line = vim.split(buffer_text, '\n')[1] or ''
-  vim.api.nvim_set_current_win(ed_win)
-  vim.api.nvim_win_set_cursor(ed_win, { 1, #first_line })
 end
 
 function M.setup_drawer_helpers()
@@ -790,113 +674,59 @@ function M.setup_drawer_helpers()
       end
     end
 
-    if node and node.kind == 'database' then
-      local res = orig_toggle()
-      vim.schedule(function()
-        local ok_state, state = pcall(require, 'sqmeow.state')
-        local child = ok_state and state.child_connection and state.child_connection(node.conn_id, node.name)
-        if child and child.id then
-          local ok_api, api = pcall(require, 'sqmeow.api')
-          if ok_api and api then
-            api.use(child.id)
-          end
-        end
-      end)
-      return res
-    end
-
     return orig_toggle()
   end
 
-  -- 5. Hook drawer.actions.preview to open relation preview as an in-memory buffer in editor & execute
+  -- 5. Hook drawer.actions.preview to attach save-query on :w and track bottom panel dbout mode
   local orig_preview = drawer.actions.preview
-  drawer.actions.preview = function()
-    local node = drawer.current_node()
-    local is_rel = node and (
-      node.kind == 'table' or node.kind == 'view' or node.kind == 'materialized view'
-      or node.kind == 'relation' or node.kind == 'key'
-      or (node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views'))
-    )
-    if is_rel then
-      M.open_preview_buffer(node)
-      return
+  drawer.actions.preview = function(...)
+    local res = orig_preview(...)
+    local buf = drawer.preview_buffer()
+    if buf and vim.api.nvim_buf_is_valid(buf) then
+      vim.b[buf].is_preview_buffer = true
+      if M.current_db then
+        vim.b[buf].db = M.current_db
+        vim.b[buf].db_name = M.current_db_name
+      end
+      local group = vim.api.nvim_create_augroup('SqmeowPreviewSave', { clear = false })
+      pcall(vim.api.nvim_clear_autocmds, { buffer = buf, group = group })
+      vim.api.nvim_create_autocmd('BufWriteCmd', {
+        group = group,
+        buffer = buf,
+        callback = function()
+          M.save_query(true)
+        end,
+      })
+      if _G.BottomPanel then
+        _G.BottomPanel.active_mode = 'dbout'
+      end
     end
-    return orig_preview()
+    return res
   end
 
-  -- 6. Hook drawer.actions.use to switch active connection AND rebind active editor buffer
+  -- 6. Hook drawer.actions.use to synchronize Dadbod / completion state on connection switch
   local orig_use = drawer.actions.use
-  drawer.actions.use = function()
-    local node = drawer.current_node()
-    if node then
-      local target_id = node.conn_id
-      if node.kind == 'database' then
-        local ok_st, state = pcall(require, 'sqmeow.state')
-        local child = ok_st and state.child_connection and state.child_connection(node.conn_id, node.name)
-        if child and child.id then
-          target_id = child.id
-        else
-          local parent_conn = ok_st and state.connections and state.connections[node.conn_id]
-          if parent_conn and parent_conn.name then
-            target_id = M.ensure_sqmeow_connection(parent_conn.name .. '/' .. node.name)
-          end
-        end
-      end
+  drawer.actions.use = function(...)
+    local res = orig_use(...)
+    local ok_st, state = pcall(require, 'sqmeow.state')
+    local conn_id = ok_st and state.current
+    local conn = conn_id and state.connections[conn_id]
+    if conn then
+      local conn_url = M.get_connection_url(conn.name) or conn.url
+      M.current_db = conn_url
+      M.current_db_name = conn.name
+      M.save_active_connection(conn.name, conn_url)
 
-      if target_id then
-        local api = require('sqmeow.api')
-        local conn = api.use(target_id)
-        if conn then
-          local conn_url = M.get_connection_url(conn.name) or conn.url
-          M.current_db = conn_url
-          M.current_db_name = conn.name
-
-          -- Rebind active SQL / editor buffer
-          local ed_buf = nil
-          local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
-          if ed_win and vim.api.nvim_win_is_valid(ed_win) then
-            local b = vim.api.nvim_win_get_buf(ed_win)
-            if vim.api.nvim_buf_is_valid(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
-              ed_buf = b
-            end
-          end
-          if not ed_buf then
-            for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-              if vim.api.nvim_win_is_valid(win) then
-                local b = vim.api.nvim_win_get_buf(win)
-                if vim.api.nvim_buf_is_valid(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
-                  ed_buf = b
-                  break
-                end
-              end
-            end
-          end
-          if not ed_buf then
-            for _, b in ipairs(vim.api.nvim_list_bufs()) do
-              if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_is_loaded(b) and (vim.bo[b].filetype == 'sql' or vim.b[b].sqmeow_editor or vim.b[b].sqmeow_connection) then
-                ed_buf = b
-                break
-              end
-            end
-          end
-
-          if ed_buf then
-            vim.b[ed_buf].sqmeow_connection = conn.name
-            vim.b[ed_buf].db = conn_url
-            vim.b[ed_buf].db_name = conn.name
-            pcall(function()
-              require('sqmeow.ui.editor').update_winbar()
-              vim.cmd('call vim_dadbod_completion#fetch(' .. ed_buf .. ')')
-            end)
-            vim.notify(('Bound `%s` to %s'):format(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(ed_buf), ':t'), conn.name), vim.log.levels.INFO, { title = 'Database' })
-          else
-            vim.notify(('queries now run on %s'):format(conn.name), vim.log.levels.INFO, { title = 'Database' })
-          end
-          return conn
-        end
+      -- Synchronize dadbod context on the active editor buffer if present
+      local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
+      local buf = (ed_win and vim.api.nvim_win_is_valid(ed_win)) and vim.api.nvim_win_get_buf(ed_win) or vim.api.nvim_get_current_buf()
+      if buf and vim.api.nvim_buf_is_valid(buf) and (vim.bo[buf].filetype == 'sql' or vim.b[buf].sqmeow_connection) then
+        vim.b[buf].db = conn_url
+        vim.b[buf].db_name = conn.name
+        pcall(vim.cmd, 'call vim_dadbod_completion#fetch(' .. buf .. ')')
       end
     end
-    return orig_use()
+    return res
   end
 end
 
@@ -1526,6 +1356,7 @@ return {
         drawer = {
           position = 'right',
           width = 35,
+          preview_in_editor = true,
         },
         result = {
           height = 16,
