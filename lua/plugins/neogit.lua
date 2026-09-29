@@ -6,6 +6,7 @@ return {
     'folke/snacks.nvim',
   },
   keys = {
+    { '<leader>gg', ':Neogit<CR>', desc = 'Status' },
     { '<leader>gs', ':Neogit<CR>', desc = 'Status' },
     { '<leader>gc', ':Neogit commit <CR>', desc = 'Commit' },
     { '<leader>gp', ':Neogit pull <CR>', desc = 'Pull' },

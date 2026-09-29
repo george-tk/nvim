@@ -13,14 +13,14 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>f', group = 'Find' },
       { '<leader>b', group = 'Database', mode = { 'n', 'v' } },
       { '<leader>a', group = 'Ai', mode = { 'n', 'v' } },
-      { '<leader>t', group = 'Todo' },
+      { '<leader>T', group = 'Todo' },
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
       { '<leader>s', group = 'Search / Spelling' },
       { '<leader>w', group = 'Window' },
 
       -- Direct 1-Key Actions
-      { '<leader>T', desc = 'Terminal', mode = { 'n', 't' } },
+      { '<leader>t', desc = 'Terminal', mode = { 'n', 't' } },
       { '<leader>p', desc = 'Git Pull' },
       { '<leader>P', desc = 'Git Push' },
       { '<leader>e', desc = 'File Explorer', mode = { 'n', 'v' } },
@@ -84,16 +84,16 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>bv', desc = 'Review & Apply In-Grid Edits' },
       { '<leader>bx', desc = 'Export Results' },
 
-      -- Todo Group (<leader>t)
-      { '<leader>tt', desc = 'Todo List' },
-      { '<leader>tb', desc = 'Todo Board' },
-      { '<leader>tn', desc = 'New Todo' },
-      { '<leader>tr', desc = 'Reference Todo' },
-      { '<leader>tj', desc = 'Jump to Todo' },
-      { '<leader>tl', desc = 'Todo Log' },
+      -- Todo Group (<leader>T)
+      { '<leader>TT', desc = 'Todo List' },
+      { '<leader>Tb', desc = 'Todo Board' },
+      { '<leader>Tn', desc = 'New Todo' },
+      { '<leader>Tr', desc = 'Reference Todo' },
+      { '<leader>Tj', desc = 'Jump to Todo' },
+      { '<leader>Tl', desc = 'Todo Log' },
 
       -- Git Group (<leader>g)
-      { '<leader>gs', desc = 'Status' },
+      { '<leader>gg', desc = 'Status' },
       { '<leader>gc', desc = 'Commit' },
       { '<leader>gp', desc = 'Pull' },
       { '<leader>gP', desc = 'Push' },

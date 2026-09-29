@@ -1012,8 +1012,8 @@ vim.keymap.set({ 'n', 't', 'i' }, '<C-j>', function()
   BottomPanel.toggle_active(count)
 end, { desc = 'Bottom Output' })
 
--- <leader>T: Direct Terminal Toggle & Switch Bottom Mode
-vim.keymap.set({ 'n', 't' }, '<leader>T', function()
+-- <leader>t: Direct Terminal Toggle & Switch Bottom Mode
+vim.keymap.set({ 'n', 't' }, '<leader>t', function()
   local count = vim.v.count > 0 and vim.v.count or nil
   BottomPanel.open_terminal(count)
 end, { desc = 'Terminal' })
