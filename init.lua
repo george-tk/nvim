@@ -25,8 +25,6 @@ else
   require 'options'
   -- Plugins
   require 'plugin-loader'
-  -- Health Check
-  require 'health'
   -- Auto Commands
   require 'auto-commands'
 end

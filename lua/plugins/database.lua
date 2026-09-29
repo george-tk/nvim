@@ -1556,7 +1556,7 @@ return {
     },
     keys = {
       {
-        '<leader>be',
+        '<leader>bb',
         function()
           if _G.RightPanel then
             _G.RightPanel.open_dbui()

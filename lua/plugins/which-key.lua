@@ -71,7 +71,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>fk', desc = 'Keymaps' },
 
       -- Database Group (<leader>b)
-      { '<leader>be', desc = 'Database Explorer' },
+      { '<leader>bb', desc = 'Database Explorer' },
       { '<leader>bs', desc = 'Switch / Bind Database' },
       { '<leader>bw', desc = 'Save Query' },
       { '<leader>bl', desc = 'Select Saved Query' },
@@ -95,8 +95,8 @@ return { -- Useful plugin to show you pending keybinds.
       -- Git Group (<leader>g)
       { '<leader>gs', desc = 'Status' },
       { '<leader>gc', desc = 'Commit' },
-      { '<leader>gp', desc = 'Push' },
-      { '<leader>gl', desc = 'Pull' },
+      { '<leader>gp', desc = 'Pull' },
+      { '<leader>gP', desc = 'Push' },
       { '<leader>gb', desc = 'Branch' },
       { '<leader>gd', desc = 'Diff' },
 
@@ -128,8 +128,8 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>sp', desc = 'Previous Spell Error' },
 
       -- AI Group (<leader>a)
-      { '<leader>ae', desc = 'AI Explorer' },
-      { '<leader>aa', desc = 'Ask AI', mode = { 'n', 'v' } },
+      { '<leader>aa', desc = 'AI Explorer' },
+      { '<leader>ai', desc = 'Ask AI', mode = { 'n', 'v' } },
       { '<leader>as', desc = 'AI Prompts', mode = { 'n', 'v' } },
       { '<leader>an', desc = 'New AI Session' },
       { '<leader>ac', desc = 'Compact AI Session' },

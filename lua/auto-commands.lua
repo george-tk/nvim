@@ -23,7 +23,6 @@ local augroups = {
   user_auto_create_dir = api.nvim_create_augroup('UserAutoCreateDir', { clear = true }),
   user_markdown_autosave = api.nvim_create_augroup('UserMarkdownAutosave', { clear = true }),
   user_markdown_folding = api.nvim_create_augroup('UserMarkdownFolding', { clear = true }),
-  user_render_markdown_fixes = api.nvim_create_augroup('UserRenderMarkdownFixes', { clear = true }),
   user_cursorline = api.nvim_create_augroup('UserCursorLine', { clear = true }),
 }
 
@@ -75,8 +74,8 @@ api.nvim_create_autocmd('InsertLeave', {
 -- Markdown Specific Autocommands & Functions
 -------------------------------------------------------------------------------
 
--- Autosave markdown files silently on InsertLeave and TextChanged (noautocmd prevents format on save lag)
-api.nvim_create_autocmd({ 'InsertLeave', 'TextChanged' }, {
+-- Autosave markdown files silently on InsertLeave and CursorHold (noautocmd prevents format on save lag)
+api.nvim_create_autocmd({ 'InsertLeave', 'CursorHold' }, {
   group = augroups.user_markdown_autosave,
   pattern = { '*.md', '*.markdown' },
   callback = function()
@@ -84,7 +83,7 @@ api.nvim_create_autocmd({ 'InsertLeave', 'TextChanged' }, {
       vim.cmd('noautocmd silent! write')
     end
   end,
-  desc = 'Autosave markdown files on change/InsertLeave',
+  desc = 'Autosave markdown files on CursorHold/InsertLeave',
 })
 
 
@@ -170,30 +169,6 @@ api.nvim_create_autocmd('BufReadPost', {
     cmd 'normal! zr'
   end,
   desc = 'Force markdown folding for markdown extensions',
-})
-
--- Ensure render-markdown re-activates on buffer enter
-api.nvim_create_autocmd('BufEnter', {
-  group = augroups.user_render_markdown_fixes,
-  pattern = { '*.md', '*.markdown' },
-  callback = function(args)
-    vim.schedule(function()
-      local success_rm, rm = pcall(require, 'render-markdown')
-      if not success_rm or not rm or not rm.buf_enable then
-        return
-      end
-
-      if not api.nvim_buf_is_valid(args.buf) or not bo[args.buf].modifiable then
-        return
-      end
-
-      local ft = bo[args.buf].filetype
-      if ft == 'markdown' or ft == '' then
-        pcall(rm.buf_enable, args.buf)
-      end
-    end)
-  end,
-  desc = 'Ensure render-markdown is active on BufEnter for Markdown',
 })
 
 -- Function to choose fold level (can be called via :lua require('auto-commands').choose_fold_level(1))

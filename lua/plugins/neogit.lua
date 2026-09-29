@@ -8,8 +8,8 @@ return {
   keys = {
     { '<leader>gs', ':Neogit<CR>', desc = 'Status' },
     { '<leader>gc', ':Neogit commit <CR>', desc = 'Commit' },
-    { '<leader>gp', ':Neogit push <CR>', desc = 'Push' },
-    { '<leader>gl', ':Neogit pull <CR>', desc = 'Pull' },
+    { '<leader>gp', ':Neogit pull <CR>', desc = 'Pull' },
+    { '<leader>gP', ':Neogit push <CR>', desc = 'Push' },
     { '<leader>gb', ':Neogit branch <CR>', desc = 'Branch' },
     { '<leader>gd', ':DiffviewOpen <CR>', desc = 'Diff' },
     { '<leader>p', ':Neogit pull <CR>', desc = 'Git Pull' },

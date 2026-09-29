@@ -15,6 +15,8 @@ o.showmode = false -- Hide mode messages
 o.cmdheight = 0 -- Command line height
 o.pumheight = 10 -- Completion menu height
 o.clipboard = 'unnamedplus' -- Allow for copy and pasting
+o.updatetime = 250 -- Faster completion & CursorHold trigger (default 4000ms)
+o.timeoutlen = 300 -- Faster which-key popup & key sequence timeout (default 1000ms)
 ---
 -- Indentation
 -------------------------------------------------------------------------------

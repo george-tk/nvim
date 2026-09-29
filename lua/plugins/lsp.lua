@@ -221,11 +221,6 @@ return {
               debounce_text_changes = 200,
             }, server.flags or {})
 
-            -- Default on_attach unless server overrides it (ts_ls above)
-            if not server.on_attach then
-              server.on_attach = on_attach
-            end
-
             require('lspconfig')[server_name].setup(server)
           end,
         },

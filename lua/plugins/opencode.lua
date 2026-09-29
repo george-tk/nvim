@@ -44,21 +44,21 @@ return {
     }
 
     -- Keymaps for OpenCode AI under <leader>a
-    vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
-      require('opencode').ask('@this: ')
-    end, { desc = 'Ask AI' })
-
-    vim.keymap.set({ 'n', 'x' }, '<leader>as', function()
-      require('opencode').select()
-    end, { desc = 'AI Prompts' })
-
-    vim.keymap.set({ 'n' }, '<leader>ae', function()
+    vim.keymap.set({ 'n' }, '<leader>aa', function()
       if _G.RightPanel then
         _G.RightPanel.open_opencode()
       else
         require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
       end
     end, { desc = 'AI Explorer' })
+
+    vim.keymap.set({ 'n', 'x' }, '<leader>ai', function()
+      require('opencode').ask('@this: ')
+    end, { desc = 'Ask AI' })
+
+    vim.keymap.set({ 'n', 'x' }, '<leader>as', function()
+      require('opencode').select()
+    end, { desc = 'AI Prompts' })
 
     vim.keymap.set({ 'n' }, '<leader>an', function()
       require('opencode').command('session.new')
