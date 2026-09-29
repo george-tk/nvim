@@ -51,9 +51,8 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | Stable session persistence |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
 | **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `74ae98e` | 2026-09-29 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #57 merged upstream: native cluster database support in `:Sqmeow use` and `api.databases`) |
-| **vim-dadbod** | `tpope/vim-dadbod` | `6d1d41d` | 2026-01-06 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Stable database engine |
-| **vim-dadbod-completion** | `kristijanhusak/vim-dadbod-completion` | `a8dac0b` | 2025-03-19 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Bridges to `lua/utils/dadbod-blink.lua` |
-| **vim-dadbod-ui** | `kristijanhusak/vim-dadbod-ui` | `local` | 2026-08-08 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Local copy/symlink for query runners |
+| **vim-dadbod** | `tpope/vim-dadbod` | `6d1d41d` | 2026-01-06 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Stable database engine (backend connection provider for completion) |
+| **vim-dadbod-completion** | `kristijanhusak/vim-dadbod-completion` | `a8dac0b` | 2025-03-19 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Schema metadata provider; bridges to `lua/utils/dadbod-blink.lua` |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
 | **plenary.nvim** | `nvim-lua/plenary.nvim` | `74b06c6` | 2026-04-10 | Dependency | Shared Lua library |
 | **nui.nvim** | `MunifTanjim/nui.nvim` | `10fc361` | 2026-08-21 | Dependency | UI components for sqmeow & snacks |
