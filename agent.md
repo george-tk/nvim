@@ -165,12 +165,11 @@ flowchart TD
 
 #### 5. `nickjvandyke/opencode.nvim`
 - **Baseline**: `84eabfb` (`v1.0.2`, September 14, 2026).
-- **Upstream Major Milestone**:
-  - Commit `d512228`: `feat!: migrate to OpenCode v2`.
-  - Added native support for directory-based session targeting (`x-opencode-directory: nvim-cwd`) and revamped event listeners (`OpencodeEvent:session.execution.failed`, `OpencodeEvent:global.disposed`).
-- **Recommendation**:
-  - Since [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua#L3) has `version = '*'`, lazy currently remains on `v1.0.2`.
-  - When updating to OpenCode v2 CLI, update `opencode.lua` and verify your `<leader>a` shortcuts against OpenCode v2 event names.
+- **CLI Stable Version**: `1.18.33` (released Sep 28, 2026).
+- **Agent Tracking Rule**:
+  - OpenCode CLI v2 (`v2.0.x`) is currently on the pre-release/beta channel.
+  - The Neovim plugin in [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua#L3) remains safely pinned to `version = '*'` (`v1.0.2`), matching CLI `1.18.x`.
+  - Future audit sessions must monitor when `anomalyco/opencode` promotes `v2.x` to the official "Latest Stable" release. At that point, update the CLI (`opencode upgrade`) and transition `opencode.lua` to `version = false` (or track `main`).
 
 #### 6. `monkoose/neocodeium`
 - **Baseline**: `ab8a3da` (`v1.19.1`, June 22, 2026).
