@@ -21,38 +21,14 @@ return {
     dependencies = { 'nvim-treesitter/nvim-treesitter' },
     config = function()
       require('nvim-treesitter-textobjects').setup {
-        select = {
-          enable = true,
-          lookahead = true,
-        },
         move = {
           enable = true,
           set_jumps = true,
         },
       }
 
-      -- Define Selection keymaps (visual and operator-pending modes)
-      local select = require('nvim-treesitter-textobjects.select')
-      local select_maps = {
-        ['af'] = '@function.outer',
-        ['if'] = '@function.inner',
-        ['ac'] = '@class.outer',
-        ['ic'] = '@class.inner',
-        ['ai'] = '@conditional.outer',
-        ['ii'] = '@conditional.inner',
-        ['al'] = '@loop.outer',
-        ['il'] = '@loop.inner',
-        ['aa'] = '@parameter.outer',
-        ['ia'] = '@parameter.inner',
-      }
-      for lhs, rhs in pairs(select_maps) do
-        vim.keymap.set({ 'x', 'o' }, lhs, function()
-          select.select_textobject(rhs, 'textobjects')
-        end, { desc = 'Select ' .. rhs })
-      end
-
       -- Define Move keymaps (normal, visual, and operator-pending modes)
-      local move = require('nvim-treesitter-textobjects.move')
+      local move = require 'nvim-treesitter-textobjects.move'
       local move_maps = {
         [']f'] = { fn = move.goto_next_start, query = '@function.outer', desc = 'Next function start' },
         [']F'] = { fn = move.goto_next_end, query = '@function.outer', desc = 'Next function end' },

@@ -16,7 +16,7 @@ return {
     notify_on_error = false,
     format_on_save = false, -- Disabled autoformat on save (manual trigger only via <leader>=)
     formatters_by_ft = {
-      lua = { 'stylua', 'lua-language-server' },
+      lua = { 'stylua' },
       -- python = { 'isort', 'black' },
       markdown = { 'prettier' },
       sql = { 'sql_formatter' },

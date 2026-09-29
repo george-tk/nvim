@@ -238,17 +238,13 @@ flowchart TD
 
 ## 4. Immediate Recommended Tweaks for User Config
 
-The following micro-fixes improve consistency and resolve minor linter/runtime warnings:
+The following micro-fixes have been applied to improve consistency:
 
-### Tweak 1: Clean invalid formatter in `autoformat.lua`
-In [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/autoformat.lua#L19), remove `'lua-language-server'`:
-```diff
-- lua = { 'stylua', 'lua-language-server' },
-+ lua = { 'stylua' },
-```
+### Tweak 1: Clean invalid formatter in `autoformat.lua` [RESOLVED]
+In [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/autoformat.lua#L19), removed `'lua-language-server'` leaving `'stylua'` as the primary formatter with fallback to LSP.
 
-### Tweak 2: Deduplicate Textobjects between `treesitter.lua` and `mini-ai.lua`
-In [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L34-L53), remove redundant selection mappings for `af`, `if`, `ac`, `ic` so `mini.ai` has exclusive, conflict-free ownership of textobject selections with full dot-repeat.
+### Tweak 2: Deduplicate Textobjects between `treesitter.lua` and `mini-ai.lua` [RESOLVED]
+Removed redundant selection mappings (`af`, `if`, `ac`, `ic`, `aa`, `ia`) from [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua). `mini.ai` now has exclusive, conflict-free ownership of textobject selections with full dot-repeat and visual range extensions, while `nvim-treesitter-textobjects` focuses purely on movement jumping (`]f`, `[f`, `]c`, `[c`, `]a`, `[a`).
 
 ---
 
