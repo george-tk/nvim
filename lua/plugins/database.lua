@@ -785,37 +785,12 @@ function M.fetch_connection_databases(conn_name, conn_url, callback)
 
   local ok_api, api = pcall(require, 'sqmeow.api')
   local ok_state, state = pcall(require, 'sqmeow.state')
-  local ok_rpc, rpc = pcall(require, 'sqmeow.rpc')
-  if not ok_api or not ok_state or not ok_rpc then
+  if not ok_api or not ok_state or not api.databases then
     callback(nil, 'sqmeow core modules not available')
     return
   end
 
-  -- 2. Check sqmeow drawer cache if already introspected
-  local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
-  if ok_dr and drawer and drawer.load then
-    local _, cache = debug.getupvalue(drawer.load, 2)
-    local conn = state.connection_by_name(conn_name)
-    if conn and type(cache) == 'table' then
-      local entry = cache[conn.id .. ':']
-      if entry and entry.nodes then
-        local dbs = {}
-        for _, n in ipairs(entry.nodes) do
-          if n.kind == 'database' then
-            table.insert(dbs, n.name)
-          end
-        end
-        if #dbs > 0 then
-          table.sort(dbs)
-          M._conn_databases[conn_name] = dbs
-          callback(dbs)
-          return
-        end
-      end
-    end
-  end
-
-  -- 3. Connect parent if needed and request introspection
+  -- Connect parent if not already connected
   local parent = state.connection_by_name(conn_name)
   local parent_id = parent and parent.id
   if not parent_id or parent.state == 'closed' then
@@ -827,54 +802,34 @@ function M.fetch_connection_databases(conn_name, conn_url, callback)
     return
   end
 
-  local done = false
-  local unsub = nil
-  local timer = nil
-
-  local function finish(dbs, err)
-    if done then return end
-    done = true
-    if unsub then unsub() end
-    if timer and not timer:is_closing() then
-      timer:stop()
-      timer:close()
-    end
-    vim.schedule(function()
+  local function query_databases()
+    api.databases(parent_id, function(dbs, err)
+      if dbs and #dbs > 0 then
+        table.sort(dbs)
+        M._conn_databases[conn_name] = dbs
+      end
       callback(dbs, err)
     end)
   end
 
-  unsub = rpc.on('schema:nodes', function(payload)
-    if payload.conn_id == parent_id and (#(payload.path or {}) == 0) then
-      local dbs = {}
-      for _, n in ipairs(payload.nodes or {}) do
-        if n.kind == 'database' then
-          table.insert(dbs, n.name)
-        end
-      end
-      table.sort(dbs)
-      if #dbs > 0 then
-        M._conn_databases[conn_name] = dbs
-      end
-      finish(dbs)
-    end
-  end)
-
-  timer = vim.defer_fn(function()
-    finish(nil, 'Timed out waiting for database list from ' .. conn_name)
-  end, 3500)
-
   local conn_now = state.connections[parent_id]
   if conn_now and conn_now.state == 'connected' then
-    rpc.request('introspect', { conn_id = parent_id, path = {} })
+    query_databases()
   else
-    local state_unsub
-    state_unsub = rpc.on('conn:state', function(payload)
-      if payload.id == parent_id and payload.state == 'connected' then
-        if state_unsub then state_unsub() end
-        rpc.request('introspect', { conn_id = parent_id, path = {} })
-      end
-    end)
+    local ok_rpc, rpc = pcall(require, 'sqmeow.rpc')
+    if ok_rpc and rpc then
+      local state_unsub
+      state_unsub = rpc.on('conn:state', function(payload)
+        if payload.id == parent_id and payload.state == 'connected' then
+          if state_unsub then
+            state_unsub()
+          end
+          query_databases()
+        end
+      end)
+    else
+      query_databases()
+    end
   end
 end
 
@@ -887,6 +842,11 @@ function M.activate_connection(name, url, callback)
   pcall(function()
     require('sqmeow.ui.editor').update_winbar()
     vim.cmd('call vim_dadbod_completion#fetch(' .. cur_buf .. ')')
+  end)
+
+  -- Sync connection in sqmeow natively (supports clusters and single-db via PR #57)
+  pcall(function()
+    vim.cmd('Sqmeow use ' .. vim.fn.fnameescape(name))
   end)
 
   vim.notify('Active database: ' .. name, vim.log.levels.INFO, { title = 'Database' })
