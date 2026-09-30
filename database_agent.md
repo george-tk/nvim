@@ -70,6 +70,7 @@ flowchart TD
 | **9. In-Memory Relation Preview in Editor** | Upstream `opts.ui.drawer.preview_in_editor = true` | Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk clutter until explicit `:w`. Multi-dialect support without trailing semicolons on redis/json. | **RESOLVED & MERGED UPSTREAM ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Merged into master in commit `403cef1`. Upstream natively handles relation preview directly in `editing_window()`. Local preview buffer generator retired; light wrapper retains `:w` save hook. |
 | **10. Editor Buffer Re-binding on `use` (`u`)** | Upstream native `drawer.actions.use` & `editor.rebind` | Switching connections in the drawer previously left open editor buffers bound to their old connection, causing queries to hit the previous database. | **RESOLVED & MERGED UPSTREAM ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Merged into master in commit `a299288`. Upstream natively inspects visible editor windows and re-binds them via `editor.rebind(ed_buf, conn.name)`. Local rebind search retired; light hook synchronizes Dadbod completion context. |
 | **11. Multi-DB Connection Switching & Two-Step Picker** | [`M.select_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L900) & [`M.fetch_connection_databases`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L778) | Switching to a multi-db cluster connection via picker previously bound the cluster root without a selected database, causing queries to fail. | **RESOLVED & MERGED UPSTREAM ([Issue #52](https://github.com/2giosangmitom/sqmeow.nvim/issues/52) / [PR #57](https://github.com/2giosangmitom/sqmeow.nvim/pull/57))**. Merged into master in commit `74ae98e`. Single-DB connections display as `conn / db` and bind immediately; multi-DB connections prompt for database selection and bind `<conn>/<db>`. Native `api.databases` and `drawer.databases` helpers adopted in config; manual RPC introspection and debug hacks retired. |
+| **12. Relation Preview Buffer Listedness (`buflisted`)** | Upstream `ui.drawer.preview_in_editor` | Preview buffer was created unlisted (`buflisted = false`), causing it to vanish from bufferlines (lualine) when switching away and preventing `:bnext`/`:bprev` cycling. | **ISSUE OPEN UPSTREAM ([Issue #59](https://github.com/2giosangmitom/sqmeow.nvim/issues/59))**. Proposed creating preview buffer with `nvim_create_buf(true, true)` or configurable `ui.drawer.preview_listed`. Local hook in `database.lua` forces `vim.bo[buf].buflisted = true` as proactive workaround. |
 
 ---
 
@@ -510,3 +511,22 @@ When connecting to a cluster connection (e.g. `postgresql://user:pass@host:5432/
 2. Present a secondary menu via `vim.ui.select` (or `sqmeow.ui.form.menu`) to choose the database within that cluster.
 3. Open and activate the child connection (`<parent>/<database>`) via `api.connect(parent.url, { name = ('%s/%s'):format(parent.name, db), parent = parent.id, database = db })` followed by `api.use(child_id)`.
 4. Single-database connections (where URL specifies a database or SQLite/DuckDB) should display as `<conn> / <db>` and bind immediately without a secondary prompt.
+
+---
+
+### Issue 10: Relation preview buffer in editor is unlisted, breaking bufferline persistence and :bnext/bprev cycling [Issue #59]
+
+> **Status**: **ISSUE OPEN UPSTREAM** ([Issue #59](https://github.com/2giosangmitom/sqmeow.nvim/issues/59)).
+
+**Title**: `bug(drawer): relation preview buffer in editor is unlisted, breaking bufferline persistence and :bnext/bprev cycling`
+
+**Problem**:
+When `ui.drawer.preview_in_editor = true` is enabled, pressing `p` on a relation in the drawer opens the preview query in the main editing window. However, in `lua/sqmeow/ui/drawer.lua`, the buffer is created with `vim.api.nvim_create_buf(false, true)` (`buflisted = false`).
+
+Because it is unlisted:
+1. Bufferlines (`lualine`, `bufferline.nvim`) drop the preview buffer as soon as the user switches to any other file.
+2. Standard buffer navigation (`:bnext`, `:bprev`) skips the preview buffer.
+3. Hitting `<C-^>` to jump to it triggers Vim's automatic `'buflisted'` promotion, making it behave inconsistently before and after `<C-^>`.
+
+**Proposed Fix**:
+In `lua/sqmeow/ui/drawer.lua`, create the buffer with `vim.api.nvim_create_buf(true, true)` (or allow a configuration flag `ui.drawer.preview_listed = true`).
