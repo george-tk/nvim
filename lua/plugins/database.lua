@@ -654,14 +654,59 @@ function M.setup_drawer_helpers()
     return orig_toggle()
   end
 
-  -- 5. Hook drawer.actions.preview to attach save-query on :w and track bottom panel dbout mode
+  -- 5. Hook drawer.actions.preview to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
   local orig_preview = drawer.actions.preview
   drawer.actions.preview = function(...)
+    -- Safely inspect or modify upstream's module-level preview_buf upvalue
+    local function set_drawer_preview_buf(b)
+      if drawer.preview_buffer then
+        for i = 1, 20 do
+          local name = debug.getupvalue(drawer.preview_buffer, i)
+          if not name then break end
+          if name == 'preview_buf' then
+            debug.setupvalue(drawer.preview_buffer, i, b)
+            break
+          end
+        end
+      end
+    end
+
+    local node = drawer.current_node and drawer.current_node()
+    local rel_name = node and (node.name or (node.path and node.path[#node.path])) or 'preview'
+    local target_pattern = '%[Preview: ' .. vim.pesc(rel_name) .. '%]$'
+    local existing_buf = nil
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_name(b):match(target_pattern) then
+        existing_buf = b
+        break
+      end
+    end
+
+    if existing_buf and not vim.bo[existing_buf].modified then
+      -- If an unmodified preview for this relation already exists, reuse it
+      set_drawer_preview_buf(existing_buf)
+    else
+      -- Force upstream to create a fresh buffer so multiple preview queries can coexist
+      set_drawer_preview_buf(nil)
+    end
+
     local res = orig_preview(...)
     local buf = drawer.preview_buffer()
     if buf and vim.api.nvim_buf_is_valid(buf) then
       vim.bo[buf].buflisted = true
       vim.b[buf].is_preview_buffer = true
+
+      -- If buffer name collided (e.g. existing buffer was modified), give it a distinct indexed name
+      if vim.api.nvim_buf_get_name(buf) == '' then
+        local count = 1
+        while true do
+          local try_name = ('[Preview: %s (%d)]'):format(rel_name, count)
+          local ok = pcall(vim.api.nvim_buf_set_name, buf, try_name)
+          if ok then break end
+          count = count + 1
+        end
+      end
+
       if M.current_db then
         vim.b[buf].db = M.current_db
         vim.b[buf].db_name = M.current_db_name
@@ -677,6 +722,24 @@ function M.setup_drawer_helpers()
       })
       if _G.BottomPanel then
         _G.BottomPanel.active_mode = 'dbout'
+      end
+
+      -- Ensure preview window is never locked by winfixbuf
+      local pwin = vim.fn.bufwinid(buf)
+      if pwin and pwin ~= -1 and vim.api.nvim_win_is_valid(pwin) then
+        if vim.fn.exists('&winfixbuf') == 1 and vim.wo[pwin].winfixbuf then
+          vim.wo[pwin].winfixbuf = false
+        end
+      end
+
+      -- Explicitly register in buffer ring and refresh lualine
+      local ok_br, br = pcall(require, 'utils.buffer-ring')
+      if ok_br and br.on_buf_enter then
+        br.on_buf_enter(buf)
+      end
+      local ok_lualine, lualine = pcall(require, 'lualine')
+      if ok_lualine and lualine.refresh then
+        lualine.refresh()
       end
     end
     return res

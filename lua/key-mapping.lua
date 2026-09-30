@@ -210,7 +210,7 @@ local function get_editor_win()
         or ft == 'dbout'
         or ft == 'sqmeow-result'
         or buftype == 'terminal'
-        or buftype == 'nofile'
+        or (buftype == 'nofile' and not vim.b[buf].is_preview_buffer and not bname:find('%[preview:'))
         or bname:find('opencode') ~= nil
         or bname:find('neogit') ~= nil
         or bname:find('term://') ~= nil
@@ -703,6 +703,9 @@ local function smart_close()
   end
 
   -- 4. In Code Editor: safely close buffer while preserving window splits!
+  pcall(function()
+    require('utils.buffer-ring').on_buf_delete(cur_buf)
+  end)
   local ok, snacks = pcall(require, 'snacks')
   if ok and snacks.bufdelete then
     snacks.bufdelete({ buf = cur_buf })
@@ -725,7 +728,12 @@ local function smart_bnext()
       vim.api.nvim_set_current_win(ed)
     end
   end
-  vim.cmd('bnext')
+  local ok, ring = pcall(require, 'utils.buffer-ring')
+  if ok and ring.next_buffer then
+    ring.next_buffer()
+  else
+    vim.cmd('bnext')
+  end
 end
 
 local function smart_bprev()
@@ -736,10 +744,18 @@ local function smart_bprev()
       vim.api.nvim_set_current_win(ed)
     end
   end
-  vim.cmd('bprevious')
+  local ok, ring = pcall(require, 'utils.buffer-ring')
+  if ok and ring.prev_buffer then
+    ring.prev_buffer()
+  else
+    vim.cmd('bprevious')
+  end
 end
 
 vim.keymap.set('n', '<leader>q', smart_close, { desc = 'Close Buffer' })
+vim.keymap.set('n', '<leader>p', function()
+  require('utils.buffer-ring').toggle_pin()
+end, { desc = 'Toggle Pin Buffer' })
 vim.keymap.set('n', '<leader>Q', '<cmd>confirm qa<CR>', { desc = 'Quit Neovim' })
 vim.keymap.set('n', '<leader><Tab>', smart_bnext, { desc = 'Next Buffer' })
 vim.keymap.set('n', '<leader><S-Tab>', smart_bprev, { desc = 'Previous Buffer' })

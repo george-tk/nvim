@@ -71,6 +71,8 @@ flowchart TD
 | **10. Editor Buffer Re-binding on `use` (`u`)** | Upstream native `drawer.actions.use` & `editor.rebind` | Switching connections in the drawer previously left open editor buffers bound to their old connection, causing queries to hit the previous database. | **RESOLVED & MERGED UPSTREAM ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Merged into master in commit `a299288`. Upstream natively inspects visible editor windows and re-binds them via `editor.rebind(ed_buf, conn.name)`. Local rebind search retired; light hook synchronizes Dadbod completion context. |
 | **11. Multi-DB Connection Switching & Two-Step Picker** | [`M.select_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L900) & [`M.fetch_connection_databases`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L778) | Switching to a multi-db cluster connection via picker previously bound the cluster root without a selected database, causing queries to fail. | **RESOLVED & MERGED UPSTREAM ([Issue #52](https://github.com/2giosangmitom/sqmeow.nvim/issues/52) / [PR #57](https://github.com/2giosangmitom/sqmeow.nvim/pull/57))**. Merged into master in commit `74ae98e`. Single-DB connections display as `conn / db` and bind immediately; multi-DB connections prompt for database selection and bind `<conn>/<db>`. Native `api.databases` and `drawer.databases` helpers adopted in config; manual RPC introspection and debug hacks retired. |
 | **12. Relation Preview Buffer Listedness (`buflisted`)** | Upstream `ui.drawer.preview_in_editor` | Preview buffer was created unlisted (`buflisted = false`), causing it to vanish from bufferlines (lualine) when switching away and preventing `:bnext`/`:bprev` cycling. | **ISSUE OPEN UPSTREAM ([Issue #59](https://github.com/2giosangmitom/sqmeow.nvim/issues/59))**. Proposed creating preview buffer with `nvim_create_buf(true, true)` or configurable `ui.drawer.preview_listed`. Local hook in `database.lua` forces `vim.bo[buf].buflisted = true` as proactive workaround. |
+| **13. Distinct Relation Preview Buffers & Data Loss Prevention** | [`drawer.actions.preview` hook in `lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L657) | Upstream caches a single module-level `preview_buf` upvalue, causing subsequent previews of any table to wipe out and overwrite existing preview buffers (including unsaved edits). Users cannot compare relations side-by-side or keep query iterations across tables. | **ISSUE OPEN UPSTREAM ([Issue #60](https://github.com/2giosangmitom/sqmeow.nvim/issues/60))**. Proposed per-relation buffer mapping (`preview_bufs[rel_name]`) or checking buffer modification before re-use. Local wrapper uses `debug.setupvalue` to manage buffer lifecycle dynamically. |
+
 
 ---
 
@@ -530,3 +532,36 @@ Because it is unlisted:
 
 **Proposed Fix**:
 In `lua/sqmeow/ui/drawer.lua`, create the buffer with `vim.api.nvim_create_buf(true, true)` (or allow a configuration flag `ui.drawer.preview_listed = true`).
+
+---
+
+### Issue 11: Allow distinct preview buffers per relation and prevent silent data loss on modified queries [Issue #60]
+
+> **Status**: **ISSUE OPEN UPSTREAM** ([Issue #60](https://github.com/2giosangmitom/sqmeow.nvim/issues/60)).
+
+**Title**: `feat(drawer): allow distinct preview buffers per relation and prevent silent data loss on modified queries`
+
+**Problem**:
+In `lua/sqmeow/ui/drawer.lua`, previewing a relation via `preview` (`p`) reuses a singleton module-level variable:
+```lua
+local preview_buf = nil
+
+function M.preview_buffer()
+  if not (preview_buf and vim.api.nvim_buf_is_valid(preview_buf)) then
+    preview_buf = vim.api.nvim_create_buf(false, true)
+    -- ...
+  end
+  pcall(vim.api.nvim_buf_set_name, preview_buf, ('[Preview: %s]'):format(rel_name))
+  vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, vim.split(text, '\n'))
+  vim.bo[preview_buf].modified = false
+```
+
+Because `preview_buf` is a singleton that is never reset after creation:
+1. **Silent Data Loss on Modified Queries**: When a user experiments directly inside the editor buffer—adding `WHERE` conditions, `JOIN`s, or aggregations (`modified = true`)—previewing any subsequent table unconditionally overwrites the buffer lines with the new table's default query and resets `modified = false`. Custom edits are lost without warning.
+2. **Inability to Compare Relations**: Users cannot have multiple preview queries open across window splits or tabs (e.g. comparing `users` with `orders`).
+
+**Proposed Fix**:
+- Key preview buffers by relation name/path (`preview_bufs[rel_name]`).
+- Check `if vim.bo[preview_buf].modified` before overwriting; if modified or distinct, open a separate dedicated buffer (or indexed instance like `[Preview: users (1)]`).
+- Local workaround in [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L657): Hooks `drawer.actions.preview` to inspect the relation name and modify upstream's `preview_buf` upvalue via `debug.setupvalue`. Reuses unmodified previews of the same table while forcing a fresh buffer when opening a different table or when unsaved changes exist.
+

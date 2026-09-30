@@ -6,12 +6,14 @@ return {
     { 'nvim-tree/nvim-web-devicons', lazy = true },
   },
 
-  -- Define keymaps without forcing plugin to load
+  -- Initialize buffer-ring and define fixed slot keymaps (<leader>1 to <leader>4)
   init = function()
-    for i = 1, 9 do
+    require('utils.buffer-ring').setup()
+
+    for i = 1, 4 do
       vim.keymap.set('n', '<leader>' .. i, function()
-        vim.cmd('LualineBuffersJump ' .. i)
-      end, { desc = 'buffer ' .. i })
+        require('utils.buffer-ring').jump(i)
+      end, { desc = 'Buffer Slot ' .. i })
     end
   end,
 
@@ -28,17 +30,6 @@ return {
       local dir = vim.fn.finddir('.git', '.;')
       return dir ~= ''
     end
-
-    -- Buffers component options, computed on render
-    local buffers_component = {
-      'buffers',
-      mode = 2, -- 2 = buffer index + filename
-      -- Recompute width at render time so it adapts to current UI width
-      max_length = function()
-        return math.floor(vim.o.columns * 0.85)
-      end,
-      symbols = { alternate_file = '' },
-    }
 
     -- Diff component that defers to gitsigns if available and only in repos
     local diff_component = {
@@ -94,7 +85,14 @@ return {
           { 'branch', cond = in_git_repo },
           diff_component,
         },
-        lualine_c = { buffers_component },
+        lualine_c = {
+          {
+            function()
+              return require('utils.buffer-ring').lualine_component()
+            end,
+            padding = { left = 0, right = 0 },
+          },
+        },
 
         -- Show active database when editing SQL buffers
         lualine_x = {

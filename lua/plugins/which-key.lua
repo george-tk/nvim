@@ -21,8 +21,7 @@ return { -- Useful plugin to show you pending keybinds.
 
       -- Direct 1-Key Actions
       { '<leader>t', desc = 'Terminal', mode = { 'n', 't' } },
-      { '<leader>p', desc = 'Git Pull' },
-      { '<leader>P', desc = 'Git Push' },
+      { '<leader>p', desc = 'Toggle Pin Buffer' },
       { '<leader>e', desc = 'File Explorer', mode = { 'n', 'v' } },
       { '<leader>d', desc = 'Dashboard' },
       { '<leader>z', desc = 'Zen Mode' },

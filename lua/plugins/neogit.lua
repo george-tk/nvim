@@ -13,7 +13,5 @@ return {
     { '<leader>gP', ':Neogit push <CR>', desc = 'Push' },
     { '<leader>gb', ':Neogit branch <CR>', desc = 'Branch' },
     { '<leader>gd', ':DiffviewOpen <CR>', desc = 'Diff' },
-    { '<leader>p', ':Neogit pull <CR>', desc = 'Git Pull' },
-    { '<leader>P', ':Neogit push <CR>', desc = 'Git Push' },
   },
 }
