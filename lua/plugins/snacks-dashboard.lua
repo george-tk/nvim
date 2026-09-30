@@ -1,3 +1,21 @@
+local function open_project_clean(dir)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted and vim.bo[buf].modified then
+      vim.notify('Save or discard modified buffers before opening another project', vim.log.levels.WARN, { title = 'Project' })
+      return
+    end
+  end
+
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted then
+      vim.api.nvim_buf_delete(buf, {})
+    end
+  end
+
+  vim.cmd.cd(vim.fn.fnameescape(dir))
+  Snacks.picker.files({ cwd = dir })
+end
+
 return {
   'folke/snacks.nvim',
   lazy = false,
@@ -80,6 +98,7 @@ return {
             section = 'projects',
             indent = 2,
             padding = 2,
+            action = open_project_clean,
             filter = function(dir)
               return dir and not dir:find('sqmeow') and not dir:find('db_ui') and not dir:find('nvim/assets')
             end,

@@ -1374,6 +1374,17 @@ return {
       require('sqmeow').install()
     end,
     init = function()
+      -- Database UI and result buffers inherit the global spell setting otherwise.
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        pattern = { 'dbui', 'dbout', 'sqmeow-drawer', 'sqmeow-result' },
+        callback = function(args)
+          vim.opt_local.spell = false
+          for _, win in ipairs(vim.fn.win_findbuf(args.buf)) do
+            vim.wo[win].spell = false
+          end
+        end,
+      })
+
       -- Automatically bind active database and enable AI completion for any opened .sql file
       vim.api.nvim_create_autocmd('FileType', {
         pattern = { 'sql', 'mysql', 'plsql' },

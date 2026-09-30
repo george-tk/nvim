@@ -372,6 +372,10 @@ function RightPanel.open_opencode()
       width = 0.38,
       relative = 'editor',
       wo = { winbar = '', winfixwidth = true, winfixbuf = true },
+      on_buf = function(term)
+        -- OpenCode uses spaces in prompts, so never treat Space+t as a terminal toggle here.
+        vim.keymap.set('t', '<leader>t', '<Space>t', { buffer = term.buf, noremap = true, silent = true })
+      end,
     },
   })
 end
@@ -646,6 +650,8 @@ vim.api.nvim_create_autocmd('FileType', {
   callback = function(args)
     BottomPanel.last_dbout_buf = args.buf
     BottomPanel.active_mode = 'dbout'
+    -- Sqmeow creates its result split directly, so hide the shell before both remain visible.
+    hide_terminal_if_visible()
   end,
 })
 
