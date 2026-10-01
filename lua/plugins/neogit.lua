@@ -15,7 +15,7 @@ return {
       border = 'rounded',
     },
     popup = {
-      kind = 'split',
+      kind = 'popup',
     },
     commit_editor = {
       kind = 'floating',
