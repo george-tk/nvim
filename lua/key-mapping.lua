@@ -753,6 +753,20 @@ local function smart_bprev()
 end
 
 vim.keymap.set('n', '<leader>q', smart_close, { desc = 'Close Buffer' })
+vim.keymap.set('n', '<leader>n', function()
+  local ok, ring = pcall(require, 'utils.buffer-ring')
+  if ok and ring.create_filetype_buffer then
+    ring.create_filetype_buffer()
+  else
+    vim.cmd('enew')
+  end
+end, { desc = 'New Buffer (with Filetype)' })
+vim.keymap.set('n', '<leader>ct', function()
+  local ok, ring = pcall(require, 'utils.buffer-ring')
+  if ok and ring.change_filetype then
+    ring.change_filetype()
+  end
+end, { desc = 'Change Filetype' })
 vim.keymap.set('n', '<leader>p', function()
   require('utils.buffer-ring').toggle_pin()
 end, { desc = 'Toggle Pin Buffer' })

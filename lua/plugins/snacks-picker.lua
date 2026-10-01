@@ -193,13 +193,6 @@ return {
       desc = 'Word in Current Buffer',
     },
     {
-      '<leader>fo',
-      function()
-        Snacks.picker.grep_buffers()
-      end,
-      desc = 'Word in Open Buffers',
-    },
-    {
       '<leader>fw',
       function()
         Snacks.picker.grep_word()

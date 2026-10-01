@@ -16,7 +16,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>T', group = 'Todo' },
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
-      { '<leader>s', group = 'Search / Spelling' },
+      { '<leader>s', group = 'Spelling' },
       { '<leader>w', group = 'Window' },
 
       -- Direct 1-Key Actions
@@ -25,10 +25,10 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>e', desc = 'File Explorer', mode = { 'n', 'v' } },
       { '<leader>d', desc = 'Dashboard' },
       { '<leader>z', desc = 'Zen Mode' },
+      { '<leader>n', desc = 'New Buffer (with Filetype)' },
       { '<leader>q', desc = 'Close Buffer' },
       { '<leader>Q', desc = 'Quit Neovim' },
       { '<leader>r', desc = 'Alternate Buffer' },
-      { '<leader>=', desc = 'Format Buffer' },
       { '<leader><Tab>', desc = 'Next Buffer' },
       { '<leader><S-Tab>', desc = 'Previous Buffer' },
 
@@ -58,7 +58,6 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>fb', desc = 'Open Buffers' },
       { '<leader>fg', desc = 'Word in Workspace' },
       { '<leader>fl', desc = 'Word in Current Buffer' },
-      { '<leader>fo', desc = 'Word in Open Buffers' },
       { '<leader>fw', desc = 'Word Under Cursor' },
       { '<leader>fc', desc = 'Neovim Config' },
       { '<leader>fd', desc = 'Diagnostics' },
@@ -116,11 +115,14 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>ca', desc = 'Code Action', mode = { 'n', 'v' } },
       { '<leader>cr', desc = 'Rename Symbol' },
       { '<leader>cd', desc = 'Line Diagnostics' },
+      { '<leader>cD', desc = 'Workspace Diagnostics' },
+      { '<leader>cR', desc = 'References' },
+      { '<leader>cs', desc = 'Document Symbols' },
+      { '<leader>ci', desc = 'Implementations' },
+      { '<leader>ct', desc = 'Change Filetype' },
       { '<leader>cf', desc = 'Format Buffer' },
 
-      -- Search & Replace / Spelling Group (<leader>s)
-      { '<leader>sr', desc = 'Search & Replace in Project (Grug Far)' },
-      { '<leader>sw', desc = 'Search Word in Project (Grug Far)' },
+      -- Spelling Group (<leader>s)
       { '<leader>st', desc = 'Spelling Toggle' },
       { '<leader>ss', desc = 'Spelling Suggestions' },
       { '<leader>sn', desc = 'Next Spell Error' },

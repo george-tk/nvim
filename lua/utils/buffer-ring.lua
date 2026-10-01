@@ -26,6 +26,11 @@ function M.is_qualifying(buf)
     return true
   end
 
+  -- Explicit user-created blank buffers are allowed
+  if vim.b[buf].is_user_buffer then
+    return true
+  end
+
   local buftype = vim.bo[buf].buftype
   local filetype = vim.bo[buf].filetype
 
@@ -34,8 +39,8 @@ function M.is_qualifying(buf)
     return false
   end
 
-  -- Skip empty unnamed scratchpads without filetype or disk backing
-  if name == '' and filetype == '' then
+  -- Skip empty unnamed scratchpads without filetype or disk backing unless user buffer or modified
+  if name == '' and filetype == '' and not vim.bo[buf].modified then
     return false
   end
 
@@ -317,6 +322,136 @@ function M.prev_buffer()
   end
 end
 
+--- Build curated list of filetypes with icons and descriptions
+---@return table[] items
+local function get_filetype_items()
+  local curated = {
+    { ft = '', text = '󰈔  Plain Text', desc = 'plain' },
+    { ft = 'lua', text = '  Lua', desc = 'lua' },
+    { ft = 'go', text = '  Go', desc = 'go' },
+    { ft = 'sql', text = '󰆼  SQL', desc = 'sql' },
+    { ft = 'python', text = '  Python', desc = 'python' },
+    { ft = 'typescript', text = '󰌞  TypeScript', desc = 'typescript ts' },
+    { ft = 'typescriptreact', text = '  TypeScript React (TSX)', desc = 'typescriptreact tsx' },
+    { ft = 'javascript', text = '  JavaScript', desc = 'javascript js' },
+    { ft = 'javascriptreact', text = '  JavaScript React (JSX)', desc = 'javascriptreact jsx' },
+    { ft = 'rust', text = '  Rust', desc = 'rust' },
+    { ft = 'markdown', text = '  Markdown', desc = 'markdown md' },
+    { ft = 'json', text = '󰘦  JSON', desc = 'json' },
+    { ft = 'yaml', text = '  YAML', desc = 'yaml yml' },
+    { ft = 'toml', text = '  TOML', desc = 'toml' },
+    { ft = 'html', text = '󰌝  HTML', desc = 'html' },
+    { ft = 'css', text = '󰌜  CSS', desc = 'css' },
+    { ft = 'sh', text = '  Bash / Shell', desc = 'sh bash zsh' },
+    { ft = 'dockerfile', text = '󰡨  Dockerfile', desc = 'dockerfile' },
+  }
+
+  local seen = {}
+  local items = {}
+  for _, item in ipairs(curated) do
+    seen[item.ft] = true
+    table.insert(items, item)
+  end
+
+  local devicons_ok, devicons = pcall(require, 'nvim-web-devicons')
+  for _, ft in ipairs(vim.fn.getcompletion('', 'filetype')) do
+    if ft ~= '' and not seen[ft] then
+      seen[ft] = true
+      local icon = '󰈔 '
+      if devicons_ok and devicons.get_icon_by_filetype then
+        local ic = devicons.get_icon_by_filetype(ft)
+        if ic then icon = ic .. ' ' end
+      end
+      table.insert(items, { ft = ft, text = icon .. ' ' .. ft, desc = ft })
+    end
+  end
+
+  return items
+end
+
+--- Open a fuzzy picker to select a filetype
+---@param prompt string
+---@param callback fun(choice: { ft: string, text: string })
+function M.select_filetype(prompt, callback)
+  local items = get_filetype_items()
+  local ok_snacks, snacks = pcall(require, 'snacks')
+
+  if ok_snacks and snacks.picker and snacks.picker.select then
+    snacks.picker.select(items, {
+      prompt = prompt or 'Select Filetype',
+      format_item = function(item)
+        return item.text
+      end,
+    }, function(choice)
+      if choice then
+        callback(choice)
+      end
+    end)
+  else
+    vim.ui.select(items, {
+      prompt = prompt or 'Select Filetype',
+      format_item = function(item)
+        return item.text
+      end,
+    }, function(choice)
+      if choice then
+        callback(choice)
+      end
+    end)
+  end
+end
+
+--- Open a new blank buffer for editing
+---@param filetype? string Optional filetype to assign
+---@return integer buf The new buffer ID
+function M.new_buffer(filetype)
+  local win = get_target_window()
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    win = vim.api.nvim_get_current_win()
+  end
+
+  if vim.fn.exists('&winfixbuf') == 1 and vim.wo[win].winfixbuf then
+    vim.wo[win].winfixbuf = false
+  end
+
+  vim.api.nvim_set_current_win(win)
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.bo[buf].buftype = ''
+  vim.bo[buf].buflisted = true
+  vim.bo[buf].swapfile = true
+  vim.b[buf].is_user_buffer = true
+  if filetype and filetype ~= '' then
+    vim.bo[buf].filetype = filetype
+  end
+
+  vim.api.nvim_win_set_buf(win, buf)
+  M.on_buf_enter(buf)
+  pcall(function() require('lualine').refresh() end)
+
+  return buf
+end
+
+--- Create a new buffer with chosen filetype via picker
+function M.create_filetype_buffer()
+  M.select_filetype('New Buffer Filetype (Enter for Plain)', function(choice)
+    M.new_buffer(choice.ft)
+  end)
+end
+
+--- Change filetype of current buffer via picker
+function M.change_filetype()
+  local cur_buf = vim.api.nvim_get_current_buf()
+  M.select_filetype('Change Filetype', function(choice)
+    if cur_buf and vim.api.nvim_buf_is_valid(cur_buf) then
+      vim.bo[cur_buf].filetype = choice.ft
+      local label = choice.ft ~= '' and choice.ft or 'plain text'
+      vim.notify(('Filetype set to `%s`'):format(label), vim.log.levels.INFO, { title = 'Filetype' })
+      pcall(function() require('lualine').refresh() end)
+    end
+  end)
+end
+
 --- Count how many buffers are currently pinned in the ring
 ---@return integer
 function M.pinned_count()
@@ -401,7 +536,6 @@ function M.lualine_component()
   M.clean_slots()
   local cur_buf = vim.api.nvim_get_current_buf()
   local items = {}
-  local ok_devicons, devicons = pcall(require, 'nvim-web-devicons')
 
   for i = 1, M.max_slots do
     local b = M.slots[i]
@@ -409,22 +543,12 @@ function M.lualine_component()
       local is_active = (b == cur_buf)
       local raw = vim.api.nvim_buf_get_name(b)
       local name = vim.fs.basename(raw)
-      local ft_icon = '󰈔 '
 
       if vim.b[b].is_preview_buffer or raw:match('%[Preview: ') then
         local tbl = raw:match('%[Preview: (.-)%]')
         name = tbl and tbl or 'preview'
-        ft_icon = '󰆼 '
       elseif name == '' then
         name = '[No Name]'
-      else
-        if ok_devicons and devicons.get_icon then
-          local ext = vim.fn.fnamemodify(raw, ':e')
-          local icon = devicons.get_icon(name, ext, { default = true })
-          if icon then
-            ft_icon = icon .. ' '
-          end
-        end
       end
 
       local modified = vim.bo[b].modified and ' ●' or ''
@@ -432,9 +556,9 @@ function M.lualine_component()
 
       -- Style active vs inactive slots (clean highlight badge without extra separators)
       if is_active then
-        table.insert(items, string.format('%%#lualine_a_normal# %d %s%s%s%s %%*', i, pin, ft_icon, name, modified))
+        table.insert(items, string.format('%%#lualine_a_normal# %d %s%s%s %%*', i, pin, name, modified))
       else
-        table.insert(items, string.format('%%#lualine_c_normal# %d %s%s%s%s %%*', i, pin, ft_icon, name, modified))
+        table.insert(items, string.format('%%#lualine_c_normal# %d %s%s%s %%*', i, pin, name, modified))
       end
     else
       -- Vacant slot indicator

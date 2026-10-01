@@ -110,7 +110,30 @@ return {
             color = { fg = '#fab387', gui = 'bold' },
           },
         },
-        lualine_y = {},
+        lualine_y = {
+          {
+            function()
+              local cur_buf = vim.api.nvim_get_current_buf()
+              local bname = vim.api.nvim_buf_get_name(cur_buf)
+              if vim.b[cur_buf].is_preview_buffer or bname:match('%[Preview: ') then
+                return '󰆼 preview'
+              end
+              local ft = vim.bo[cur_buf].filetype
+              if not ft or ft == '' then
+                return '󰈔 none'
+              end
+              local ok_devicons, devicons = pcall(require, 'nvim-web-devicons')
+              local icon = '󰈔'
+              if ok_devicons and devicons.get_icon_by_filetype then
+                local i = devicons.get_icon_by_filetype(ft, { default = true })
+                if i then
+                  icon = i
+                end
+              end
+              return icon .. ' ' .. ft
+            end,
+          },
+        },
         lualine_z = {},
       },
 
