@@ -33,7 +33,7 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **mason-tool-installer.nvim** | `WhoIsSethDaniel/mason-tool-installer.nvim` | `443f1ef` | 2026-01-22 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L24) | ✓ Up to date |
 | **fidget.nvim** | `j-hui/fidget.nvim` | `9e02016` | 2026-09-03 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L27) | ✓ Up to date |
 | **conform.nvim** | `stevearc/conform.nvim` | `016802d` | 2026-08-11 | [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/autoformat.lua) | ✓ Standardized on `<leader>cf` |
-| **nvim-treesitter** | `nvim-treesitter/nvim-treesitter` | `cf12346` | 2026-09-30 | [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L3) | ⚠️ Pinned to `branch = 'master'` to avoid breaking changes when `main` becomes default |
+| **nvim-treesitter** | `nvim-treesitter/nvim-treesitter` | `910fdf6` | 2026-09-30 | [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L3) | ✓ Modernized to `main` branch for Neovim 0.12+ native engine |
 | **nvim-treesitter-textobjects** | `nvim-treesitter/nvim-treesitter-textobjects` | `5c7b026` | 2026-09-03 | [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L19) | ✓ Dedicated exclusively to jump motions |
 | **mini.ai** | `echasnovski/mini.ai` | `6c39ae7` | 2026-09-21 | [`lua/plugins/mini-ai.lua`](file:///home/georgek/.config/nvim/lua/plugins/mini-ai.lua) | ✓ Text objects handled cleanly |
 | **neocodeium** | `monkoose/neocodeium` | `ab8a3da` (`v1.19.1`) | 2026-06-22 | [`lua/plugins/neocodeium.lua`](file:///home/georgek/.config/nvim/lua/plugins/neocodeium.lua) | ✓ Monkey-patch still active and required |
@@ -133,7 +133,15 @@ flowchart TD
   > [!IMPORTANT]
   > Keep `version = '1.*'` in [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L4). Do NOT unpin to `main` until upstream officially tags `v2.0.0` and publishes matching prebuilt fuzzy binaries.
 
-#### 3. `nvim-treesitter-textobjects` vs `mini.ai`
+#### 3. `nvim-treesitter/nvim-treesitter`
+- **Baseline**: `910fdf6` (`main` branch, September 30, 2026).
+- **Architectural Rewrite for Neovim 0.12+**:
+  - The plugin underwent a complete rewrite on `main`. The legacy `master` branch is frozen for Neovim 0.10/0.11 and crashes on Neovim 0.12 (`attempt to call method 'range' (a nil value)`) because Neovim 0.12 changed directive arguments to `table<integer, TSNode[]>`.
+  - In [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua), the legacy `opts` table and `nvim-treesitter.configs` modules are retired.
+  - Highlighting and injections run natively through Neovim 0.12's core Treesitter engine (`vim.treesitter.start()`).
+  - Parsers are compiled directly via `tree-sitter-cli` 0.26.9 into `~/.local/share/nvim/site/parser`.
+
+#### 4. `nvim-treesitter-textobjects` vs `mini.ai`
 - **Problem / Overlap Identified**:
   - [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L36-L47) defines:
     - `af` / `if` (`@function.outer` / `@function.inner`)
@@ -146,7 +154,7 @@ flowchart TD
   - `mini.ai` provides superior behavior for text objects (better dot-repeat, visual cursor boundary feedback, next/last motions `vanf`/`valf`).
   - **Recommended change**: Remove manual `select_maps` from [`treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua) and let `mini.ai` handle all text object selections. Keep `nvim-treesitter-textobjects` strictly for jumping/movement keymaps (`]f`, `[f`, `]c`, `[c`, `]a`, `[a`).
 
-#### 4. `stevearc/conform.nvim`
+#### 5. `stevearc/conform.nvim`
 - **Baseline**: `016802d` (August 11, 2026).
 - **Configuration Bug Found**:
   - In [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/autoformat.lua#L19):
@@ -160,7 +168,7 @@ flowchart TD
 - **Recommended Fix**:
   - Change `lua = { 'stylua', 'lua-language-server' }` to `lua = { 'stylua' }`.
 
-#### 5. `nickjvandyke/opencode.nvim`
+#### 6. `nickjvandyke/opencode.nvim`
 - **Baseline**: `84eabfb` (`v1.0.2`, September 14, 2026).
 - **CLI Stable Version**: `1.18.33` (released Sep 28, 2026).
 - **Agent Tracking Rule**:
@@ -168,7 +176,7 @@ flowchart TD
   - The Neovim plugin in [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua#L3) remains safely pinned to `version = '*'` (`v1.0.2`), matching CLI `1.18.x`.
   - Future audit sessions must monitor when `anomalyco/opencode` promotes `v2.x` to the official "Latest Stable" release. At that point, update the CLI (`opencode upgrade`) and transition `opencode.lua` to `version = false` (or track `main`).
 
-#### 6. `monkoose/neocodeium`
+#### 7. `monkoose/neocodeium`
 - **Baseline**: `ab8a3da` (`v1.19.1`, June 22, 2026).
 - **Monkey-Patch Status**:
   - The custom patch in [`lua/plugins/neocodeium.lua`](file:///home/georgek/.config/nvim/lua/plugins/neocodeium.lua#L34-L55) (intercepting `neocodeium.doc.get` to construct virtual workspace URIs for scratchpads and DBUI buffers) is **still mandatory**. Upstream has not merged native handling for buffers outside `cwd`. Keep this patch in dotfiles.
@@ -177,24 +185,24 @@ flowchart TD
 
 ### 3.2. Tier 2: Search, Navigation & UI
 
-#### 7. `MagicDuck/grug-far.nvim` [RETIRED]
+#### 8. `MagicDuck/grug-far.nvim` [RETIRED]
 - **Status**: Retired & uninstalled in October 2026 per user request.
 - **Rationale**: User preferred native and Snacks single-file navigation; multi-file search & replace keys (`<leader>sr`, `<leader>sw`) were removed to strictly dedicate `<leader>s` to Spelling (`<leader>st`, `<leader>ss`, `<leader>sn`, `<leader>sp`). Removed `lua/plugins/grug-far.lua`.
 
-#### 8. `folke/which-key.nvim`
+#### 9. `folke/which-key.nvim`
 - **Baseline**: `3aab214` (v3 spec).
 - **Status**: Perfectly configured in [`lua/plugins/which-key.lua`](file:///home/georgek/.config/nvim/lua/plugins/which-key.lua) using modern grouped specs. No deprecations found.
 
-#### 9. `nvim-lualine/lualine.nvim`
+#### 10. `nvim-lualine/lualine.nvim`
 - **Baseline**: `221ce6b` (May 31, 2026).
-- **Status**: Custom buffer jumper (`LualineBuffersJump 1..9`) and dynamic SQL database status indicator work flawlessly. No upstream changes required.
+- **Status**: Integrated with fixed 4-slot buffer ring (`lua/utils/buffer-ring.lua`) and dynamic SQL database indicator. Vacant slots (`···`) are suppressed dynamically to save space on narrow windows, while active buffers display fixed slot badges (`1..4`) corresponding to `<leader>1`..`<leader>4` jump keys.
 
-#### 10. `catppuccin/nvim`
+#### 11. `catppuccin/nvim`
 - **Baseline**: `edefef7` (August 9, 2026).
 - **Upstream Feature**: Added native `PmenuKind` / `PmenuKindSel` highlights.
 - **Evaluation**: Custom highlights in [`lua/plugins/colorscheme.lua`](file:///home/georgek/.config/nvim/lua/plugins/colorscheme.lua) cleanly enforce transparency across Snacks and Blink.
 
-#### 11. `chrisgrieser/nvim-origami`
+#### 12. `chrisgrieser/nvim-origami`
 - **Baseline**: `a137d35` (August 3, 2026).
 - **Upstream Fix**: Fixed crash when `gitsignsCount` is evaluated without `mini.diff`. Our config disables foldtext anyway (`foldtext = { enabled = false }`), so it is completely stable.
 
@@ -202,14 +210,14 @@ flowchart TD
 
 ### 3.3. Tier 3: Markdown & Note Taking
 
-#### 12. `MeanderingProgrammer/render-markdown.nvim`
+#### 13. `MeanderingProgrammer/render-markdown.nvim`
 - **Baseline**: `640a3ec` (`v8.14.0`, September 14, 2026).
 - **Recent Upstream Features**:
   - `feat: multiline table cell rendering`: Multi-line markdown table cells now render beautifully with aligned borders.
   - `feat: add support for entirely replacing text with virtual lines`: Cleaner rendering of LaTeX and code blocks.
 - **Recommendation**: Up to date and actively maintained.
 
-#### 13. `jakewvincent/mkdnflow.nvim`
+#### 14. `jakewvincent/mkdnflow.nvim`
 - **Baseline**: `272148c` (July 3, 2026).
 - **Redundancy Analysis**:
   - In [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L58-L72), **9 out of 11 modules are explicitly disabled** (`bib`, `buffers`, `conceal`, `cursor`, `folds`, `foldtext`, `links`, `paths`, `yaml`, `completion`).
@@ -218,7 +226,7 @@ flowchart TD
   - Markdown table manipulation can be achieved with lightweight Treesitter-based snippets or simple Neovim table formatters (like `prettier` via Conform).
   - If you want fewer plugins, `mkdnflow.nvim` can be retired by extracting the 5 table manipulation keymaps into a 30-line helper script.
 
-#### 14. `george-tk/todo-picker`
+#### 15. `george-tk/todo-picker`
 - **Baseline**: `9e48dc0` (July 22, 2026).
 - **Recent Features**: Added `ToDoLog` and `ToDoBoard`.
 - **Status**: Personal custom tool; keep permanently.
@@ -241,14 +249,17 @@ In [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/
 ### Tweak 2: Deduplicate Textobjects between `treesitter.lua` and `mini-ai.lua` [RESOLVED]
 Removed redundant selection mappings (`af`, `if`, `ac`, `ic`, `aa`, `ia`) from [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua). `mini.ai` now has exclusive, conflict-free ownership of textobject selections with full dot-repeat and visual range extensions, while `nvim-treesitter-textobjects` focuses purely on movement jumping (`]f`, `[f`, `]c`, `[c`, `]a`, `[a`).
 
-### Tweak 3: Pin `nvim-treesitter` to `branch = 'master'` [RESOLVED]
-Added `branch = 'master'` to `nvim-treesitter` in [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua) per upstream advisory (`42fc28b`). Prevents `lazy.nvim` from pulling breaking nightly/0.11+ changes when `main` becomes the upstream default.
+### Tweak 3: Modernized `nvim-treesitter` to `main` Branch [RESOLVED]
+Migrated `nvim-treesitter` in [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua) to the upstream `main` branch rewrite designed for Neovim 0.12+. Resolves the Neovim 0.12 `attempt to call method 'range' (a nil value)` crash caused by legacy `master` branch query directives (`query_predicates.lua`). Uses Neovim's native Treesitter highlighter (`vim.treesitter.start()`), native indentexpr, and `tree-sitter-cli` 0.26 parser compilation.
 
 ### Tweak 4: Pure Floating Neogit & Modern Popup Kind [RESOLVED]
 Configured all Neogit views to `kind = 'floating'` in [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua), completely eliminating disruptive tabpages and window split reshuffling. Updated `popup = { kind = 'popup' }` matching upstream commit `97c21a4`.
 
 ### Tweak 5: Retired `grug-far.nvim` & Consolidated Keybindings [RESOLVED]
 Uninstalled `grug-far.nvim` by removing `lua/plugins/grug-far.lua`. Dedicated `<leader>s` strictly to Spelling (`<leader>st`, `<leader>ss`, `<leader>sn`, `<leader>sp`). Standardized code formatting on `<leader>cf` (removed duplicate `<leader>=`), removed `<leader>fo`, and enhanced `<leader>c` with LSP navigation (`<leader>cD`, `<leader>cR`, `<leader>cs`, `<leader>ci`, `<leader>ct`).
+
+### Tweak 6: Suppress Vacant Slots in Lualine [RESOLVED]
+Updated [`lua/utils/buffer-ring.lua`](file:///home/georgek/.config/nvim/lua/utils/buffer-ring.lua#L560-L565) to suppress vacant slot placeholders (`···`). Empty slots take up zero characters on narrow windows, while occupied slots retain their non-shifting fixed index numbers (`1..4`) for `<leader>1` through `<leader>4` jumps.
 
 ---
 

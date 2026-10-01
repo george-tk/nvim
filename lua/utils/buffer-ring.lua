@@ -560,9 +560,6 @@ function M.lualine_component()
       else
         table.insert(items, string.format('%%#lualine_c_normal# %d %s%s%s %%*', i, pin, name, modified))
       end
-    else
-      -- Vacant slot indicator
-      table.insert(items, string.format('%%#Comment# %d ··· %%*', i))
     end
   end
 
