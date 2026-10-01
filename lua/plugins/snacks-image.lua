@@ -107,20 +107,5 @@ return {
       desc = 'Insert Image',
       mode = { 'n', 'v' },
     },
-    -- Global finder for images in picker
-    {
-      '<leader>fi',
-      function()
-        Snacks.picker({
-          title = 'Workspace Images',
-          finder = function()
-            return get_image_files()
-          end,
-          format = 'file',
-          preview = 'file',
-        })
-      end,
-      desc = 'Images',
-    },
   },
 }

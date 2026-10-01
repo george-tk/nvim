@@ -296,20 +296,12 @@ Run the built-in health check to confirm all tools and dependencies are properly
 ### 🔍 Find & Search (`<leader>f`)
 | Keybinding | Action | Description |
 | :--- | :--- | :--- |
-| **`<leader>fa`** | **All Pickers** | **Meta-picker to search and launch any Snacks picker** |
-| **`<leader>fn`** | **Notifications** | **Find & view all notification history** |
 | **`<leader>ff`** | Find Files | Search files in workspace |
-| **`<leader>fb`** | Open Buffers | Search active buffers |
-| **`<leader>fg`** | Word in Workspace | Live grep across entire codebase |
-| **`<leader>fl`** | Word in Current Buffer | Fuzzy-find any word on the fly in active buffer |
-| **`<leader>fo`** | Word in Open Buffers | Grep across all open buffers |
-| **`<leader>fw`** | Word Under Cursor | Instant grep for symbol under cursor |
-| **`<leader>fc`** | Neovim Config | Jump to `~/.config/nvim` files |
-| **`<leader>fd`** | Diagnostics | Workspace errors, warnings, and lints |
-| **`<leader>fr`** | Recent Files | Search recently opened files |
-| **`<leader>fp`** | Projects | Project switcher |
-| **`<leader>fs`** | Sessions | Saved workspace sessions |
-| **`<leader>fi`** | Images | Search images in workspace |
+| **`<leader>fw`** | Find Word | Live ripgrep workspace (in visual mode: auto-seeds selection) |
+| **`<leader>fu`** | Undo History | Visual undo diff tree with `<C-y>`/`<C-S-y>` yanking |
+| **`<leader>fr`** | Resume Last Picker | Reopen previous picker, query, and scroll position |
+| **`<leader>fp`** | All Pickers | Meta-picker to search and launch any Snacks picker |
+| **`<leader>fn`** | Notifications | Find & view all notification history |
 | **`<leader>fh`** | Help Tags | Neovim help documentation |
 | **`<leader>fk`** | Keymaps | Search all registered keymaps |
 

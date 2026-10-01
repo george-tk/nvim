@@ -894,11 +894,17 @@ vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
     local buftype = vim.bo[buf].buftype
     local bname = vim.api.nvim_buf_get_name(buf):lower()
 
+    -- Exclude preview and input windows from layout locks
+    if ft == 'snacks_picker_preview' or ft == 'snacks_picker_input' then
+      vim.bo[buf].buflisted = false
+      return
+    end
+
     local is_sidebar = ft == 'dbui'
       or ft == 'sqmeow-drawer'
       or ft:match('opencode') ~= nil
       or bname:find('opencode') ~= nil
-      or ft:match('^snacks_picker') ~= nil
+      or ft == 'snacks_picker_list'
       or ft:match('^snacks_layout') ~= nil
 
     local is_bottom = (not is_sidebar) and (
@@ -916,6 +922,9 @@ vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
       vim.schedule(function()
         local win = vim.fn.bufwinid(buf)
         if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          local cfg = vim.api.nvim_win_get_config(win)
+          if cfg.relative and cfg.relative ~= '' then return end
+
           vim.wo[win].winfixbuf = true
           vim.wo[win].winfixwidth = true
         end
@@ -925,6 +934,9 @@ vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
       vim.schedule(function()
         local win = vim.fn.bufwinid(buf)
         if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          local cfg = vim.api.nvim_win_get_config(win)
+          if cfg.relative and cfg.relative ~= '' then return end
+
           vim.wo[win].winfixbuf = true
           vim.wo[win].winfixheight = true
           ensure_right_sidebar_precedence()

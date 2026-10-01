@@ -49,7 +49,7 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **nvim-origami** | `chrisgrieser/nvim-origami` | `a137d35` | 2026-08-03 | [`lua/plugins/fold-origami.lua`](file:///home/georgek/.config/nvim/lua/plugins/fold-origami.lua) | ✓ Up to date |
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | Stable session persistence |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
-| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `66a8a49` | 2026-10-01 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #59 merged: preview listed; PR #62 & Issue #63 pending) |
+| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `e08832b` | 2026-10-01 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #62 merged: distinct preview buffers native upstream; Issue #63 open for discussion) |
 | **vim-dadbod** | `tpope/vim-dadbod` | `6d1d41d` | 2026-01-06 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Stable database engine (backend connection provider for completion) |
 | **vim-dadbod-completion** | `kristijanhusak/vim-dadbod-completion` | `a8dac0b` | 2025-03-19 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Schema metadata provider; bridges to `lua/utils/dadbod-blink.lua` |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
@@ -260,6 +260,24 @@ Uninstalled `grug-far.nvim` by removing `lua/plugins/grug-far.lua`. Dedicated `<
 
 ### Tweak 6: Suppress Vacant Slots in Lualine [RESOLVED]
 Updated [`lua/utils/buffer-ring.lua`](file:///home/georgek/.config/nvim/lua/utils/buffer-ring.lua#L560-L565) to suppress vacant slot placeholders (`···`). Empty slots take up zero characters on narrow windows, while occupied slots retain their non-shifting fixed index numbers (`1..4`) for `<leader>1` through `<leader>4` jumps.
+
+### Tweak 7: Layout Permanence Exemption for Floating Windows & Picker Diffs [RESOLVED]
+In [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua#L894-L935), updated the `UserLayoutLock` autocommand:
+- Exempted `snacks_picker_preview` and `snacks_picker_input` so preview scratch buffers can be swapped freely without `E1513: Cannot switch buffer. 'winfixbuf' is enabled` errors.
+- Guarded all floating windows (`cfg.relative ~= ''`) so `winfixbuf`, `winfixwidth`, and `winfixheight` only apply to tiled splits (docked explorers and bottom panes).
+- Enabled fully functioning syntax-highlighted diff rendering in `Snacks.picker.undo()`.
+
+### Tweak 8: Curated Lean `<leader>f` Find Suite [RESOLVED]
+Streamlined the `<leader>f` keybinding map in [`lua/plugins/snacks-picker.lua`](file:///home/georgek/.config/nvim/lua/plugins/snacks-picker.lua) and [`lua/plugins/which-key.lua`](file:///home/georgek/.config/nvim/lua/plugins/which-key.lua) from 15 binds down to 8 high-utility, 1-letter mnemonic shortcuts:
+- `<leader>ff`: `Snacks.picker.files()` (Find Files)
+- `<leader>fw`: `Snacks.picker.grep()` (Find Word in Workspace; live prompt in normal mode, auto-seeds visual selection in visual mode)
+- `<leader>fu`: `Snacks.picker.undo()` (Visual diff time-travel with `<C-y>`/`<C-S-y>` yanking)
+- `<leader>fr`: `Snacks.picker.resume()` (Resume Last Picker)
+- `<leader>fp`: `Snacks.picker.pickers()` (All Pickers meta escape hatch)
+- `<leader>fn`: `Snacks.picker.notifications()` (Notifications)
+- `<leader>fh`: `Snacks.picker.help()` (Help Tags)
+- `<leader>fk`: `Snacks.picker.keymaps()` (Keymaps)
+- Dropped redundant/colliding binds: `<leader>fc` (config), `<leader>fs` (sessions; removed from `session-manager.lua`), `<leader>fi` (images; removed from `snacks-image.lua` in favor of `<leader>mi`), `<leader>fb` (buffers), `<leader>fl` (lines), `<leader>fg` (workspace grep - unified into `<leader>fw`), `<leader>fd` (diagnostics - handled by `<leader>cD`), and old `<leader>fa` (migrated to `<leader>fp`).
 
 ---
 

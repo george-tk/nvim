@@ -110,14 +110,57 @@ return {
     terminal = { enabled = true },
   },
   keys = {
-    -- Meta Picker & Notifications
+    -- Find Files
     {
-      '<leader>fa',
+      '<leader>ff',
+      function()
+        Snacks.picker.files()
+      end,
+      desc = 'Find Files',
+    },
+
+    -- Find Word (Normal mode: live grep prompt | Visual mode: grep visual selection)
+    {
+      '<leader>fw',
+      function()
+        Snacks.picker.grep {
+          search = function(p)
+            return p.visual and p.visual.text or nil
+          end,
+        }
+      end,
+      desc = 'Find Word',
+      mode = { 'n', 'x' },
+    },
+
+    -- Undo History (Visual diff time-travel with <C-y>/<C-S-y> yanking)
+    {
+      '<leader>fu',
+      function()
+        Snacks.picker.undo()
+      end,
+      desc = 'Undo History',
+    },
+
+    -- Resume Last Picker
+    {
+      '<leader>fr',
+      function()
+        Snacks.picker.resume()
+      end,
+      desc = 'Resume Last Picker',
+    },
+
+    -- All Pickers (Meta escape hatch)
+    {
+      '<leader>fp',
       function()
         Snacks.picker.pickers()
       end,
       desc = 'All Pickers',
     },
+
+    -- Notifications
     {
       '<leader>fn',
       function()
@@ -126,42 +169,7 @@ return {
       desc = 'Notifications',
     },
 
-    -- Core File & Buffer Pickers
-    {
-      '<leader>ff',
-      function()
-        Snacks.picker.files()
-      end,
-      desc = 'Find Files',
-    },
-    {
-      '<leader>fb',
-      function()
-        Snacks.picker.buffers()
-      end,
-      desc = 'Open Buffers',
-    },
-    {
-      '<leader>fr',
-      function()
-        Snacks.picker.recent()
-      end,
-      desc = 'Recent Files',
-    },
-    {
-      '<leader>fc',
-      function()
-        Snacks.picker.files { cwd = vim.fn.stdpath 'config' }
-      end,
-      desc = 'Neovim Config',
-    },
-    {
-      '<leader>fp',
-      function()
-        Snacks.picker.projects()
-      end,
-      desc = 'Projects',
-    },
+    -- Help Tags
     {
       '<leader>fh',
       function()
@@ -169,44 +177,14 @@ return {
       end,
       desc = 'Help Tags',
     },
+
+    -- Keymaps
     {
       '<leader>fk',
       function()
         Snacks.picker.keymaps()
       end,
       desc = 'Keymaps',
-    },
-
-    -- Word & Grep Pickers (All Uniform 2-Key Length, Zero Prefix Collisions)
-    {
-      '<leader>fg',
-      function()
-        Snacks.picker.grep()
-      end,
-      desc = 'Word in Workspace',
-    },
-    {
-      '<leader>fl',
-      function()
-        Snacks.picker.lines()
-      end,
-      desc = 'Word in Current Buffer',
-    },
-    {
-      '<leader>fw',
-      function()
-        Snacks.picker.grep_word()
-      end,
-      desc = 'Word Under Cursor',
-    },
-
-    -- Diagnostics Picker
-    {
-      '<leader>fd',
-      function()
-        Snacks.picker.diagnostics()
-      end,
-      desc = 'Diagnostics',
     },
 
     -- Spelling Picker (Autocomplete-style clean dropdown at cursor with zero prompt icons or counts)
