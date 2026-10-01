@@ -693,7 +693,6 @@ function M.setup_drawer_helpers()
     local res = orig_preview(...)
     local buf = drawer.preview_buffer()
     if buf and vim.api.nvim_buf_is_valid(buf) then
-      vim.bo[buf].buflisted = true
       vim.b[buf].is_preview_buffer = true
 
       -- If buffer name collided (e.g. existing buffer was modified), give it a distinct indexed name
