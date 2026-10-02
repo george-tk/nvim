@@ -49,9 +49,7 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **nvim-origami** | `chrisgrieser/nvim-origami` | `a137d35` | 2026-08-03 | [`lua/plugins/fold-origami.lua`](file:///home/georgek/.config/nvim/lua/plugins/fold-origami.lua) | ✓ Up to date |
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | Stable session persistence |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
-| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `e08832b` | 2026-10-01 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #62 merged: distinct preview buffers native upstream; Issue #63 open for discussion) |
-| **vim-dadbod** | `tpope/vim-dadbod` | `6d1d41d` | 2026-01-06 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Stable database engine (backend connection provider for completion) |
-| **vim-dadbod-completion** | `kristijanhusak/vim-dadbod-completion` | `a8dac0b` | 2025-03-19 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | Schema metadata provider; bridges to `lua/utils/dadbod-blink.lua` |
+| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `c620d23` | 2026-10-02 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #62, PR #64 merged; commit `01cf139` added native `blink.cmp` completion) |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
 | **plenary.nvim** | `nvim-lua/plenary.nvim` | `74b06c6` | 2026-04-10 | Dependency | Shared Lua library |
 | **nui.nvim** | `MunifTanjim/nui.nvim` | `10fc361` | 2026-08-21 | Dependency | UI components for sqmeow & snacks |
@@ -94,9 +92,9 @@ flowchart TD
     end
 
     subgraph Database Suite
-        SQMEOW["2giosangmitom/sqmeow.nvim"]
-        DADBOD["tpope/vim-dadbod"]
-        DADBOD_BLINK["lua/utils/dadbod-blink.lua"]
+        SQMEOW["2giosangmitom/sqmeow.nvim<br/>(Rust Engine, Drawer, UI)"]
+        BLINK_SQMEOW["sqmeow.completion.blink<br/>(Tree-sitter SQL columns & schemas)"]
+        SQL_KW["lua/utils/sql-keywords-blink.lua<br/>(SQL Boilerplate & Keywords)"]
     end
 
     SNACKS -.->|replaces Telescope/Fzf| BLINK

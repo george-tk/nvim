@@ -7,3 +7,5 @@ spell/
 lazy-lock.json
 *.py
 my_environment
+assets/
+todo.json

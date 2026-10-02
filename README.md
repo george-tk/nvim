@@ -1,6 +1,6 @@
 # Personal Neovim Configuration
 
-A modern, fast, modular Neovim IDE configuration powered by [`lazy.nvim`](https://github.com/folke/lazy.nvim), [`snacks.nvim`](https://github.com/folke/snacks.nvim), [`vim-dadbod-ui`](https://github.com/kristijanhusak/vim-dadbod-ui), [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim), [`neocodeium`](https://github.com/monkoose/neocodeium), [`blink.cmp`](https://github.com/saghen/blink.cmp), and [`nvim-origami`](https://github.com/chrisgrieser/nvim-origami).
+A modern, fast, modular Neovim IDE configuration powered by [`lazy.nvim`](https://github.com/folke/lazy.nvim), [`snacks.nvim`](https://github.com/folke/snacks.nvim), [`sqmeow.nvim`](https://github.com/2giosangmitom/sqmeow.nvim), [`opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim), [`neocodeium`](https://github.com/monkoose/neocodeium), [`blink.cmp`](https://github.com/saghen/blink.cmp), and [`nvim-origami`](https://github.com/chrisgrieser/nvim-origami).
 
 ---
 
@@ -39,7 +39,7 @@ To enable all features (fuzzy pickers, code completion, Tree-sitter parsers, dat
 | **`unzip`, `tar`, `curl`** | Required by `mason.nvim` to download and unpack LSPs and formatters |
 | **`nodejs` & `npm` / `pnpm`** | Required for Mason formatters & LSPs (`prettier`, `sql-formatter`, etc.) |
 | **`python3` & `pip`** | Python language support and linters |
-| **`sqlite3`** | SQLite CLI engine for `vim-dadbod` and local database testing |
+| **`sqlite3`** | SQLite CLI engine for local database testing |
 | **`opencode` CLI** *(Optional)* | AI coding assistant integration (`opencode.nvim`) |
 
 #### One-Liner Dependency Installation by OS:

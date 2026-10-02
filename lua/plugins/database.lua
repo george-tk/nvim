@@ -1,8 +1,5 @@
 local M = {}
 
--- Silence dadbod completion notifications and redraw prompts
-vim.g.vim_dadbod_completion_disable_notifications = 1
-
 local sqmeow_dir = vim.fs.normalize(vim.fn.stdpath('data') .. '/sqmeow')
 local sqmeow_scratch_dir = vim.fs.normalize(sqmeow_dir .. '/scratch')
 local sqmeow_conn_file = sqmeow_dir .. '/connections.json'
@@ -304,12 +301,8 @@ function M.set_active_connection(name, url)
     if vim.api.nvim_buf_is_valid(buf) then
       local ft = vim.bo[buf].filetype
       if ft == 'sql' or ft == 'mysql' or ft == 'plsql' then
-        vim.b[buf].db = url
         vim.b[buf].db_name = name
         vim.b[buf].sqmeow_connection = name
-        pcall(function()
-          vim.cmd('call vim_dadbod_completion#fetch(' .. buf .. ')')
-        end)
       end
     end
   end
@@ -499,7 +492,6 @@ function M.setup_drawer_helpers()
       local db_url, db_name = M.get_active_db(buf)
       if db_name then
         vim.b[buf].sqmeow_connection = db_name
-        vim.b[buf].db = db_url
         vim.b[buf].db_name = db_name
         M.ensure_sqmeow_connection(db_name)
       end
@@ -641,9 +633,7 @@ function M.setup_drawer_helpers()
       if file_path then
         local buf = require('sqmeow.ui.editor').open_path(file_path)
         if db_name then
-          local db_url = M.get_connection_url(db_name)
           vim.b[buf].sqmeow_connection = db_name
-          vim.b[buf].db = db_url
           vim.b[buf].db_name = db_name
           M.ensure_sqmeow_connection(db_name)
         end
@@ -662,8 +652,7 @@ function M.setup_drawer_helpers()
     if buf and vim.api.nvim_buf_is_valid(buf) then
       vim.b[buf].is_preview_buffer = true
 
-      if M.current_db then
-        vim.b[buf].db = M.current_db
+      if M.current_db_name then
         vim.b[buf].db_name = M.current_db_name
       end
       local group = vim.api.nvim_create_augroup('SqmeowPreviewSave', { clear = false })
@@ -700,7 +689,7 @@ function M.setup_drawer_helpers()
     return res
   end
 
-  -- 6. Hook drawer.actions.use to synchronize Dadbod / completion state on connection switch
+  -- 6. Hook drawer.actions.use to synchronize connection state on connection switch
   local orig_use = drawer.actions.use
   drawer.actions.use = function(...)
     local res = orig_use(...)
@@ -713,13 +702,12 @@ function M.setup_drawer_helpers()
       M.current_db_name = conn.name
       M.save_active_connection(conn.name, conn_url)
 
-      -- Synchronize dadbod context on the active editor buffer if present
+      -- Synchronize connection context on the active editor buffer if present
       local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
       local buf = (ed_win and vim.api.nvim_win_is_valid(ed_win)) and vim.api.nvim_win_get_buf(ed_win) or vim.api.nvim_get_current_buf()
       if buf and vim.api.nvim_buf_is_valid(buf) and (vim.bo[buf].filetype == 'sql' or vim.b[buf].sqmeow_connection) then
-        vim.b[buf].db = conn_url
         vim.b[buf].db_name = conn.name
-        pcall(vim.cmd, 'call vim_dadbod_completion#fetch(' .. buf .. ')')
+        vim.b[buf].sqmeow_connection = conn.name
       end
     end
     return res
@@ -855,12 +843,10 @@ end
 function M.activate_connection(name, url, callback)
   M.set_active_connection(name, url)
   local cur_buf = vim.api.nvim_get_current_buf()
-  vim.b[cur_buf].db = url
   vim.b[cur_buf].db_name = name
   vim.b[cur_buf].sqmeow_connection = name
   pcall(function()
     require('sqmeow.ui.editor').update_winbar()
-    vim.cmd('call vim_dadbod_completion#fetch(' .. cur_buf .. ')')
   end)
 
   -- Sync connection in sqmeow natively (supports clusters and single-db via PR #57)
@@ -1116,7 +1102,6 @@ function M.open_query_scratchpad()
     sqmeow_api.scratchpad(nil, default_prefix)
     local cur_buf = vim.api.nvim_get_current_buf()
     if M.current_db then
-      vim.b[cur_buf].db = M.current_db
       vim.b[cur_buf].db_name = M.current_db_name
       vim.b[cur_buf].sqmeow_connection = M.current_db_name
     end
@@ -1151,7 +1136,6 @@ function M.run_query()
     if M.current_db_name then
       db_name = M.current_db_name
       db_url = M.current_db
-      vim.b[cur_buf].db = db_url
       vim.b[cur_buf].db_name = db_name
       vim.b[cur_buf].sqmeow_connection = db_name
     else
@@ -1268,7 +1252,6 @@ function M.save_query(force_prompt)
       local new_buf = vim.api.nvim_get_current_buf()
       vim.bo[new_buf].filetype = 'sql'
       vim.bo[new_buf].buftype = ''
-      vim.b[new_buf].db = db_url or M.current_db
       vim.b[new_buf].db_name = db_name
       vim.b[new_buf].sqmeow_connection = db_name
       local prev_table = vim.b[buf] and vim.b[buf].sqmeow_table
@@ -1346,8 +1329,6 @@ function M.select_saved_query()
     local buf = editor.open_path(choice.file)
     local target_db = choice.db_name or M.current_db_name
     if target_db then
-      local db_url = M.get_connection_url(target_db) or M.current_db
-      vim.b[buf].db = db_url
       vim.b[buf].db_name = target_db
       vim.b[buf].sqmeow_connection = target_db
       M.ensure_sqmeow_connection(target_db)
@@ -1364,19 +1345,6 @@ end, { desc = 'Clean up duplicate connections in sqmeow drawer' })
 _G.DatabaseUtils = M
 
 return {
-  -- Core Database Engine (Dadbod) - provides connection & execution fallback
-  {
-    'tpope/vim-dadbod',
-    cmd = { 'DB' },
-    ft = { 'sql', 'mysql', 'plsql' },
-  },
-
-  -- Database Completion for Blink.cmp (Fast, buffer-local column & table autocomplete)
-  {
-    'kristijanhusak/vim-dadbod-completion',
-    dependencies = { 'tpope/vim-dadbod' },
-    ft = { 'sql', 'mysql', 'plsql' },
-  },
 
   -- UI component library required by sqmeow
   {
@@ -1416,15 +1384,8 @@ return {
           vim.opt_local.spell = false
           if db_url and M.is_accessible(db_url) then
             pcall(function()
-              vim.b[buf].db = db_url
               vim.b[buf].db_name = db_name
               vim.b[buf].sqmeow_connection = db_name
-            end)
-            vim.schedule(function()
-              pcall(function()
-                require('lazy').load({ plugins = { 'vim-dadbod-completion' } })
-                vim.cmd('call vim_dadbod_completion#fetch(' .. buf .. ')')
-              end)
             end)
           end
           pcall(function()

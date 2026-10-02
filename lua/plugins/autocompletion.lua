@@ -35,7 +35,7 @@ return {
 
         -- Lazy-load VSCode snippets from friendly-snippets
         require('luasnip.loaders.from_vscode').lazy_load {
-          include = { 'lua', 'markdown' },
+          include = { 'lua', 'markdown', 'sql' },
         }
       end,
     },
@@ -152,7 +152,7 @@ return {
           if vim.bo.filetype == 'opencode_ask' then
             return { 'lsp', 'buffer' }
           elseif vim.bo.filetype == 'sql' or vim.bo.filetype == 'mysql' or vim.bo.filetype == 'plsql' then
-            return { 'dadbod', 'lsp', 'snippets', 'buffer' }
+            return { 'sqmeow', 'sql_keywords', 'lsp', 'snippets', 'buffer' }
           elseif vim.bo.filetype == 'markdown' or vim.bo.filetype == 'text' or vim.bo.filetype == 'gitcommit' then
             if not (vim.g.markdown_autocomplete_enabled or vim.b.markdown_autocomplete_enabled) then
               return {}
@@ -220,11 +220,18 @@ return {
             },
           },
 
-          -- Database completion with intelligent table-aware prioritization
-          dadbod = {
-            name = 'Dadbod',
-            module = 'utils.dadbod-blink',
+          -- Sqmeow native database completion (schemas, tables, views, columns, query-aware)
+          sqmeow = {
+            name = 'Sqmeow',
+            module = 'sqmeow.completion.blink',
             score_offset = 100,
+          },
+
+          -- Standalone SQL keywords, clauses, and boilerplate phrases
+          sql_keywords = {
+            name = 'SQL',
+            module = 'utils.sql-keywords-blink',
+            score_offset = 50,
           },
 
           -- keep LazyDev provider
