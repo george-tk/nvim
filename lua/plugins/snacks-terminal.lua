@@ -5,7 +5,7 @@ return {
       enabled = true,
       win = {
         position = 'bottom',
-        relative = 'win',
+        relative = 'editor',
         height = 0.38,
         wo = {
           winbar = '',

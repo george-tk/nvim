@@ -1438,7 +1438,7 @@ return {
           vim.keymap.set('n', '<C-j>', function() _G.BottomPanel.toggle_active() end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
           vim.keymap.set('n', 'q', function()
             if _G.RightPanel then
-              _G.RightPanel.close()
+              _G.RightPanel.close_all()
             else
               require('sqmeow.api').close_drawer()
             end
