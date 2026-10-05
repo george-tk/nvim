@@ -564,7 +564,7 @@ Upstream now keys preview buffers per relation (`preview_bufs[key]`), preserves 
 
 ### Issue 12: Respect result.page_size for drawer preview relation limit [PR #64 / Issue #63]
 
-> **Status**: **PR OPEN UPSTREAM** ([PR #64](https://github.com/2giosangmitom/sqmeow.nvim/pull/64) / [Issue #63](https://github.com/2giosangmitom/sqmeow.nvim/issues/63)).
+> **Status**: **RESOLVED & MERGED UPSTREAM** ([PR #64](https://github.com/2giosangmitom/sqmeow.nvim/pull/64) / [Issue #63](https://github.com/2giosangmitom/sqmeow.nvim/issues/63)). Merged into master in commit `c620d23` and released in `v2.5.0` (`962e25a`).
 
 **Title**: `feat(drawer): respect ui.result.page_size for relation preview`
 
