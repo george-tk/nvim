@@ -403,8 +403,9 @@ end
 
 --- Open a new blank buffer for editing
 ---@param filetype? string Optional filetype to assign
+---@param target_slot? integer Optional explicit slot in ring (1..4)
 ---@return integer buf The new buffer ID
-function M.new_buffer(filetype)
+function M.new_buffer(filetype, target_slot)
   local win = get_target_window()
   if not win or not vim.api.nvim_win_is_valid(win) then
     win = vim.api.nvim_get_current_win()
@@ -426,16 +427,23 @@ function M.new_buffer(filetype)
   end
 
   vim.api.nvim_win_set_buf(win, buf)
-  M.on_buf_enter(buf)
+  if target_slot and target_slot >= 1 and target_slot <= M.max_slots then
+    M.clean_slots()
+    M.slots[target_slot] = buf
+    M.touch(buf)
+  else
+    M.on_buf_enter(buf)
+  end
   pcall(function() require('lualine').refresh() end)
 
   return buf
 end
 
 --- Create a new buffer with chosen filetype via picker
-function M.create_filetype_buffer()
+---@param target_slot? integer Optional explicit slot to place buffer in
+function M.create_filetype_buffer(target_slot)
   M.select_filetype('New Buffer Filetype (Enter for Plain)', function(choice)
-    M.new_buffer(choice.ft)
+    M.new_buffer(choice.ft, target_slot)
   end)
 end
 
