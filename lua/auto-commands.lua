@@ -188,4 +188,34 @@ function M.choose_fold_level(level_to_apply)
   end
 end
 
+-- Restore cursor position on file open from ShaDa mark '"'
+api.nvim_create_autocmd('BufReadPost', {
+  group = api.nvim_create_augroup('UserLastPositionJump', { clear = true }),
+  callback = function(args)
+    local bt = vim.bo[args.buf].buftype
+    local ft = vim.bo[args.buf].filetype
+    if bt ~= '' or ft == 'gitcommit' or ft == 'gitrebase' or ft == 'commit' or ft == 'diff' then
+      return
+    end
+    local mark = api.nvim_buf_get_mark(args.buf, '"')
+    local line_count = api.nvim_buf_line_count(args.buf)
+    if mark[1] > 0 and mark[1] <= line_count then
+      pcall(api.nvim_win_set_cursor, 0, mark)
+      pcall(vim.cmd, 'normal! zv')
+    end
+  end,
+  desc = 'Restore last cursor position on file open from ShaDa mark',
+})
+
+-- Pre-warm explorer git status cache on directory change or session load
+api.nvim_create_autocmd({ 'DirChanged', 'SessionLoadPost' }, {
+  group = api.nvim_create_augroup('UserExplorerGitPrewarm', { clear = true }),
+  callback = function()
+    pcall(function()
+      require('snacks.explorer.git').update(vim.fn.getcwd(), { untracked = true })
+    end)
+  end,
+  desc = 'Pre-warm explorer git status cache on directory change or session load',
+})
+
 return M
