@@ -50,6 +50,7 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | ✓ Project-linked sessions, multi-event auto-save (FocusLost, BufWritePost, DirChangedPre) |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
 | **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `962e25a` (`v2.5.0`) | 2026-10-04 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date on `v2.5.0` (PR #62, PR #64 merged; native `blink.cmp` & project config) |
+| **jira.nvim** | `letieu/jira.nvim` | `fefe20d` | 2026-09-26 | [`lua/plugins/jira.lua`](file:///home/georgek/.config/nvim/lua/plugins/jira.lua) | ⚠️ Testing branch (`feat/jira-testing`); dynamic `Snacks.picker` multi-project routing |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
 | **plenary.nvim** | `nvim-lua/plenary.nvim` | `74b06c6` | 2026-04-10 | Dependency | Shared Lua library |
 | **nui.nvim** | `MunifTanjim/nui.nvim` | `10fc361` | 2026-08-21 | Dependency | UI components for sqmeow & snacks |
@@ -302,6 +303,14 @@ Hardened the layout engine in [`lua/key-mapping.lua`](file:///home/georgek/.conf
 - Bound to `ensure_right_sidebar_precedence()`, `RightPanel.close_all()`, `WinClosed`, and `VimResized` autocommands, ensuring splits stay equally wide when sidebars open, close, or resize.
 - Added custom split ratio tracking in `smart_resize_width`: if the user explicitly alters split widths with `<M-h>` / `<M-l>`, their custom proportion is preserved across sidebar toggles; otherwise, splits remain strictly equal.
 - Standardized `<C-w>=` to clear custom ratios and restore equal geometry without executing destructive global `wincmd =` calls that corrupt Snacks picker layout boxes.
+
+### Tweak 13: Jira.nvim Integration with Dynamic Multi-Project Snacks.picker [TESTING]
+- Added `letieu/jira.nvim` on testing branch `feat/jira-testing`.
+- Implemented [`lua/utils/jira-picker.lua`](file:///home/georgek/.config/nvim/lua/utils/jira-picker.lua) providing dynamic multi-project selection, state persistence (`stdpath('state')/jira_active_projects.json`), and project caching.
+- Enforced user's picker navigation standards: `<Tab>` / `<S-Tab>` strictly navigates list items; `<Space>` / `<C-Space>` / `x` toggles project selection.
+- Created universal issue finder (`<leader>jf`) and my tasks (`<leader>jm`) querying `project IN (...)` with status badges and action keys (`<CR>`, `<C-e>`, `<C-b>`, `<C-o>`, `<C-y>`).
+- Bound `<leader>jj` (double character) as primary Jira Board entrypoint, and `<leader>jc` for issue creation with unified 1-vs-many project routing.
+- Guarded `smart_close` in [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua) to dismiss floating windows cleanly on `<C-q>` and `<leader>q`.
 
 ---
 

@@ -966,6 +966,13 @@ local function smart_close()
   local cur_buf = vim.api.nvim_win_get_buf(cur_win)
   local info = get_win_info(cur_win)
 
+  -- 0. If inside any floating window (e.g. Jira Board, Issue Reader, Popups): close cleanly
+  local cfg = vim.api.nvim_win_get_config(cur_win)
+  if cfg.relative and cfg.relative ~= '' then
+    pcall(vim.api.nvim_win_close, cur_win, true)
+    return
+  end
+
   -- 1. If inside Right Panel (Explorer, DBUI, AI): close/hide the Right Panel
   if info.is_explorer or info.is_dbui or info.is_opencode then
     RightPanel.close_all()

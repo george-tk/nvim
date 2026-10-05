@@ -18,6 +18,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>m', group = 'Markdown' },
       { '<leader>s', group = 'Spelling' },
       { '<leader>w', group = 'Window' },
+      { '<leader>j', group = 'Jira' },
 
       -- Direct 1-Key Actions
       { '<leader>t', desc = 'Terminal', mode = { 'n', 't' } },
@@ -136,6 +137,15 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>we', desc = 'Balance Splits' },
       { '<leader>wq', desc = 'Close Window Split' },
       { '<leader>wo', desc = 'Close Other Splits' },
+
+      -- Jira Group (<leader>j)
+      { '<leader>jj', desc = 'Jira Board (Home)' },
+      { '<leader>jf', desc = 'Find Issues' },
+      { '<leader>jm', desc = 'My Tasks' },
+      { '<leader>jc', desc = 'Create Issue' },
+      { '<leader>jp', desc = 'Select Projects' },
+      { '<leader>ji', desc = 'Issue Details' },
+      { '<leader>ja', desc = 'Jira Auth / Login' },
     },
   },
 }
