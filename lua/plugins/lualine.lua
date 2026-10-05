@@ -9,6 +9,7 @@ return {
   -- Initialize buffer-ring and define fixed slot keymaps (<leader>1 to <leader>4)
   init = function()
     require('utils.buffer-ring').setup()
+    require('utils.terminal-tracker').setup()
 
     for i = 1, 4 do
       vim.keymap.set('n', '<leader>' .. i, function()
@@ -61,6 +62,34 @@ return {
       -- update_in_insert = false, -- default is false; keep it that way for less churn
     }
 
+    -- Resolve active editor buffer (locks to editor file so tool panels don't jitter the right side)
+    local function get_active_editor_buf()
+      local ed_win = nil
+      if _G.RightPanel and _G.RightPanel.get_editor_win then
+        ed_win = _G.RightPanel.get_editor_win()
+      end
+      if ed_win and vim.api.nvim_win_is_valid(ed_win) then
+        local b = vim.api.nvim_win_get_buf(ed_win)
+        if vim.api.nvim_buf_is_valid(b) then
+          return b
+        end
+      end
+
+      local ok_ring, ring = pcall(require, 'utils.buffer-ring')
+      if ok_ring and ring and ring.is_qualifying then
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          if vim.api.nvim_win_is_valid(w) then
+            local b = vim.api.nvim_win_get_buf(w)
+            if ring.is_qualifying(b) then
+              return b
+            end
+          end
+        end
+      end
+
+      return vim.api.nvim_get_current_buf()
+    end
+
     return {
       options = {
         component_separators = { left = '', right = '' },
@@ -94,18 +123,27 @@ return {
           },
         },
 
-        -- Show active database when editing SQL buffers
+        -- Right-side sections: Terminal Instances tracker & Active database
         lualine_x = {
           {
             function()
-              local db_name = vim.b.db_name
+              return require('utils.terminal-tracker').lualine_component()
+            end,
+            padding = { left = 0, right = 1 },
+          },
+          {
+            function()
+              local cur_buf = get_active_editor_buf()
+              local db_name = vim.b[cur_buf].db_name
               if not db_name and _G.DatabaseUtils and _G.DatabaseUtils.current_db_name then
                 db_name = _G.DatabaseUtils.current_db_name
               end
               return db_name and ('󰆼 ' .. db_name) or ''
             end,
             cond = function()
-              return vim.bo.filetype == 'sql' or vim.bo.filetype == 'mysql' or vim.bo.filetype == 'plsql'
+              local cur_buf = get_active_editor_buf()
+              local ft = vim.bo[cur_buf].filetype
+              return ft == 'sql' or ft == 'mysql' or ft == 'plsql'
             end,
             color = { fg = '#fab387', gui = 'bold' },
           },
@@ -113,7 +151,7 @@ return {
         lualine_y = {
           {
             function()
-              local cur_buf = vim.api.nvim_get_current_buf()
+              local cur_buf = get_active_editor_buf()
               local bname = vim.api.nvim_buf_get_name(cur_buf)
               if vim.b[cur_buf].is_preview_buffer or bname:match('%[Preview: ') then
                 return '󰆼 preview'
