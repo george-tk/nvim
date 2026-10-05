@@ -47,7 +47,7 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **render-markdown.nvim** | `MeanderingProgrammer/render-markdown.nvim` | `640a3ec` (`v8.14.0`) | 2026-09-14 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L3) | ✓ Multiline table cells & virtual line rendering |
 | **mkdnflow.nvim** | `jakewvincent/mkdnflow.nvim` | `272148c` | 2026-07-03 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L37) | Retained per user request |
 | **nvim-origami** | `chrisgrieser/nvim-origami` | `a137d35` | 2026-08-03 | [`lua/plugins/fold-origami.lua`](file:///home/georgek/.config/nvim/lua/plugins/fold-origami.lua) | ✓ Up to date |
-| **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | Stable session persistence |
+| **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | ✓ Project-linked sessions, multi-event auto-save (FocusLost, BufWritePost, DirChangedPre) |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
 | **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `c620d23` | 2026-10-02 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date (PR #62, PR #64 merged; commit `01cf139` added native `blink.cmp` completion) |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
@@ -276,6 +276,32 @@ Streamlined the `<leader>f` keybinding map in [`lua/plugins/snacks-picker.lua`](
 - `<leader>fh`: `Snacks.picker.help()` (Help Tags)
 - `<leader>fk`: `Snacks.picker.keymaps()` (Keymaps)
 - Dropped redundant/colliding binds: `<leader>fc` (config), `<leader>fs` (sessions; removed from `session-manager.lua`), `<leader>fi` (images; removed from `snacks-image.lua` in favor of `<leader>mi`), `<leader>fb` (buffers), `<leader>fl` (lines), `<leader>fg` (workspace grep - unified into `<leader>fw`), `<leader>fd` (diagnostics - handled by `<leader>cD`), and old `<leader>fa` (migrated to `<leader>fp`).
+
+### Tweak 9: Project-Linked Session Persistence & Buffer Parity [RESOLVED]
+- Restored last cursor position on file open from ShaDa mark `"` in [`lua/auto-commands.lua`](file:///home/georgek/.config/nvim/lua/auto-commands.lua).
+- Enhanced [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) with comprehensive debounced auto-save on `BufDelete`, `BufWipeout`, `BufReadPost`, `BufWritePost`, `FocusLost`, and `DirChangedPre`.
+- Added automatic isolation and cleanup of database preview buffers (`[Preview: ...]`), preventing phantom buffers from ever being written into session files.
+- Added `PersistenceLoadPost` autocommand to automatically wipe empty unnamed placeholder buffers left behind after session load.
+- Aligned dashboard `r` (Restore Session) and Project selection in [`lua/plugins/snacks-dashboard.lua`](file:///home/georgek/.config/nvim/lua/plugins/snacks-dashboard.lua) and `<leader>d` in [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua) to cleanly evict existing buffers before restoring, guaranteeing 100% identical buffer states regardless of whether entering via `r` or Project selection.
+
+### Tweak 10: Strict 3-Zone Docking Layout & Collapse Prevention [RESOLVED]
+Hardened the layout engine in [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua):
+- **Center Editor Zone**: Guaranteed never to collapse. Closing the last editor window (`<leader>wq`) safely deletes the buffer via `smart_close` (`enew`), and `WinClosed` prevents sidebars/terminals from ever expanding to 100% full screen.
+- **Unified Bottom Zone**: Terminals set to `relative = 'editor'` with `winfixheight = true`. Terminals and SQL query results share a single bottom floor (never stack vertically). Support side-by-side vertical splits in the bottom panel via `BottomPanel.split_terminal()` and `<leader>wv`.
+- **Right Panel Zone**: Sidebars dock on the right edge (`wincmd L`).
+- **Spatial Navigation**: Context-aware `<C-l>`, `<C-h>`, `<C-j>`, `<C-k>` route seamlessly between vertical editor splits, bottom panel splits, and sidebars without jumping prematurely.
+
+### Tweak 11: OpenCode AI Width Locking & Resizing Permanence [RESOLVED]
+- Fixed root cause of OpenCode shrinking to 35 columns on navigation: OpenCode (`snacks_terminal`) was being caught by `ft:match('^snacks_')` in `ensure_right_sidebar_precedence()` and `reset_window_layout()`.
+- Differentiated OpenCode from general sidebars; OpenCode now defaults to 38% width (`math.max(45, math.floor(vim.o.columns * 0.38))`) and standard sidebars to 35 columns.
+- Added persistent tracking for manual split adjustments made via `<M-h>` / `<M-l>` (`RightPanel.custom_widths`), preventing navigation `<C-h>` or layout recalculations from overriding the user's custom width.
+
+### Tweak 12: Split Width Equalization Across Sidebar Lifecycles [RESOLVED]
+- Solved asymmetry where closing the right sidebar caused the rightmost window (Terminal 2 or rightmost editor split) to absorb all freed columns while the leftmost split remained small.
+- Implemented `equalize_splits()` in [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua): calculates available width (`vim.o.columns` minus sidebar width) and distributes it equally across all vertical splits in both the editor and bottom zones.
+- Bound to `ensure_right_sidebar_precedence()`, `RightPanel.close_all()`, `WinClosed`, and `VimResized` autocommands, ensuring splits stay equally wide when sidebars open, close, or resize.
+- Added custom split ratio tracking in `smart_resize_width`: if the user explicitly alters split widths with `<M-h>` / `<M-l>`, their custom proportion is preserved across sidebar toggles; otherwise, splits remain strictly equal.
+- Standardized `<C-w>=` to clear custom ratios and restore equal geometry without executing destructive global `wincmd =` calls that corrupt Snacks picker layout boxes.
 
 ---
 
