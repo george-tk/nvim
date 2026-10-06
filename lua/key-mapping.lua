@@ -350,7 +350,14 @@ function RightPanel.close_all()
       local bname = vim.api.nvim_buf_get_name(buf):lower()
       local ft = vim.bo[buf].filetype
       if ft == 'dbui' or ft == 'sqmeow-drawer' then
-        pcall(function() require('sqmeow.api').close_drawer() end)
+        pcall(function()
+          local ok_v, view = pcall(require, 'sqmeow.api.view')
+          if ok_v and view then
+            view.close_drawer()
+          else
+            require('sqmeow.api').close_drawer()
+          end
+        end)
         pcall(vim.api.nvim_win_close, win, true)
       elseif (ft:match('opencode') or bname:find('opencode')) and not (ok_t and term and term.win == win) then
         pcall(vim.api.nvim_win_close, win, true)
@@ -548,7 +555,14 @@ local function close_dbout_win()
       local buf = vim.api.nvim_win_get_buf(win)
       local ft = vim.bo[buf].filetype
       if ft == 'dbout' or ft == 'sqmeow-result' then
-        pcall(function() require('sqmeow.api').close() end)
+        pcall(function()
+          local ok_v, view = pcall(require, 'sqmeow.api.view')
+          if ok_v and view then
+            view.close()
+          else
+            require('sqmeow.api').close()
+          end
+        end)
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
@@ -799,11 +813,18 @@ function BottomPanel.open_dbout()
     return
   end
 
-  local ok, sqmeow_api = pcall(require, 'sqmeow.api')
-  if ok then
+  local ok_v, view_api = pcall(require, 'sqmeow.api.view')
+  if not ok_v then
+    pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
+    ok_v, view_api = pcall(require, 'sqmeow.api.view')
+  end
+  if not ok_v then
+    ok_v, view_api = pcall(require, 'sqmeow.api')
+  end
+  if ok_v and view_api and view_api.open then
     hide_terminal_if_visible()
     BottomPanel.active_mode = 'dbout'
-    sqmeow_api.open()
+    view_api.open()
 
     -- Ensure focus moves directly to the query result window instead of remaining in editor
     local res_win = nil
