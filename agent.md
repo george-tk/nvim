@@ -303,6 +303,12 @@ Hardened the layout engine in [`lua/key-mapping.lua`](file:///home/georgek/.conf
 - Added custom split ratio tracking in `smart_resize_width`: if the user explicitly alters split widths with `<M-h>` / `<M-l>`, their custom proportion is preserved across sidebar toggles; otherwise, splits remain strictly equal.
 - Standardized `<C-w>=` to clear custom ratios and restore equal geometry without executing destructive global `wincmd =` calls that corrupt Snacks picker layout boxes.
 
+### Tweak 13: Universal Slot Navigation via Leader & Alt Numbers [RESOLVED]
+- Mapped `<leader>1` through `<leader>4` and `<M-1>` through `<M-4>` directly to `smart_goto_slot(i)` in [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua).
+- Retired legacy `buffer-ring.jump(i)` from [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua), guaranteeing `<leader>1`..`<leader>4` uses full context routing (jumps or creates filetype buffers in editor, switches/creates terminal instances in terminal, returns from sidebars).
+- Added `<M-1>` through `<M-4>` (`Alt+1`..`Alt+4`) across all modes (`{'n', 't', 'i'}`) to allow direct 1-touch switching in terminal insert mode and WSL environments where Windows Terminal intercepts or does not encode Ctrl+Number.
+- Guarded `smart_close()` to dismiss floating windows cleanly on `<C-q>` and `<leader>q`.
+
 ---
 
 ## 5. Future Maintenance Runbook (Next Sessions)

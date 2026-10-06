@@ -6,16 +6,10 @@ return {
     { 'nvim-tree/nvim-web-devicons', lazy = true },
   },
 
-  -- Initialize buffer-ring and define fixed slot keymaps (<leader>1 to <leader>4)
+  -- Initialize buffer-ring and terminal-tracker
   init = function()
     require('utils.buffer-ring').setup()
     require('utils.terminal-tracker').setup()
-
-    for i = 1, 4 do
-      vim.keymap.set('n', '<leader>' .. i, function()
-        require('utils.buffer-ring').jump(i)
-      end, { desc = 'Buffer Slot ' .. i })
-    end
   end,
 
   opts = function()
