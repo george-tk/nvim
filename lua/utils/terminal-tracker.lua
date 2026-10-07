@@ -61,7 +61,7 @@ local function resolve_terminal_label(pid, buf)
 
   -- Priority 1: Active running command
   if has_child and comm and comm ~= '' then
-    return comm .. ' ●'
+    return comm .. ' '
   end
 
   -- Priority 2: Subfolder if terminal cwd differs from Neovim cwd
@@ -162,6 +162,30 @@ function M.invalidate()
   cache.timestamp = 0
 end
 
+-- Resolve active highlight matching current mode
+local function get_active_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local name = 'lualine_a' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(name) == 1 then
+      return name
+    end
+  end
+  return 'TerminalTrackerActive'
+end
+
+-- Resolve inactive highlight (transparent background with mode font color)
+local function get_inactive_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local name = 'lualine_b' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(name) == 1 then
+      return name
+    end
+  end
+  return 'TerminalTrackerInactive'
+end
+
 -- Lualine component formatter
 function M.lualine_component()
   local terms = M.get_terminals()
@@ -172,20 +196,17 @@ function M.lualine_component()
   local cur_win = vim.api.nvim_get_current_win()
   local cur_buf = vim.api.nvim_get_current_buf()
   local win_buf = vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_buf(cur_win) or cur_buf
-  local mode = vim.fn.mode()
-  local active_hl = (mode == 't') and 'lualine_a_terminal' or 'lualine_a_normal'
+  local active_hl = get_active_hl()
+  local inactive_hl = get_inactive_hl()
 
   local parts = {}
-
-  -- Leading terminal icon separator
-  table.insert(parts, '%#lualine_b_normal#  %*')
 
   for _, t in ipairs(terms) do
     local is_active = (t.buf == cur_buf or t.buf == win_buf)
     if is_active then
       table.insert(parts, string.format('%%#%s# %d: %s %%*', active_hl, t.id, t.label))
     else
-      table.insert(parts, string.format('%%#lualine_c_normal# %d: %s %%*', t.id, t.label))
+      table.insert(parts, string.format('%%#%s# %d: %s %%*', inactive_hl, t.id, t.label))
     end
   end
 

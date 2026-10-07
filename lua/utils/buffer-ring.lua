@@ -538,11 +538,37 @@ function M.is_pinned(buf)
   return M.pinned[buf] == true
 end
 
+-- Resolve active highlight matching current mode
+local function get_active_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local name = 'lualine_a' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(name) == 1 then
+      return name
+    end
+  end
+  return 'BufferRingActive'
+end
+
+-- Resolve inactive highlight (transparent background with mode font color)
+local function get_inactive_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local name = 'lualine_b' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(name) == 1 then
+      return name
+    end
+  end
+  return 'BufferRingInactive'
+end
+
 --- Format the 4-slot ring for Lualine
 ---@return string
 function M.lualine_component()
   M.clean_slots()
   local cur_buf = vim.api.nvim_get_current_buf()
+  local active_hl = get_active_hl()
+  local inactive_hl = get_inactive_hl()
   local items = {}
 
   for i = 1, M.max_slots do
@@ -564,9 +590,9 @@ function M.lualine_component()
 
       -- Style active vs inactive slots (clean highlight badge without extra separators)
       if is_active then
-        table.insert(items, string.format('%%#lualine_a_normal# %d %s%s%s %%*', i, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %d %s%s%s %%*', active_hl, i, pin, name, modified))
       else
-        table.insert(items, string.format('%%#lualine_c_normal# %d %s%s%s %%*', i, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %d %s%s%s %%*', inactive_hl, i, pin, name, modified))
       end
     end
   end

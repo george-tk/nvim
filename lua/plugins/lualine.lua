@@ -8,53 +8,88 @@ return {
 
   -- Initialize buffer-ring and terminal-tracker
   init = function()
+    local function setup_dock_highlights()
+      local ok, ctp = pcall(require, 'catppuccin.palettes')
+      local C = ok and ctp.get_palette('mocha') or {}
+      local blue = C.blue or '#89b4fa'
+      local base = C.base or '#1e1e2e'
+
+      vim.api.nvim_set_hl(0, 'BufferRingActive', { bg = blue, fg = base, bold = true, default = true })
+      vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = 'NONE', fg = blue, default = true })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerActive', { bg = blue, fg = base, bold = true, default = true })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = 'NONE', fg = blue, default = true })
+    end
+
+    setup_dock_highlights()
+    vim.api.nvim_create_autocmd('ColorScheme', {
+      callback = setup_dock_highlights,
+    })
+
     require('utils.buffer-ring').setup()
     require('utils.terminal-tracker').setup()
   end,
 
   opts = function()
     -- Helpers
-    local function in_git_repo()
-      -- Fast check: only runs when statusline renders
-      local ok, git = pcall(vim.b, 'gitsigns_head')
-      -- If gitsigns has attached it sets b:gitsigns_head; fallback to checking git dir
-      if ok and type(git) == 'string' and git ~= '' then
-        return true
+    -- Centered mode with fixed width (10 columns) to prevent mode-switch jitter
+    local function center_mode(str)
+      local clean = vim.trim(str or '')
+      local width = 10
+      local len = vim.fn.strdisplaywidth(clean)
+      if len >= width then
+        return clean
       end
-      -- fallback (cheap): look for .git from current file
-      local dir = vim.fn.finddir('.git', '.;')
-      return dir ~= ''
+      local total_pad = width - len
+      local left_pad = math.floor(total_pad / 2)
+      local right_pad = total_pad - left_pad
+      return string.rep(' ', left_pad) .. clean .. string.rep(' ', right_pad)
     end
 
-    -- Diff component that defers to gitsigns if available and only in repos
-    local diff_component = {
-      'diff',
-      source = function()
-        local ok, gs = pcall(require, 'gitsigns')
-        if ok and gs.get_hunks then
-          local hunks = gs.get_hunks()
-          if not hunks then
-            return nil
-          end
-          local added, changed, removed = 0, 0, 0
-          for _, h in ipairs(hunks) do
-            if h.type == 'add' then
-              added = added + h.added.count
-            elseif h.type == 'change' then
-              changed = changed + h.added.count + h.removed.count
-            elseif h.type == 'delete' then
-              removed = removed + h.removed.count
-            end
-          end
-          return { added = added, modified = changed, removed = removed }
+    -- Persistent workspace branch tracker (retains branch name on DB queries and non-workspace buffers)
+    local last_branch_time = 0
+    local cached_workspace_branch = ''
+
+    local function get_workspace_branch()
+      local b_head = vim.b.gitsigns_head
+      if b_head and b_head ~= '' then
+        cached_workspace_branch = b_head
+        return cached_workspace_branch
+      end
+
+      local ok_gs, gs = pcall(require, 'gitsigns')
+      if ok_gs and gs.get_head then
+        local head = gs.get_head()
+        if head and head ~= '' then
+          cached_workspace_branch = head
+          return cached_workspace_branch
         end
-        -- fallback: let lualine run its own lightweight diff (may show 0s)
-        return nil
+      end
+
+      local now = (vim.uv or vim.loop).now()
+      if (now - last_branch_time) < 1500 and cached_workspace_branch ~= '' then
+        return cached_workspace_branch
+      end
+      last_branch_time = now
+
+      local cwd = vim.fn.getcwd()
+      local out = vim.fn.system('git -C ' .. vim.fn.shellescape(cwd) .. ' branch --show-current 2>/dev/null')
+      if out and out ~= '' and not out:find('fatal') then
+        local trimmed = vim.trim(out)
+        if trimmed ~= '' then
+          cached_workspace_branch = trimmed
+          return cached_workspace_branch
+        end
+      end
+
+      return cached_workspace_branch
+    end
+
+    vim.api.nvim_create_autocmd('DirChanged', {
+      callback = function()
+        cached_workspace_branch = ''
+        last_branch_time = 0
       end,
-      cond = in_git_repo,
-      -- Optional: throttle refresh a bit to avoid recomputing too often
-      -- update_in_insert = false, -- default is false; keep it that way for less churn
-    }
+    })
 
     -- Resolve active editor buffer (locks to editor file so tool panels don't jitter the right side)
     local function get_active_editor_buf()
@@ -84,8 +119,49 @@ return {
       return vim.api.nvim_get_current_buf()
     end
 
+    -- Transparent statusline theme: mode-colored active blocks with black text, mode-colored inactive text
+    local function get_theme()
+      local ok, ctp = pcall(require, 'catppuccin.palettes')
+      if not ok then return 'auto' end
+      local C = ctp.get_palette('mocha')
+      local function make_mode(accent)
+        return {
+          a = { bg = accent, fg = C.base, gui = 'bold' },
+          b = { bg = 'NONE', fg = accent },
+          c = { bg = 'NONE', fg = accent },
+          x = { bg = 'NONE', fg = accent },
+          y = { bg = 'NONE', fg = accent },
+          z = { bg = 'NONE', fg = accent },
+        }
+      end
+      return {
+        normal = {
+          a = { bg = C.blue, fg = C.base, gui = 'bold' },
+          b = { bg = 'NONE', fg = C.blue },
+          c = { bg = 'NONE', fg = C.blue },
+          x = { bg = 'NONE', fg = C.blue },
+          y = { bg = 'NONE', fg = C.blue },
+          z = { bg = 'NONE', fg = C.blue },
+        },
+        insert = make_mode(C.green),
+        terminal = make_mode(C.green),
+        command = make_mode(C.peach),
+        visual = make_mode(C.mauve),
+        replace = make_mode(C.red),
+        inactive = {
+          a = { bg = 'NONE', fg = C.surface1, gui = 'bold' },
+          b = { bg = 'NONE', fg = C.surface1 },
+          c = { bg = 'NONE', fg = C.surface1 },
+          x = { bg = 'NONE', fg = C.surface1 },
+          y = { bg = 'NONE', fg = C.surface1 },
+          z = { bg = 'NONE', fg = C.surface1 },
+        },
+      }
+    end
+
     return {
       options = {
+        theme = get_theme(),
         component_separators = { left = '', right = '' },
         section_separators = { left = '', right = '' },
         -- If you don’t need icons, set to false and delete the devicons dep
@@ -102,11 +178,21 @@ return {
       },
 
       sections = {
-        lualine_a = { 'mode' },
-        -- Keep branch (light), but only inside repos
+        lualine_a = {
+          {
+            'mode',
+            fmt = center_mode,
+            padding = { left = 0, right = 0 },
+          },
+        },
         lualine_b = {
-          { 'branch', cond = in_git_repo },
-          diff_component,
+          {
+            get_workspace_branch,
+            icon = '󰊢',
+            cond = function()
+              return get_workspace_branch() ~= ''
+            end,
+          },
         },
         lualine_c = {
           {

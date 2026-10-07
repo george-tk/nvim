@@ -22,8 +22,10 @@ return {
         CursorLineNr = { fg = colors.text, bold = true },
         CursorLine = { bg = colors.surface0 },
         Visual = { bg = colors.surface0 },
-        WinSeparator = { fg = colors.surface0 },
-        VertSplit = { fg = colors.surface0 },
+        WinSeparator = { fg = colors.surface2 },
+        VertSplit = { fg = colors.surface2 },
+        StatusLine = { bg = 'NONE', fg = colors.text },
+        StatusLineNC = { bg = 'NONE', fg = colors.text },
         NormalNC = { bg = 'NONE' },
         NormalFloat = { bg = 'NONE' },
         FloatBorder = { fg = colors.surface2, bg = 'NONE' },
@@ -61,6 +63,12 @@ return {
 
         -- Inlay hints: dimmed elegant ghost labels
         LspInlayHint = { fg = colors.overlay0, bg = 'NONE', italic = true },
+
+        -- Lualine transparent statusline: mode-colored active blocks with black text, mode-colored inactive text
+        BufferRingActive = { bg = colors.blue, fg = colors.base, bold = true },
+        BufferRingInactive = { bg = 'NONE', fg = colors.blue },
+        TerminalTrackerActive = { bg = colors.blue, fg = colors.base, bold = true },
+        TerminalTrackerInactive = { bg = 'NONE', fg = colors.blue },
       }
     end,
   },
