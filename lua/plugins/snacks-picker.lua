@@ -125,7 +125,7 @@ return {
       function()
         Snacks.picker.grep {
           search = function(p)
-            return p.visual and p.visual.text or nil
+            return p.visual and p.visual.text or ''
           end,
         }
       end,
