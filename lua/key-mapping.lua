@@ -1001,6 +1001,9 @@ _G.BottomPanel = BottomPanel
 vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
   pattern = { 'dbout', 'sqmeow-result' },
   callback = function(args)
+    local ft = vim.bo[args.buf].filetype
+    local name = vim.api.nvim_buf_get_name(args.buf)
+    if ft == 'sqmeow-drawer' or name:find('drawer') then return end
     BottomPanel.last_dbout_buf = args.buf
     BottomPanel.active_mode = 'dbout'
     -- Sqmeow creates its result split directly, so hide the shell before both remain visible.

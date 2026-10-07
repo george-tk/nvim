@@ -1632,17 +1632,31 @@ return {
 
       -- Result window coordination: keymaps, navigation, sticky headers & winbar
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter', 'BufEnter', 'WinEnter' }, {
-        pattern = { 'sqmeow-result', 'sqmeow://*' },
+        pattern = { 'sqmeow-result', 'sqmeow://result*' },
         callback = function(args)
+          local buf_ft = vim.bo[args.buf].filetype
+          local buf_name = vim.api.nvim_buf_get_name(args.buf)
+          -- Guard: Never run on database drawer! sqmeow://drawer is the right sidebar, not query results!
+          if buf_ft == 'sqmeow-drawer' or buf_name:find('drawer') then
+            return
+          end
+          if buf_ft ~= 'sqmeow-result' and buf_ft ~= 'dbout' and not buf_name:find('sqmeow://result') then
+            return
+          end
+
           vim.opt_local.spell = false
           for _, w in ipairs(vim.fn.win_findbuf(args.buf)) do
             if vim.api.nvim_win_is_valid(w) then
               vim.wo[w].spell = false
+              vim.wo[w].winfixheight = true
+              vim.wo[w].winfixbuf = true
             end
           end
           local cur_win = vim.api.nvim_get_current_win()
           if vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_buf(cur_win) == args.buf then
             vim.wo[cur_win].spell = false
+            vim.wo[cur_win].winfixheight = true
+            vim.wo[cur_win].winfixbuf = true
           end
           vim.bo[args.buf].buflisted = false
           if _G.BottomPanel then
