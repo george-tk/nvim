@@ -270,6 +270,46 @@ local function ensure_right_sidebar_precedence()
   equalize_splits()
 end
 
+_G.ensure_right_sidebar_precedence = ensure_right_sidebar_precedence
+
+-- Reset and balance all windows back to clean default IDE geometry
+local function reset_window_layout()
+  local default_bot_height = math.floor(vim.o.lines * 0.38)
+
+  RightPanel.custom_widths = {}
+  RightPanel.has_custom_editor_widths = false
+  RightPanel.has_custom_bottom_widths = false
+
+  local cur = vim.api.nvim_get_current_win()
+
+  -- Re-apply exact sidebar widths and bottom panel heights, clear custom ratios
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      vim.w[win].custom_split_ratio = nil
+      local cfg = vim.api.nvim_win_get_config(win)
+      if not cfg.relative or cfg.relative == '' then
+        local info = get_win_info(win)
+        if info.is_opencode then
+          pcall(vim.api.nvim_win_set_width, win, math.max(45, math.floor(vim.o.columns * 0.38)))
+        elseif info.is_explorer or info.is_dbui then
+          pcall(vim.api.nvim_win_set_width, win, 35)
+        elseif info.is_terminal then
+          pcall(vim.api.nvim_win_set_height, win, default_bot_height)
+        end
+      end
+    end
+  end
+
+  ensure_right_sidebar_precedence()
+  equalize_splits()
+
+  if vim.api.nvim_win_is_valid(cur) then
+    vim.api.nvim_set_current_win(cur)
+  end
+end
+
+_G.reset_window_layout = reset_window_layout
+
 local function get_editor_win()
   -- If current window is an editor window, keep focus on it
   local cur = vim.api.nvim_get_current_win()
@@ -949,16 +989,23 @@ function BottomPanel.toggle_active(count)
   BottomPanel.open_terminal(target_count)
 end
 
+BottomPanel.hide_terminal = hide_terminal_if_visible
+BottomPanel.close_dbout = close_dbout_win
+BottomPanel.ensure_precedence = ensure_right_sidebar_precedence
+BottomPanel.equalize_splits = equalize_splits
+BottomPanel.reset_layout = reset_window_layout
+
 _G.BottomPanel = BottomPanel
 
 -- Track query results buffer automatically
-vim.api.nvim_create_autocmd('FileType', {
+vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
   pattern = { 'dbout', 'sqmeow-result' },
   callback = function(args)
     BottomPanel.last_dbout_buf = args.buf
     BottomPanel.active_mode = 'dbout'
     -- Sqmeow creates its result split directly, so hide the shell before both remain visible.
     hide_terminal_if_visible()
+    ensure_right_sidebar_precedence()
   end,
 })
 
@@ -1356,7 +1403,7 @@ end
 
 vim.keymap.set('n', '<leader>ws', function() editor_split('horizontal') end, { desc = 'Split Horizontally' })
 vim.keymap.set('n', '<leader>wv', function() editor_split('vertical') end, { desc = 'Split Vertically' })
-vim.keymap.set('n', '<leader>we', function() _G.reset_window_layout() end, { desc = 'Balance Window Splits' })
+vim.keymap.set('n', '<leader>we', function() reset_window_layout() end, { desc = 'Balance Window Splits' })
 vim.keymap.set('n', '<leader>wq', smart_close_window, { desc = 'Close Window Split' })
 vim.keymap.set('n', '<leader>wo', function()
   local ed = get_editor_win()
@@ -1864,42 +1911,6 @@ local function smart_resize_height(delta)
   local cur_h = vim.api.nvim_win_get_height(cur_win)
   local new_h = math.max(4, cur_h + delta)
   pcall(vim.api.nvim_win_set_height, cur_win, new_h)
-end
-
--- Reset and balance all windows back to clean default IDE geometry
-local function reset_window_layout()
-  local default_bot_height = math.floor(vim.o.lines * 0.38)
-
-  RightPanel.custom_widths = {}
-  RightPanel.has_custom_editor_widths = false
-  RightPanel.has_custom_bottom_widths = false
-
-  local cur = vim.api.nvim_get_current_win()
-
-  -- Re-apply exact sidebar widths and bottom panel heights, clear custom ratios
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_win_is_valid(win) then
-      vim.w[win].custom_split_ratio = nil
-      local cfg = vim.api.nvim_win_get_config(win)
-      if not cfg.relative or cfg.relative == '' then
-        local info = get_win_info(win)
-        if info.is_opencode then
-          pcall(vim.api.nvim_win_set_width, win, math.max(45, math.floor(vim.o.columns * 0.38)))
-        elseif info.is_explorer or info.is_dbui then
-          pcall(vim.api.nvim_win_set_width, win, 35)
-        elseif info.is_terminal then
-          pcall(vim.api.nvim_win_set_height, win, default_bot_height)
-        end
-      end
-    end
-  end
-
-  ensure_right_sidebar_precedence()
-  equalize_splits()
-
-  if vim.api.nvim_win_is_valid(cur) then
-    vim.api.nvim_set_current_win(cur)
-  end
 end
 
 _G.smart_resize_width = smart_resize_width

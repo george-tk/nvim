@@ -555,18 +555,47 @@ end
 
 function M.setup_drawer_helpers()
   local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
-  -- Hook sqmeow.ui.result to ensure spellchecking is disabled on result windows
+  -- Hook sqmeow.ui.result to ensure spellchecking is disabled on result windows and coordinate with BottomPanel layout
   local ok_res, result = pcall(require, 'sqmeow.ui.result')
   if ok_res and result and not M._result_spell_hooked then
     M._result_spell_hooked = true
     if result.open then
       local orig_open = result.open
       result.open = function(...)
+        if _G.BottomPanel and _G.BottomPanel.hide_terminal then
+          _G.BottomPanel.hide_terminal()
+        end
+        if _G.BottomPanel then
+          _G.BottomPanel.active_mode = 'dbout'
+        end
         local rwin = orig_open(...)
         if rwin and vim.api.nvim_win_is_valid(rwin) then
           vim.wo[rwin].spell = false
+          vim.wo[rwin].winfixheight = true
+          vim.wo[rwin].winfixbuf = true
         end
+        local function rebalance()
+          if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
+            _G.BottomPanel.ensure_precedence()
+          end
+        end
+        rebalance()
+        vim.schedule(rebalance)
         return rwin
+      end
+    end
+    if result.close then
+      local orig_close = result.close
+      result.close = function(...)
+        local ret = orig_close(...)
+        local function rebalance()
+          if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
+            _G.BottomPanel.ensure_precedence()
+          end
+        end
+        rebalance()
+        vim.schedule(rebalance)
+        return ret
       end
     end
     if result.open_float then
@@ -1282,6 +1311,13 @@ function M.run_query()
 
   -- Ensure active in sqmeow without duplicating connection
   M.ensure_sqmeow_connection(db_name)
+  M.setup_drawer_helpers()
+  if _G.BottomPanel and _G.BottomPanel.hide_terminal then
+    _G.BottomPanel.hide_terminal()
+  end
+  if _G.BottomPanel then
+    _G.BottomPanel.active_mode = 'dbout'
+  end
 
   local mode = vim.api.nvim_get_mode().mode
   local is_visual = mode:match('[vV\x16]') ~= nil
@@ -1295,6 +1331,9 @@ function M.run_query()
 
   if _G.BottomPanel then
     _G.BottomPanel.active_mode = 'dbout'
+    if _G.BottomPanel.ensure_precedence then
+      _G.BottomPanel.ensure_precedence()
+    end
   end
 end
 
@@ -1609,6 +1648,12 @@ return {
           if _G.BottomPanel then
             _G.BottomPanel.last_dbout_buf = args.buf
             _G.BottomPanel.active_mode = 'dbout'
+            if _G.BottomPanel.hide_terminal then
+              _G.BottomPanel.hide_terminal()
+            end
+            if _G.BottomPanel.ensure_precedence then
+              _G.BottomPanel.ensure_precedence()
+            end
           end
 
           -- First/Last column navigation (next/prev column are now built-in upstream on <Tab>/<S-Tab> and ]c/[c)
@@ -1621,6 +1666,9 @@ return {
               view_api.close()
             else
               require('sqmeow.api').close()
+            end
+            if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
+              _G.BottomPanel.ensure_precedence()
             end
             local ed = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
             if ed and vim.api.nvim_win_is_valid(ed) then
