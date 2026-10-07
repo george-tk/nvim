@@ -1375,12 +1375,11 @@ local session_stability_group = vim.api.nvim_create_augroup('UserSessionStabilit
 local function is_database_or_transient_buf(buf)
   if not vim.api.nvim_buf_is_valid(buf) then return false end
   local ft = vim.bo[buf].filetype
-  if ft == 'sqmeow-drawer' or ft == 'sqmeow-output' or ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
+  if ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'sqmeow-output' or ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
   local bname = vim.api.nvim_buf_get_name(buf)
-  if bname:match('^%[') or vim.b[buf].is_preview_buffer then return true end
-  if bname:find('/sqmeow/') ~= nil or bname:find('/db_ui/') ~= nil then return true end
+  if (bname:match('^%[Preview:') or vim.b[buf].is_preview_buffer) and vim.bo[buf].buftype == 'nofile' then return true end
+  if bname:find('/db_ui/') ~= nil then return true end
   if bname:match('%.sqlite%d?$') or bname:match('%.db$') then return true end
-  if vim.b[buf].sqmeow_connection ~= nil or vim.b[buf].dbui_db_key_name ~= nil then return true end
   return false
 end
 

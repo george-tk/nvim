@@ -555,8 +555,31 @@ end
 
 function M.setup_drawer_helpers()
   local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
-  if not ok or M._drawer_helpers_initialized then return end
-  M._drawer_helpers_initialized = true
+  -- Hook sqmeow.ui.result to ensure spellchecking is disabled on result windows
+  local ok_res, result = pcall(require, 'sqmeow.ui.result')
+  if ok_res and result and not M._result_spell_hooked then
+    M._result_spell_hooked = true
+    if result.open then
+      local orig_open = result.open
+      result.open = function(...)
+        local rwin = orig_open(...)
+        if rwin and vim.api.nvim_win_is_valid(rwin) then
+          vim.wo[rwin].spell = false
+        end
+        return rwin
+      end
+    end
+    if result.open_float then
+      local orig_open_float = result.open_float
+      result.open_float = function(...)
+        local rwin = orig_open_float(...)
+        if rwin and vim.api.nvim_win_is_valid(rwin) then
+          vim.wo[rwin].spell = false
+        end
+        return rwin
+      end
+    end
+  end
 
   -- 1. Hook sqmeow.ui.editor so scratchpads opened from database folders attach connection context
   local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
@@ -1288,14 +1311,8 @@ function M.save_query(force_prompt)
   local existing_db_name = nil
 
   if not force_prompt and current_name ~= '' and vim.fn.filereadable(current_name) == 1 then
-    local cur_dir = vim.fs.normalize(vim.fn.fnamemodify(current_name, ':h'))
-    for _, c in ipairs(conns) do
-      local expected_sq = vim.fs.normalize(sqmeow_scratch_dir .. '/' .. c.name)
-      if cur_dir == expected_sq then
-        is_existing_saved = true
-        existing_db_name = c.name
-        break
-      end
+    if current_name:sub(1, #sqmeow_scratch_dir) == sqmeow_scratch_dir then
+      is_existing_saved = true
     end
   end
 
@@ -1472,12 +1489,25 @@ return {
     end,
     init = function()
       -- Database UI and result buffers inherit the global spell setting otherwise.
-      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
-        pattern = { 'dbui', 'dbout', 'sqmeow-drawer', 'sqmeow-result' },
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter', 'BufEnter', 'WinEnter' }, {
         callback = function(args)
-          vim.opt_local.spell = false
-          for _, win in ipairs(vim.fn.win_findbuf(args.buf)) do
-            vim.wo[win].spell = false
+          local buf = args.buf or vim.api.nvim_get_current_buf()
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+          local ft = vim.bo[buf].filetype
+          local name = vim.api.nvim_buf_get_name(buf)
+          if ft == 'dbui' or ft == 'dbout' or ft == 'sqmeow-drawer' or ft == 'sqmeow-result'
+            or name:find('sqmeow://') ~= nil
+          then
+            vim.opt_local.spell = false
+            for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+              if vim.api.nvim_win_is_valid(win) then
+                vim.wo[win].spell = false
+              end
+            end
+            local cur_win = vim.api.nvim_get_current_win()
+            if vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_buf(cur_win) == buf then
+              vim.wo[cur_win].spell = false
+            end
           end
         end,
       })
@@ -1562,13 +1592,18 @@ return {
       })
 
       -- Result window coordination: keymaps, navigation, sticky headers & winbar
-      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
-        pattern = 'sqmeow-result',
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter', 'BufEnter', 'WinEnter' }, {
+        pattern = { 'sqmeow-result', 'sqmeow://*' },
         callback = function(args)
           vim.opt_local.spell = false
-          local win = vim.fn.bufwinid(args.buf)
-          if win > 0 then
-            vim.wo[win].spell = false
+          for _, w in ipairs(vim.fn.win_findbuf(args.buf)) do
+            if vim.api.nvim_win_is_valid(w) then
+              vim.wo[w].spell = false
+            end
+          end
+          local cur_win = vim.api.nvim_get_current_win()
+          if vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_buf(cur_win) == args.buf then
+            vim.wo[cur_win].spell = false
           end
           vim.bo[args.buf].buflisted = false
           if _G.BottomPanel then

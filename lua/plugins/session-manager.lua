@@ -14,7 +14,7 @@ return {
         return false
       end
       local name = vim.api.nvim_buf_get_name(b)
-      if name == '' or name:match('^%[') or name:find('/sqmeow/') or name:find('/db_ui/') or name:match('%.sqlite%d?$') or name:match('%.db$') then
+      if name == '' or name:match('^%[') or name:find('/db_ui/') or name:match('%.sqlite%d?$') or name:match('%.db$') then
         return false
       end
       return true
@@ -32,8 +32,12 @@ return {
     local function cleanup_transient_bufs()
       for _, b in ipairs(vim.api.nvim_list_bufs()) do
         if vim.api.nvim_buf_is_valid(b) then
+          local ft = vim.bo[b].filetype
           local name = vim.api.nvim_buf_get_name(b)
-          if name:match('^%[') or vim.b[b].is_preview_buffer or name:find('/sqmeow/') or name:find('/db_ui/') then
+          if ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'dbui' or ft == 'dbout'
+            or (vim.b[b].is_preview_buffer and vim.bo[b].buftype == 'nofile')
+            or (name:match('^%[Preview:') and vim.bo[b].buftype == 'nofile')
+          then
             pcall(vim.api.nvim_buf_delete, b, { force = true })
           end
         end
@@ -42,7 +46,6 @@ return {
 
     local function safe_save()
       if has_real_bufs() then
-        cleanup_transient_bufs()
         pcall(function() persistence.save() end)
       end
     end
