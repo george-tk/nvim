@@ -156,11 +156,22 @@ local function equalize_splits()
 
   local function balance_group(wins, has_custom_flag)
     if #wins <= 1 then return end
-    table.sort(wins, function(a, b)
-      return vim.api.nvim_win_get_position(a)[2] < vim.api.nvim_win_get_position(b)[2]
-    end)
 
-    local n = #wins
+    -- Group windows by unique horizontal column position
+    local col_map = {}
+    local cols = {}
+    for _, w in ipairs(wins) do
+      local c = vim.api.nvim_win_get_position(w)[2]
+      if not col_map[c] then
+        col_map[c] = w
+        table.insert(cols, c)
+      end
+    end
+
+    if #cols <= 1 then return end
+    table.sort(cols)
+
+    local n = #cols
     local seps = n - 1
     local net_w = avail_w - seps
     if net_w <= 0 then return end
@@ -168,13 +179,15 @@ local function equalize_splits()
     if not has_custom_flag then
       local target = math.floor(net_w / n)
       for i = 1, n - 1 do
-        pcall(vim.api.nvim_win_set_width, wins[i], target)
+        local w = col_map[cols[i]]
+        pcall(vim.api.nvim_win_set_width, w, target)
       end
     else
       for i = 1, n - 1 do
-        local r = vim.w[wins[i]].custom_split_ratio or (1 / n)
+        local w = col_map[cols[i]]
+        local r = vim.w[w].custom_split_ratio or (1 / n)
         local target = math.max(12, math.floor(net_w * r))
-        pcall(vim.api.nvim_win_set_width, wins[i], target)
+        pcall(vim.api.nvim_win_set_width, w, target)
       end
     end
   end
@@ -439,6 +452,8 @@ function RightPanel.toggle_active()
 end
 
 RightPanel.get_editor_win = get_editor_win
+RightPanel.ensure_precedence = ensure_right_sidebar_precedence
+RightPanel.equalize_splits = equalize_splits
 
 -------------------------------------------------------------------------------
 -- Unified Bottom-Panel Manager (Persistent Terminals | SQL Results)
@@ -463,13 +478,11 @@ local function close_dbout_win()
 end
 
 local function hide_terminal_if_visible()
-  local tracker_ok, tracker = pcall(require, 'utils.terminal-tracker')
-  if tracker_ok and tracker.get_terminals then
-    tracker.invalidate()
-    local terms = tracker.get_terminals()
-    for _, t in ipairs(terms) do
-      if t.term then
-        pcall(function() t.term:hide() end)
+  local ok, list = pcall(function() return Snacks.terminal.list() end)
+  if ok and type(list) == 'table' then
+    for _, t in ipairs(list) do
+      if t and t.win and vim.api.nvim_win_is_valid(t.win) and vim.b[t.buf].panel_zone == 'bottom' then
+        pcall(function() t:hide() end)
       end
     end
   end
@@ -543,9 +556,14 @@ function BottomPanel.open_terminal(count)
     vim.api.nvim_set_current_win(ed)
   end
 
+  local r_win = get_right_sidebar_win()
+  local relative = (r_win and vim.api.nvim_win_is_valid(r_win) and ed) and 'win' or 'editor'
+  local win_target = (relative == 'win') and ed or nil
+
   local win_opts = {
     position = 'bottom',
-    relative = 'editor',
+    relative = relative,
+    win = win_target,
     height = 0.38,
     wo = {
       winbar = '',
@@ -560,6 +578,8 @@ function BottomPanel.open_terminal(count)
     win = win_opts,
   })
   if target_term then
+    target_term.opts.relative = relative
+    target_term.opts.win = win_target
     target_term:show()
     if target_term.buf and vim.api.nvim_buf_is_valid(target_term.buf) then
       vim.b[target_term.buf].panel_zone = 'bottom'
@@ -612,12 +632,17 @@ function BottomPanel.split_terminal(count)
     end
   end
   local target_count = (count and count > 0 and count) or (max_id + 1)
+  local ed = get_editor_win()
+  local r_win = get_right_sidebar_win()
+  local relative = (r_win and vim.api.nvim_win_is_valid(r_win) and ed) and 'win' or 'editor'
+  local win_target = (relative == 'win') and ed or nil
 
   Snacks.terminal.open(nil, {
     count = target_count,
     win = {
       position = 'bottom',
-      relative = 'editor',
+      relative = relative,
+      win = win_target,
       height = 0.38,
       wo = {
         winbar = '',
@@ -1295,17 +1320,25 @@ local function setup_autocmds()
 
   -- Track query results buffer automatically
   vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
-    pattern = { 'dbout', 'sqmeow-result' },
+    pattern = '*',
     callback = function(args)
-      local ft = vim.bo[args.buf].filetype
-      local name = vim.api.nvim_buf_get_name(args.buf)
-      if ft == 'sqmeow-drawer' or name:find('drawer') then return end
-      vim.b[args.buf].panel_zone = 'bottom'
-      vim.b[args.buf].panel_type = 'dbout'
-      BottomPanel.last_dbout_buf = args.buf
-      BottomPanel.active_mode = 'dbout'
-      hide_terminal_if_visible()
-      ensure_right_sidebar_precedence()
+      local buf = args.buf
+      if not vim.api.nvim_buf_is_valid(buf) then return end
+      local ft = vim.bo[buf].filetype
+      local name = vim.api.nvim_buf_get_name(buf)
+      if (ft == 'dbout' or ft == 'sqmeow-result' or name:find('sqmeow://result') ~= nil)
+        and ft ~= 'sqmeow-drawer' and not name:find('drawer')
+      then
+        vim.b[buf].panel_zone = 'bottom'
+        vim.b[buf].panel_type = 'dbout'
+        BottomPanel.last_dbout_buf = buf
+        BottomPanel.active_mode = 'dbout'
+        hide_terminal_if_visible()
+        local win = vim.fn.bufwinid(buf)
+        if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          vim.schedule(ensure_right_sidebar_precedence)
+        end
+      end
     end,
   })
 

@@ -45,8 +45,6 @@ return {
       return string.rep(' ', left_pad) .. clean .. string.rep(' ', right_pad)
     end
 
-    -- Persistent workspace branch tracker (retains branch name on DB queries and non-workspace buffers)
-    local last_branch_time = 0
     local cached_workspace_branch = ''
 
     local function get_workspace_branch()
@@ -65,29 +63,12 @@ return {
         end
       end
 
-      local now = (vim.uv or vim.loop).now()
-      if (now - last_branch_time) < 1500 and cached_workspace_branch ~= '' then
-        return cached_workspace_branch
-      end
-      last_branch_time = now
-
-      local cwd = vim.fn.getcwd()
-      local out = vim.fn.system('git -C ' .. vim.fn.shellescape(cwd) .. ' branch --show-current 2>/dev/null')
-      if out and out ~= '' and not out:find('fatal') then
-        local trimmed = vim.trim(out)
-        if trimmed ~= '' then
-          cached_workspace_branch = trimmed
-          return cached_workspace_branch
-        end
-      end
-
       return cached_workspace_branch
     end
 
     vim.api.nvim_create_autocmd('DirChanged', {
       callback = function()
         cached_workspace_branch = ''
-        last_branch_time = 0
       end,
     })
 

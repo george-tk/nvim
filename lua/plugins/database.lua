@@ -71,21 +71,6 @@ return {
           vim.b[args.buf].panel_zone = 'right'
           vim.b[args.buf].panel_type = 'dbui'
           db.setup_drawer_helpers()
-          vim.opt_local.spell = false
-          local win = vim.fn.bufwinid(args.buf)
-          if win > 0 then
-            vim.wo[win].spell = false
-          end
-
-          vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(args.buf) then
-              local w = vim.fn.bufwinid(args.buf)
-              if w > 0 then
-                vim.wo[w].spell = false
-                vim.api.nvim_set_current_win(w)
-              end
-            end
-          end)
           vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
           vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
@@ -111,12 +96,7 @@ return {
             if _G.RightPanel then
               _G.RightPanel.close_all()
             else
-              local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-              if ok_v and view_api and view_api.close_drawer then
-                view_api.close_drawer()
-              else
-                require('sqmeow.api').close_drawer()
-              end
+              pcall(function() require('sqmeow.api.view').close_drawer() end)
             end
           end, { buffer = args.buf, silent = true, desc = 'Close Database Drawer' })
         end,
@@ -138,37 +118,24 @@ return {
 
           vim.b[args.buf].panel_zone = 'bottom'
           vim.b[args.buf].panel_type = 'dbout'
-          vim.opt_local.spell = false
+          vim.bo[args.buf].buflisted = false
           for _, w in ipairs(vim.fn.win_findbuf(args.buf)) do
             if vim.api.nvim_win_is_valid(w) then
-              vim.wo[w].spell = false
               vim.wo[w].winfixheight = true
               vim.wo[w].winfixbuf = true
             end
           end
-          local cur_win = vim.api.nvim_get_current_win()
-          if vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_buf(cur_win) == args.buf then
-            vim.wo[cur_win].spell = false
-            vim.wo[cur_win].winfixheight = true
-            vim.wo[cur_win].winfixbuf = true
-          end
-          vim.bo[args.buf].buflisted = false
           if _G.BottomPanel then
             _G.BottomPanel.last_dbout_buf = args.buf
             _G.BottomPanel.active_mode = 'dbout'
           end
 
-          -- First/Last column navigation (next/prev column are now built-in upstream on <Tab>/<S-Tab> and ]c/[c)
+          -- First/Last column navigation (next/prev column are built-in upstream on <Tab>/<S-Tab> and ]c/[c)
           vim.keymap.set('n', 'g0', function() db.first_result_column() end, { buffer = args.buf, silent = true, desc = 'First Column' })
           vim.keymap.set('n', 'g$', function() db.last_result_column() end, { buffer = args.buf, silent = true, desc = 'Last Column' })
 
           vim.keymap.set('n', 'q', function()
-            local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-            if ok_v and view_api and view_api.close then
-              view_api.close()
-            else
-              require('sqmeow.api').close()
-            end
+            pcall(function() require('sqmeow.api.view').close() end)
             if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
               _G.BottomPanel.ensure_precedence()
             end
@@ -264,12 +231,7 @@ return {
           if _G.BottomPanel then
             _G.BottomPanel.open_dbout()
           else
-            local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-            if ok_v and view_api and view_api.open then
-              view_api.open()
-            else
-              require('sqmeow.api').open()
-            end
+            pcall(function() require('sqmeow.api.view').open() end)
           end
         end,
         desc = 'Query Output',
@@ -291,24 +253,14 @@ return {
       {
         '<leader>bf',
         function()
-          local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-          if ok_v and view_api and view_api.toggle_float then
-            view_api.toggle_float()
-          else
-            require('sqmeow.api').toggle_float()
-          end
+          pcall(function() require('sqmeow.api.view').toggle_float() end)
         end,
         desc = 'Toggle Float Result',
       },
       {
         '<leader>bv',
         function()
-          local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-          if ok_v and view_api and view_api.review then
-            view_api.review()
-          else
-            require('sqmeow.api').review()
-          end
+          pcall(function() require('sqmeow.api.view').review() end)
         end,
         desc = 'Review & Apply In-Grid Edits',
       },
@@ -317,12 +269,7 @@ return {
         function()
           vim.ui.input({ prompt = 'Export Format (csv, json, sql): ', default = 'csv' }, function(fmt)
             if not fmt or fmt == '' then return end
-            local ok_e, exp_api = pcall(require, 'sqmeow.api.export')
-            if ok_e and exp_api and exp_api.export then
-              exp_api.export({ format = vim.trim(fmt), clipboard = true })
-            else
-              require('sqmeow.api').export({ format = vim.trim(fmt), clipboard = true })
-            end
+            pcall(function() require('sqmeow.api.export').export({ format = vim.trim(fmt), clipboard = true }) end)
           end)
         end,
         desc = 'Export Results',

@@ -198,59 +198,15 @@ end
 --- Find an appropriate editor window that can accept buffer changes
 ---@return integer win The window ID
 local function get_target_window()
-  local cur_win = vim.api.nvim_get_current_win()
-
-  -- Check if a window is an ordinary editor window (not a sidebar, drawer, bottom panel, or terminal)
-  local function is_editor_win(w)
-    if not w or not vim.api.nvim_win_is_valid(w) then return false end
-    if vim.api.nvim_win_get_tabpage(w) ~= vim.api.nvim_get_current_tabpage() then return false end
-    if vim.api.nvim_win_get_config(w).relative ~= '' then return false end
-    local b = vim.api.nvim_win_get_buf(w)
-    local ft = vim.bo[b].filetype
-    local bname = vim.api.nvim_buf_get_name(b):lower()
-    if ft:match('^sqmeow%-') or ft == 'sqmeow' or ft == 'dbui' or ft == 'dbout'
-       or ft:match('opencode') or bname:find('opencode')
-       or ft:match('terminal') or bname:find('term://')
-       or ft:match('^snacks_') or ft == 'neo-tree' or ft == 'qf' then
-      return false
-    end
-    return true
+  local ok, layout = pcall(require, 'utils.layout')
+  local win = ok and layout.get_editor_win and layout.get_editor_win()
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    win = vim.api.nvim_get_current_win()
   end
-
-  -- 1. If the current window is an editor window, use it
-  if is_editor_win(cur_win) then
-    if vim.fn.exists('&winfixbuf') == 1 and vim.wo[cur_win].winfixbuf then
-      vim.wo[cur_win].winfixbuf = false
-    end
-    return cur_win
+  if vim.fn.exists('&winfixbuf') == 1 and vim.wo[win].winfixbuf then
+    vim.wo[win].winfixbuf = false
   end
-
-  -- 2. Otherwise search for another open editor window
-  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if w ~= cur_win and is_editor_win(w) then
-      if vim.fn.exists('&winfixbuf') == 1 and vim.wo[w].winfixbuf then
-        vim.wo[w].winfixbuf = false
-      end
-      return w
-    end
-  end
-
-  -- 3. If no editor window found, search for any window without winfixbuf
-  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if vim.api.nvim_win_get_config(w).relative == '' then
-      if vim.fn.exists('&winfixbuf') == 0 or not vim.wo[w].winfixbuf then
-        return w
-      end
-    end
-  end
-
-  -- 4. Fallback: create a new editor split beside the current window
-  vim.cmd('botright vnew')
-  local new_win = vim.api.nvim_get_current_win()
-  if vim.fn.exists('&winfixbuf') == 1 then
-    vim.wo[new_win].winfixbuf = false
-  end
-  return new_win
+  return win
 end
 
 --- Safely switch to a buffer, handling windows with winfixbuf enabled
@@ -322,28 +278,25 @@ function M.prev_buffer()
   end
 end
 
---- Build curated list of filetypes with icons and descriptions
+--- Build list of filetypes for buffer creation
 ---@return table[] items
 local function get_filetype_items()
   local curated = {
-    { ft = '', text = '󰈔  Plain Text', desc = 'plain' },
-    { ft = 'lua', text = '  Lua', desc = 'lua' },
-    { ft = 'go', text = '  Go', desc = 'go' },
-    { ft = 'sql', text = '󰆼  SQL', desc = 'sql' },
-    { ft = 'python', text = '  Python', desc = 'python' },
-    { ft = 'typescript', text = '󰌞  TypeScript', desc = 'typescript ts' },
-    { ft = 'typescriptreact', text = '  TypeScript React (TSX)', desc = 'typescriptreact tsx' },
-    { ft = 'javascript', text = '  JavaScript', desc = 'javascript js' },
-    { ft = 'javascriptreact', text = '  JavaScript React (JSX)', desc = 'javascriptreact jsx' },
-    { ft = 'rust', text = '  Rust', desc = 'rust' },
-    { ft = 'markdown', text = '  Markdown', desc = 'markdown md' },
-    { ft = 'json', text = '󰘦  JSON', desc = 'json' },
-    { ft = 'yaml', text = '  YAML', desc = 'yaml yml' },
-    { ft = 'toml', text = '  TOML', desc = 'toml' },
-    { ft = 'html', text = '󰌝  HTML', desc = 'html' },
-    { ft = 'css', text = '󰌜  CSS', desc = 'css' },
-    { ft = 'sh', text = '  Bash / Shell', desc = 'sh bash zsh' },
-    { ft = 'dockerfile', text = '󰡨  Dockerfile', desc = 'dockerfile' },
+    { ft = '', text = 'Plain Text' },
+    { ft = 'lua', text = 'Lua' },
+    { ft = 'sql', text = 'SQL' },
+    { ft = 'python', text = 'Python' },
+    { ft = 'typescript', text = 'TypeScript' },
+    { ft = 'javascript', text = 'JavaScript' },
+    { ft = 'markdown', text = 'Markdown' },
+    { ft = 'json', text = 'JSON' },
+    { ft = 'yaml', text = 'YAML' },
+    { ft = 'toml', text = 'TOML' },
+    { ft = 'sh', text = 'Bash / Shell' },
+    { ft = 'rust', text = 'Rust' },
+    { ft = 'go', text = 'Go' },
+    { ft = 'html', text = 'HTML' },
+    { ft = 'css', text = 'CSS' },
   }
 
   local seen = {}
@@ -353,16 +306,10 @@ local function get_filetype_items()
     table.insert(items, item)
   end
 
-  local devicons_ok, devicons = pcall(require, 'nvim-web-devicons')
   for _, ft in ipairs(vim.fn.getcompletion('', 'filetype')) do
     if ft ~= '' and not seen[ft] then
       seen[ft] = true
-      local icon = '󰈔 '
-      if devicons_ok and devicons.get_icon_by_filetype then
-        local ic = devicons.get_icon_by_filetype(ft)
-        if ic then icon = ic .. ' ' end
-      end
-      table.insert(items, { ft = ft, text = icon .. ' ' .. ft, desc = ft })
+      table.insert(items, { ft = ft, text = ft })
     end
   end
 

@@ -9,67 +9,16 @@ local active_file = sqmeow_dir .. '/last_active.json'
 M.current_db = nil
 M.current_db_name = nil
 
--- Backward-compatibility shims for sqmeow modular API refactor (v2.5.0+)
-local function setup_sqmeow_shims()
-  if not package.preload['sqmeow.api'] then
-    package.preload['sqmeow.api'] = function()
-      local ok_v, view = pcall(require, 'sqmeow.api.view')
-      if not ok_v then
-        pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-        ok_v, view = pcall(require, 'sqmeow.api.view')
-      end
-      local ok_c, conn = pcall(require, 'sqmeow.api.connection')
-      local ok_q, qry = pcall(require, 'sqmeow.api.query')
-      local ok_e, exp = pcall(require, 'sqmeow.api.export')
-      local modules = { ok_v and view, ok_c and conn, ok_q and qry, ok_e and exp }
-      return setmetatable({}, {
-        __index = function(_, k)
-          for _, mod in ipairs(modules) do
-            if mod and mod[k] ~= nil then
-              return mod[k]
-            end
-          end
-          return nil
-        end,
-      })
-    end
+-- Helper to load sqmeow native modules with lazy fallback
+local function sqmeow(submod)
+  local mod_name = 'sqmeow.' .. submod
+  local ok, mod = pcall(require, mod_name)
+  if not ok then
+    pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
+    ok, mod = pcall(require, mod_name)
   end
-
-  if not package.preload['sqmeow.state'] then
-    package.preload['sqmeow.state'] = function()
-      local ok_s, state = pcall(require, 'sqmeow.core.state')
-      if not ok_s then
-        pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-        ok_s, state = pcall(require, 'sqmeow.core.state')
-      end
-      return ok_s and state or nil
-    end
-  end
-
-  if not package.preload['sqmeow.url'] then
-    package.preload['sqmeow.url'] = function()
-      local ok_u, url = pcall(require, 'sqmeow.core.url')
-      if not ok_u then
-        pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-        ok_u, url = pcall(require, 'sqmeow.core.url')
-      end
-      return ok_u and url or nil
-    end
-  end
-
-  if not package.preload['sqmeow.rpc'] then
-    package.preload['sqmeow.rpc'] = function()
-      local ok_r, rpc = pcall(require, 'sqmeow.rpc.client')
-      if not ok_r then
-        pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-        ok_r, rpc = pcall(require, 'sqmeow.rpc.client')
-      end
-      return ok_r and rpc or nil
-    end
-  end
+  return ok and mod or nil
 end
-
-setup_sqmeow_shims()
 
 -------------------------------------------------------------------------------
 -- Persistent Connection Storage & Management (sqmeow.nvim)
@@ -249,9 +198,8 @@ function M.get_connection_url(name)
   if not name or name == '' then return nil end
 
   -- Check active sqmeow connections first (e.g. child connections like "cluster/testdb")
-  local ok_state, state = pcall(require, 'sqmeow.core.state')
-  if not ok_state then ok_state, state = pcall(require, 'sqmeow.state') end
-  if ok_state and state and state.connections then
+  local state = sqmeow('core.state')
+  if state and state.connections then
     local conn = state.connection_by_name(name)
     if conn then
       if conn.database and conn.url and not conn.url:match('/' .. conn.database .. '$') then
@@ -292,18 +240,14 @@ function M.ensure_sqmeow_connection(db_name)
     return nil
   end
 
-  local ok_state, state = pcall(require, 'sqmeow.core.state')
-  if not ok_state then ok_state, state = pcall(require, 'sqmeow.state') end
-  local ok_api, api = pcall(require, 'sqmeow.api.connection')
-  if not ok_api or not api then
-    ok_api, api = pcall(require, 'sqmeow.api')
-  end
-  if not ok_api or not api then
+  local state = sqmeow('core.state')
+  local api = sqmeow('api.connection')
+  if not api or not state then
     return nil
   end
 
   -- If it is already an active open connection (including child connections like "cluster/testdb"), activate it
-  if ok_state and state and state.connections then
+  if state and state.connections then
     local conn = state.connection_by_name(db_name)
     if conn and conn.state ~= 'closed' then
       api.use(conn.id)
@@ -486,17 +430,8 @@ end
 -------------------------------------------------------------------------------
 
 function M.open_drawer()
-  local ok_view, view_api = pcall(require, 'sqmeow.api.view')
-  if not ok_view then
-    pcall(function()
-      require('lazy').load({ plugins = { 'sqmeow.nvim' } })
-    end)
-    ok_view, view_api = pcall(require, 'sqmeow.api.view')
-  end
-  if not ok_view or not view_api then
-    ok_view, view_api = pcall(require, 'sqmeow.api')
-  end
-  if not ok_view or not view_api then
+  local view_api = sqmeow('api.view')
+  if not view_api then
     vim.notify('sqmeow.nvim is not loaded yet', vim.log.levels.WARN, { title = 'Database' })
     return
   end
@@ -541,21 +476,21 @@ end
 
 --- Get the current in-memory preview buffer (provided natively by sqmeow)
 function M.preview_buffer()
-  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
-  return ok and drawer.preview_buffer() or nil
+  local drawer = sqmeow('ui.drawer')
+  return drawer and drawer.preview_buffer() or nil
 end
 
 --- Preview the relation under cursor in the in-memory editor buffer
 function M.open_preview_buffer(node)
-  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
-  if ok and drawer.actions and drawer.actions.preview then
+  local drawer = sqmeow('ui.drawer')
+  if drawer and drawer.actions and drawer.actions.preview then
     drawer.actions.preview()
   end
 end
 
 function M.setup_drawer_helpers()
-  local ok, drawer = pcall(require, 'sqmeow.ui.drawer')
-  if not ok or not drawer or not drawer.actions then return end
+  local drawer = sqmeow('ui.drawer')
+  if not drawer or not drawer.actions then return end
 
   -- 1. Hook drawer.actions.preview to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
   if not M._drawer_preview_hooked and drawer.actions.preview then
@@ -600,6 +535,14 @@ function M.setup_drawer_helpers()
         if ok_lualine and lualine.refresh then
           lualine.refresh()
         end
+
+        -- Guarantee right sidebar retains its 35-column width and vertical precedence
+        vim.schedule(function()
+          local ok_layout, layout = pcall(require, 'utils.layout')
+          if ok_layout and layout.RightPanel and layout.RightPanel.ensure_precedence then
+            layout.RightPanel.ensure_precedence()
+          end
+        end)
       end
       return res
     end
@@ -639,31 +582,31 @@ end
 -------------------------------------------------------------------------------
 
 function M.next_result_column()
-  local ok, result = pcall(require, 'sqmeow.ui.result')
-  if ok and result.actions and result.actions.next_column then
+  local result = sqmeow('ui.result')
+  if result and result.actions and result.actions.next_column then
     result.actions.next_column()
   end
 end
 
 function M.prev_result_column()
-  local ok, result = pcall(require, 'sqmeow.ui.result')
-  if ok and result.actions and result.actions.prev_column then
+  local result = sqmeow('ui.result')
+  if result and result.actions and result.actions.prev_column then
     result.actions.prev_column()
   end
 end
 
 function M.first_result_column(win)
-  local ok, result = pcall(require, 'sqmeow.ui.result')
-  if ok and result and result.goto_column then
+  local result = sqmeow('ui.result')
+  if result and result.goto_column then
     result.goto_column(1)
   end
 end
 
 function M.last_result_column(win)
-  local ok, result = pcall(require, 'sqmeow.ui.result')
-  if ok and result and result.goto_column then
-    local ok_st, state = pcall(require, 'sqmeow.core.state')
-    local count = (ok_st and state.call and state.call.columns and #state.call.columns) or 99
+  local result = sqmeow('ui.result')
+  if result and result.goto_column then
+    local state = sqmeow('core.state')
+    local count = (state and state.call and state.call.columns and #state.call.columns) or 99
     result.goto_column(count)
   end
 end
@@ -676,9 +619,8 @@ M._conn_databases = M._conn_databases or {}
 
 function M.get_url_database(url)
   if not url or url == '' then return nil end
-  local ok_u, umod = pcall(require, 'sqmeow.core.url')
-  if not ok_u then ok_u, umod = pcall(require, 'sqmeow.url') end
-  if ok_u and umod and umod.split then
+  local umod = sqmeow('core.url')
+  if umod and umod.split then
     local parts = umod.split(url)
     if parts then
       if parts.dialect == 'sqlite' or parts.dialect == 'duckdb' then
@@ -698,15 +640,9 @@ function M.fetch_connection_databases(conn_name, conn_url, callback)
     return
   end
 
-  local ok_api, api = pcall(require, 'sqmeow.api.connection')
-  if not ok_api or not api then
-    ok_api, api = pcall(require, 'sqmeow.api')
-  end
-  local ok_state, state = pcall(require, 'sqmeow.core.state')
-  if not ok_state then
-    ok_state, state = pcall(require, 'sqmeow.state')
-  end
-  if not ok_api or not ok_state or not api.databases then
+  local api = sqmeow('api.connection')
+  local state = sqmeow('core.state')
+  if not api or not state or not api.databases then
     callback(nil, 'sqmeow core modules not available')
     return
   end
@@ -737,9 +673,8 @@ function M.fetch_connection_databases(conn_name, conn_url, callback)
   if conn_now and conn_now.state == 'connected' then
     query_databases()
   else
-    local ok_rpc, rpc = pcall(require, 'sqmeow.rpc.client')
-    if not ok_rpc then ok_rpc, rpc = pcall(require, 'sqmeow.rpc') end
-    if ok_rpc and rpc and rpc.on then
+    local rpc = sqmeow('rpc.client')
+    if rpc and rpc.on then
       local state_unsub
       state_unsub = rpc.on('conn:state', function(payload)
         if payload.id == parent_id and payload.state == 'connected' then
@@ -782,9 +717,8 @@ function M.select_connection(callback)
   local seen = {}
 
   -- Include top-level active connections from sqmeow state if not already in connections.json
-  local ok_st, state = pcall(require, 'sqmeow.core.state')
-  if not ok_st then ok_st, state = pcall(require, 'sqmeow.state') end
-  if ok_st and state and state.connections then
+  local state = sqmeow('core.state')
+  if state and state.connections then
     for _, conn in pairs(state.connections) do
       if conn and conn.name and not conn.parent and not seen[conn.name] then
         local url = M.get_connection_url(conn.name) or conn.url
@@ -1000,11 +934,9 @@ function M.delete_connection()
     end
 
     pcall(function()
-      local ok_c, conn_api = pcall(require, 'sqmeow.api.connection')
-      if ok_c and conn_api and conn_api.remove then
+      local conn_api = sqmeow('api.connection')
+      if conn_api and conn_api.remove then
         conn_api.remove(choice.name)
-      else
-        require('sqmeow.api').remove(choice.name)
       end
     end)
 
@@ -1017,15 +949,8 @@ end
 -------------------------------------------------------------------------------
 
 function M.open_query_scratchpad()
-  local ok_v, view_api = pcall(require, 'sqmeow.api.view')
-  if not ok_v then
-    pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-    ok_v, view_api = pcall(require, 'sqmeow.api.view')
-  end
-  if not ok_v then
-    ok_v, view_api = pcall(require, 'sqmeow.api')
-  end
-  if ok_v and view_api and view_api.scratchpad then
+  local view_api = sqmeow('api.view')
+  if view_api and view_api.scratchpad then
     local default_prefix = M.current_db_name and (M.current_db_name .. '/') or nil
     view_api.scratchpad(nil, default_prefix)
     local cur_buf = vim.api.nvim_get_current_buf()
@@ -1039,15 +964,8 @@ function M.open_query_scratchpad()
 end
 
 function M.run_query()
-  local ok_q, query_api = pcall(require, 'sqmeow.api.query')
-  if not ok_q then
-    pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
-    ok_q, query_api = pcall(require, 'sqmeow.api.query')
-  end
-  if not ok_q then
-    ok_q, query_api = pcall(require, 'sqmeow.api')
-  end
-  if not ok_q or not query_api then
+  local query_api = sqmeow('api.query')
+  if not query_api then
     vim.notify('sqmeow is not available', vim.log.levels.ERROR, { title = 'Database' })
     return
   end
@@ -1055,8 +973,8 @@ function M.run_query()
   local cur_buf = vim.api.nvim_get_current_buf()
   local ft = vim.bo[cur_buf].filetype
   if ft == 'sqmeow-drawer' then
-    local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
-    if ok_dr and drawer.current_node then
+    local drawer = sqmeow('ui.drawer')
+    if drawer and drawer.current_node then
       local node = drawer.current_node()
       if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
         drawer.actions.preview()
