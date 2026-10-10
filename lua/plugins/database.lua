@@ -66,16 +66,24 @@ return {
 
       -- Explorer-like navigation in sqmeow drawer: Tab/S-Tab, l/CR, h, q, <C-j>, p, P, K
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
-        pattern = 'sqmeow-drawer',
+        pattern = { 'sqmeow-drawer', 'sqmeow://drawer*' },
         callback = function(args)
-          vim.b[args.buf].panel_zone = 'right'
-          vim.b[args.buf].panel_type = 'dbui'
+          local buf = args.buf or vim.api.nvim_get_current_buf()
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+          local ft = vim.bo[buf].filetype
+          local name = vim.api.nvim_buf_get_name(buf)
+          if ft ~= 'sqmeow-drawer' and not name:find('drawer') then return end
+
+          vim.b[buf].panel_zone = 'right'
+          vim.b[buf].panel_type = 'dbui'
           db.setup_drawer_helpers()
           vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
           vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Preview Relation' })
+          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview_editor() end, { buffer = args.buf, silent = true, desc = 'Preview in Editor' })
+          vim.keymap.set('n', 'P', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Preview in Result Grid' })
           vim.keymap.set('n', 'K', function() require('sqmeow.ui.drawer').actions.structure() end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
+          vim.keymap.set('n', 'gR', function() require('sqmeow.ui.drawer').actions.relationships() end, { buffer = args.buf, silent = true, desc = 'Table Relationships' })
           vim.keymap.set('n', 'u', function()
             require('sqmeow.ui.drawer').actions.use()
           end, { buffer = args.buf, silent = true, desc = 'Run queries against this connection' })
@@ -148,15 +156,14 @@ return {
       })
     end,
     config = function(_, opts)
-      require('sqmeow').setup(opts)
       db.setup_drawer_helpers()
+      require('sqmeow').setup(opts)
     end,
     opts = {
       ui = {
         drawer = {
           position = 'right',
           width = 35,
-          preview_in_editor = true,
         },
         result = {
           height = 16,
@@ -170,10 +177,12 @@ return {
       },
       keymaps = {
         drawer = {
-          { action = 'toggle', lhs = { '<CR>', 'o', 'l' }, desc = 'Expand or collapse the node' },
-          { action = 'close', lhs = 'q', desc = 'Close the drawer' },
-          { action = 'preview', lhs = 'p', desc = 'Preview this relation' },
-          { action = 'structure', lhs = 'K', desc = 'Show structure of table or key' },
+          toggle = { '<CR>', 'o', 'l' },
+          close = 'q',
+          preview_editor = 'p',
+          preview = 'P',
+          structure = 'K',
+          relationships = 'gR',
         },
       },
     },

@@ -483,8 +483,12 @@ end
 --- Preview the relation under cursor in the in-memory editor buffer
 function M.open_preview_buffer(node)
   local drawer = sqmeow('ui.drawer')
-  if drawer and drawer.actions and drawer.actions.preview then
-    drawer.actions.preview()
+  if drawer and drawer.actions then
+    if drawer.actions.preview_editor then
+      drawer.actions.preview_editor()
+    elseif drawer.actions.preview then
+      drawer.actions.preview()
+    end
   end
 end
 
@@ -492,12 +496,12 @@ function M.setup_drawer_helpers()
   local drawer = sqmeow('ui.drawer')
   if not drawer or not drawer.actions then return end
 
-  -- 1. Hook drawer.actions.preview to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
-  if not M._drawer_preview_hooked and drawer.actions.preview then
+  -- 1. Hook drawer.actions.preview_editor to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
+  if not M._drawer_preview_hooked and drawer.actions.preview_editor then
     M._drawer_preview_hooked = true
-    local orig_preview = drawer.actions.preview
-    drawer.actions.preview = function(...)
-      local res = orig_preview(...)
+    local orig_preview_editor = drawer.actions.preview_editor
+    drawer.actions.preview_editor = function(...)
+      local res = orig_preview_editor(...)
       local buf = drawer.preview_buffer()
       if buf and vim.api.nvim_buf_is_valid(buf) then
         vim.b[buf].is_preview_buffer = true
@@ -543,6 +547,22 @@ function M.setup_drawer_helpers()
             layout.RightPanel.ensure_precedence()
           end
         end)
+      end
+      return res
+    end
+  end
+
+  -- Hook drawer.actions.preview (result grid only) to track bottom panel dbout mode and precedence
+  if not M._drawer_grid_preview_hooked and drawer.actions.preview then
+    M._drawer_grid_preview_hooked = true
+    local orig_preview = drawer.actions.preview
+    drawer.actions.preview = function(...)
+      local res = orig_preview(...)
+      if _G.BottomPanel then
+        _G.BottomPanel.active_mode = 'dbout'
+        if _G.BottomPanel.ensure_precedence then
+          _G.BottomPanel.ensure_precedence()
+        end
       end
       return res
     end
@@ -977,7 +997,11 @@ function M.run_query()
     if drawer and drawer.current_node then
       local node = drawer.current_node()
       if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-        drawer.actions.preview()
+        if drawer.actions.preview_editor then
+          drawer.actions.preview_editor()
+        else
+          drawer.actions.preview()
+        end
         return
       end
     end
@@ -1131,6 +1155,14 @@ end
 function M.select_saved_query()
   local editor = require('sqmeow.ui.editor')
   local pads = editor.list()
+  if editor.project then
+    local proj = editor.project()
+    if proj and proj.list then
+      for _, p in ipairs(proj.list()) do
+        table.insert(pads, p)
+      end
+    end
+  end
   if #pads == 0 then
     vim.notify('No saved queries found. Save one with <leader>bw', vim.log.levels.INFO, { title = 'Database' })
     return

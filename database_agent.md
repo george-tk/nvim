@@ -8,19 +8,19 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `e08832b` (`feat(drawer): allow distinct preview buffers per relation and prevent silent data loss on modified queries (#62)`, Thu Oct 1 2026)
+- **Baseline Commit Pinned**: `0c2db40` (`chore(master): release 3.0.0 (#73)`, tag `v3.0.0`, Fri Oct 9 2026)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
 ```bash
 # Fetch latest commits without modifying working tree
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log e08832b..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 0c2db40..origin/master --oneline
 
-# Inspect diffs across specific modules (api, drawer, result, table)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff e08832b..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+# Inspect diffs across specific modules (api, drawer, result, table, view)
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 0c2db40..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -47,6 +47,11 @@ flowchart TD
         N["Preview Buffer Listedness (Issue #59 / Commit 66a8a49)"]
         O["Distinct Preview Buffers & Data Safety (PR #62 / Issue #60)"]
         P["Respect page_size in Drawer Preview (PR #64 / Issue #63)"]
+        Q["v3: Vectorized Retained Views with Polars (2c1f30e / 0bd5891)"]
+        R["v3: Retained Snapshot Aggregations (gG) (b66fb37)"]
+        S["v3: Foreign Key Relationships Browser (gR) (738aab0)"]
+        T["v3: Parameterized Scratchpads (:param / -- @param) (1cf3a2a / 27082d1)"]
+        U["v3: Distinct preview (grid) vs preview_editor (buffer) Actions"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -55,6 +60,7 @@ flowchart TD
         G["BottomPanel / RightPanel layout docking and coordinator"]
         H["Per-database directory structure: scratch/{db_name}/*.sql"]
         M["Two-Step Connection Switcher (<leader>bs)"]
+        V["Drawer Keymap Swap: 'p' for preview_editor, 'P' for grid preview"]
     end
 ```
 
@@ -72,12 +78,16 @@ flowchart TD
 | **6. SQL Autocompletion** | [`sqmeow.completion.blink`](file:///home/georgek/.local/share/nvim/lazy/sqmeow.nvim/lua/sqmeow/completion/blink.lua) & [`lua/utils/sql-keywords-blink.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-keywords-blink.lua) | Previously relied on `vim-dadbod-completion` and custom AST parsing. | **RESOLVED & MERGED UPSTREAM ([Issue #41](https://github.com/2giosangmitom/sqmeow.nvim/issues/41) / Commit `01cf139`)**. Upstream now natively provides Tree-sitter query-aware database metadata completion for `blink.cmp` and `nvim-cmp`. All Dadbod plugins and wrappers completely removed; fast standalone `sql-keywords-blink.lua` provides boilerplate keywords and phrases. |
 | **7. Multi-Sidebar Coordination** | [`_G.RightPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L386) & [`_G.BottomPanel`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L1474) | Mutual exclusivity between Snacks Explorer, OpenCode, and Database Drawer. | **User Configuration Only**. Keep permanently in personal dotfiles. |
 | **8. Multi-DB Cluster Child Connections** | Upstream native `drawer.actions.use` | Expanding a database node previously did not allow pressing `u` on descendant nodes to select that child connection. | **RESOLVED & MERGED UPSTREAM ([Issue #45](https://github.com/2giosangmitom/sqmeow.nvim/issues/45) / [PR #48](https://github.com/2giosangmitom/sqmeow.nvim/pull/48))**. Merged into master in commit `c78005a`. Upstream now resolves the owning connection ID when `u` is pressed on any database or descendant row (schemas, tables, views) and switches connection with notification. Local hook retired. |
-| **9. In-Memory Relation Preview in Editor** | Upstream `opts.ui.drawer.preview_in_editor = true` | Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk clutter until explicit `:w`. Multi-dialect support without trailing semicolons on redis/json. | **RESOLVED & MERGED UPSTREAM ([Issue #46](https://github.com/2giosangmitom/sqmeow.nvim/issues/46) / [PR #49](https://github.com/2giosangmitom/sqmeow.nvim/pull/49))**. Merged into master in commit `403cef1`. Upstream natively handles relation preview directly in `editing_window()`. Local preview buffer generator retired; light wrapper retains `:w` save hook. |
+| **9. In-Memory Relation Preview in Editor** | Upstream `drawer.actions.preview_editor` (mapped to `p`) | Dedicated in-memory buffer (`buftype = 'nofile'`) reuses slot `[Preview: <name>]` with zero disk clutter until explicit `:w`. Multi-dialect support without trailing semicolons on redis/json. | **RESOLVED & REFINED IN V3 ([Commit `85f9dcd`](https://github.com/2giosangmitom/sqmeow.nvim/commit/85f9dcdcfb6aa6d50702f54628e2441078af9bf5))**. In v3, upstream cleanly split preview into `actions.preview` (grid peek) and `actions.preview_editor` (editor buffer). Local config maps `p` to `actions.preview_editor` and `P` to `actions.preview`. Light wrapper retains `:w` save hook. |
 | **10. Editor Buffer Re-binding on `use` (`u`)** | Upstream native `drawer.actions.use` & `editor.rebind` | Switching connections in the drawer previously left open editor buffers bound to their old connection, causing queries to hit the previous database. | **RESOLVED & MERGED UPSTREAM ([Issue #47](https://github.com/2giosangmitom/sqmeow.nvim/issues/47) / [PR #50](https://github.com/2giosangmitom/sqmeow.nvim/pull/50))**. Merged into master in commit `a299288`. Upstream natively inspects visible editor windows and re-binds them via `editor.rebind(ed_buf, conn.name)`. Local rebind search retired; winbar automatically updates. |
 | **11. Multi-DB Connection Switching & Two-Step Picker** | [`M.select_connection`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L900) & [`M.fetch_connection_databases`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L778) | Switching to a multi-db cluster connection via picker previously bound the cluster root without a selected database, causing queries to fail. | **RESOLVED & MERGED UPSTREAM ([Issue #52](https://github.com/2giosangmitom/sqmeow.nvim/issues/52) / [PR #57](https://github.com/2giosangmitom/sqmeow.nvim/pull/57))**. Merged into master in commit `74ae98e`. Single-DB connections display as `conn / db` and bind immediately; multi-DB connections prompt for database selection and bind `<conn>/<db>`. Native `api.databases` and `drawer.databases` helpers adopted in config; manual RPC introspection and debug hacks retired. |
 | **12. Relation Preview Buffer Listedness (`buflisted`)** | Upstream `ui.drawer.preview_in_editor` | Preview buffer was created unlisted (`buflisted = false`), causing it to vanish from bufferlines (lualine) when switching away and preventing `:bnext`/`:bprev` cycling. | **RESOLVED & MERGED UPSTREAM ([Issue #59](https://github.com/2giosangmitom/sqmeow.nvim/issues/59))**. Merged into master in commit `66a8a49`. Upstream natively creates preview buffers with `nvim_create_buf(true, true)`. Redundant `buflisted = true` workaround retired from `database.lua`. |
 | **13. Distinct Relation Preview Buffers & Data Loss Prevention** | Upstream native `drawer.actions.preview` | Upstream cached a single module-level `preview_buf` upvalue, causing subsequent previews of any table to wipe out and overwrite existing preview buffers (including unsaved edits). Users could not compare relations side-by-side or keep query iterations across tables. | **RESOLVED & MERGED UPSTREAM ([PR #62](https://github.com/2giosangmitom/sqmeow.nvim/pull/62) / [Issue #60](https://github.com/2giosangmitom/sqmeow.nvim/issues/60))**. Merged into master in commit `e08832b`. Upstream natively manages `preview_bufs` map per relation and avoids overwriting modified queries (with automatic disambiguation `(1)`, `(2)`, etc.). Local monkey-patches (`debug.setupvalue`, manual buffer name loop) retired completely from config; light wrapper only retains personal `:w` save hook and buffer-ring slot registration. |
 | **14. Respect `ui.result.page_size` in Drawer Preview** | Upstream native `drawer.actions.preview` | Preview query previously hardcoded `LIMIT 100` instead of respecting configured `opts.ui.result.page_size`. | **RESOLVED & MERGED UPSTREAM ([PR #64](https://github.com/2giosangmitom/sqmeow.nvim/pull/64) / [Issue #63](https://github.com/2giosangmitom/sqmeow.nvim/issues/63))**. Merged into master in commit `c620d23`. Upstream natively reads `opts.ui.result.page_size` and passes it as the preview limit across all dialects. |
+| **15. Vectorized Retained Views with Polars** | Native v3 Rust core engine | Custom ad-hoc evaluator lacked comprehensive SQL syntax and was slow on large result sets. | **RESOLVED UPSTREAM (v3.0.0, commits `2c1f30e`, `0bd5891`)**. All filtering and sorting evaluate locally in Rust with Polars SQL across all relational and NoSQL dialects. |
+| **16. Snapshot Aggregation (`gG`)** | Upstream `keymaps.result` (`gG`) & `api.view.aggregate` | No way to group and aggregate query results without issuing new queries to the server. | **RESOLVED UPSTREAM (v3.0.0, commit `b66fb37`)**. Dedicated `GROUP BY`, `AGGREGATE`, `HAVING` interactive bar powered by Polars. |
+| **17. Foreign Key Relationships Browser (`gR`)** | Upstream `keymaps.drawer` / `keymaps.result` (`gR`) | Discovering table relationships required complex metadata queries. | **RESOLVED UPSTREAM (v3.0.0, commit `738aab0`)**. Built-in relationship modal with Belongs to / Referenced by inspection and `<CR>` navigation. |
+| **18. Parameterized Scratchpads (`:param` / `-- @param`)** | Upstream `api.query` and engine | Scratchpads had no clean parameter prompt or driver-level binding. | **RESOLVED UPSTREAM (v3.0.0, commits `1cf3a2a`, `27082d1`)**. Header comments declare types/defaults; query execution prompts for missing parameters across all adapters. |
 
 
 
