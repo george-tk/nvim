@@ -6,8 +6,8 @@ This document serves as the single source of truth for auditing, updating, and m
 
 ## 1. Upstream Baseline Reference & Inventory
 
-The table below catalogs all **37 installed plugins** managed by `lazy.nvim` as of **October 1, 2026**.
-- **Historical Audit Scope**: Covers updates from **July 1, 2026** to **October 1, 2026**.
+The table below catalogs all **34 installed plugins** managed by `lazy.nvim` as of **October 10, 2026**.
+- **Historical Audit Scope**: Covers updates from **July 1, 2026** to **October 10, 2026**.
 - **Future Audit Rule**: Any future session running an audit must **only** inspect commits introduced **after** the pinned baseline commit hash recorded in this table.
 
 ```bash
@@ -27,9 +27,9 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **friendly-snippets** | `rafamadriz/friendly-snippets` | `b4d01b0` | 2026-09-10 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L18) | ✓ Up to date |
 | **lspkind.nvim** | `onsails/lspkind.nvim` | `c7274c4` | 2026-01-29 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L47) | ✓ Up to date |
 | **lazydev.nvim** | `folke/lazydev.nvim` | `ff2cbcb` | 2026-03-14 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L6) | ✓ Up to date |
-| **nvim-lspconfig** | `neovim/nvim-lspconfig` | `3e8d598` | 2026-09-30 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L19) | ✓ Audited; added `autocorrect` server, no breaking changes |
+| **nvim-lspconfig** | `neovim/nvim-lspconfig` | `c59fc92` | 2026-10-09 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L19) | ✓ Audited; doc/type annotations & tombi/clice sync, no breaking changes |
 | **mason.nvim** | `mason-org/mason.nvim` | `2a6940a` | 2026-06-11 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L22) | ✓ Up to date |
-| **mason-lspconfig.nvim** | `mason-org/mason-lspconfig.nvim` | `b329899` | 2026-09-27 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L23) | ✓ Up to date |
+| **mason-lspconfig.nvim** | `mason-org/mason-lspconfig.nvim` | `e17625c` | 2026-10-09 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L23) | ✓ Up to date (generated server mappings updated) |
 | **mason-tool-installer.nvim** | `WhoIsSethDaniel/mason-tool-installer.nvim` | `443f1ef` | 2026-01-22 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L24) | ✓ Up to date |
 | **fidget.nvim** | `j-hui/fidget.nvim` | `9e02016` | 2026-09-03 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L27) | ✓ Up to date |
 | **conform.nvim** | `stevearc/conform.nvim` | `016802d` | 2026-08-11 | [`lua/plugins/autoformat.lua`](file:///home/georgek/.config/nvim/lua/plugins/autoformat.lua) | ✓ Standardized on `<leader>cf` |
@@ -38,18 +38,18 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **mini.ai** | `echasnovski/mini.ai` | `c2c4278` | 2026-10-02 | [`lua/plugins/mini-ai.lua`](file:///home/georgek/.config/nvim/lua/plugins/mini-ai.lua) | ✓ Text objects handled cleanly; prepares to drop `use_nvim_treesitter` |
 | **neocodeium** | `monkoose/neocodeium` | `ab8a3da` (`v1.19.1`) | 2026-06-22 | [`lua/plugins/neocodeium.lua`](file:///home/georgek/.config/nvim/lua/plugins/neocodeium.lua) | ✓ Monkey-patch still active and required |
 | **opencode.nvim** | `nickjvandyke/opencode.nvim` | `84eabfb` (`v1.0.2`) | 2026-09-14 | [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua) | ⚠️ Pinned to `version = '*'` (`v1.0.2`) matching stable CLI 1.18.x |
-| **gitsigns.nvim** | `lewis6991/gitsigns.nvim` | `070a5d7` | 2026-09-22 | [`lua/plugins/gitsigns.lua`](file:///home/georgek/.config/nvim/lua/plugins/gitsigns.lua) | ✓ Up to date |
+| **gitsigns.nvim** | `lewis6991/gitsigns.nvim` | `851a051` | 2026-10-05 | [`lua/plugins/gitsigns.lua`](file:///home/georgek/.config/nvim/lua/plugins/gitsigns.lua) | ✓ Up to date (topdelete hunk staging fix) |
 | **neogit** | `NeogitOrg/neogit` | `70708be` | 2026-10-01 | [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua) | ✓ Audited `configurable-popup-kind` (`97c21a4`); 100% floating mode active |
 | **diffview.nvim** | `sindrets/diffview.nvim` | `4516612` | 2024-06-13 | [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua#L5) | Stable; `<leader>gd` toggles cleanly |
 | **which-key.nvim** | `folke/which-key.nvim` | `3aab214` (`v3.*`) | 2025-10-28 | [`lua/plugins/which-key.lua`](file:///home/georgek/.config/nvim/lua/plugins/which-key.lua) | ✓ Modern v3 spec format verified |
 | **lualine.nvim** | `nvim-lualine/lualine.nvim` | `221ce6b` | 2026-05-31 | [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua) | ✓ Minimalist slots in `lualine_c`, active filetype in `lualine_y` |
 | **catppuccin** | `catppuccin/nvim` | `edefef7` | 2026-08-09 | [`lua/plugins/colorscheme.lua`](file:///home/georgek/.config/nvim/lua/plugins/colorscheme.lua) | ✓ Auto-integrations for Snacks/Blink audited |
-| **render-markdown.nvim** | `MeanderingProgrammer/render-markdown.nvim` | `640a3ec` (`v8.14.0`) | 2026-09-14 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L3) | ✓ Multiline table cells & virtual line rendering |
+| **render-markdown.nvim** | `MeanderingProgrammer/render-markdown.nvim` | `245956d` | 2026-10-06 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L3) | ✓ Up to date (ordered icon nil guard fix) |
 | **mkdnflow.nvim** | `jakewvincent/mkdnflow.nvim` | `272148c` | 2026-07-03 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L37) | Retained per user request |
 | **nvim-origami** | `chrisgrieser/nvim-origami` | `a137d35` | 2026-08-03 | [`lua/plugins/fold-origami.lua`](file:///home/georgek/.config/nvim/lua/plugins/fold-origami.lua) | ✓ Up to date |
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | ✓ Project-linked sessions, multi-event auto-save (FocusLost, BufWritePost, DirChangedPre) |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
-| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `962e25a` (`v2.5.0`) | 2026-10-04 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date on `v2.5.0` (PR #62, PR #64 merged; native `blink.cmp` & project config) |
+| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `b5cf717` (`v3.0.0`) | 2026-10-10 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Up to date on `v3.0.0` (Polars engine, relations, params, preview_editor) |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
 | **plenary.nvim** | `nvim-lua/plenary.nvim` | `74b06c6` | 2026-04-10 | Dependency | Shared Lua library |
 | **nui.nvim** | `MunifTanjim/nui.nvim` | `10fc361` | 2026-08-21 | Dependency | UI components for sqmeow & snacks |
@@ -209,10 +209,11 @@ flowchart TD
 ### 3.3. Tier 3: Markdown & Note Taking
 
 #### 13. `MeanderingProgrammer/render-markdown.nvim`
-- **Baseline**: `640a3ec` (`v8.14.0`, September 14, 2026).
+- **Baseline**: `245956d` (October 6, 2026).
 - **Recent Upstream Features**:
   - `feat: multiline table cell rendering`: Multi-line markdown table cells now render beautifully with aligned borders.
   - `feat: add support for entirely replacing text with virtual lines`: Cleaner rendering of LaTeX and code blocks.
+  - `fix: handle ordered icon tonumber returning nil`: Robust handling for ordered lists.
 - **Recommendation**: Up to date and actively maintained.
 
 #### 14. `jakewvincent/mkdnflow.nvim`
