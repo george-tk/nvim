@@ -506,6 +506,14 @@ function M.setup_drawer_helpers()
       if buf and vim.api.nvim_buf_is_valid(buf) then
         vim.b[buf].is_preview_buffer = true
 
+        local node = drawer.current_node and drawer.current_node()
+        if node and node.name then
+          vim.b[buf].sqmeow_table = node.name
+          if node.path and node.path[1] then
+            vim.b[buf].sqmeow_schema = node.path[1]
+          end
+        end
+
         if M.current_db_name then
           vim.b[buf].db_name = M.current_db_name
         end

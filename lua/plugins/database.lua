@@ -77,7 +77,7 @@ return {
         end,
       })
 
-      -- Explorer-like navigation in sqmeow drawer: Tab/S-Tab, l/CR, h, q, <C-j>, p, P, K
+      -- Explorer-like navigation in sqmeow drawer: Tab/S-Tab, l/CR, h, q, <C-j>
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
         pattern = { 'sqmeow-drawer', 'sqmeow://drawer*' },
         callback = function(args)
@@ -97,31 +97,6 @@ return {
           vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
           vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', 'p', function()
-            local node = pcall(require, 'sqmeow.ui.drawer') and require('sqmeow.ui.drawer').current_node()
-            require('sqmeow.ui.drawer').actions.preview_editor()
-            if node and node.name then
-              local cur_buf = vim.api.nvim_get_current_buf()
-              if vim.bo[cur_buf].filetype == 'sql' then
-                vim.b[cur_buf].sqmeow_table = node.name
-                if node.path and node.path[1] then
-                  vim.b[cur_buf].sqmeow_schema = node.path[1]
-                end
-              end
-            end
-          end, { buffer = args.buf, silent = true, desc = 'Preview in Editor' })
-          vim.keymap.set('n', 'P', function()
-            require('sqmeow.ui.drawer').actions.preview()
-          end, { buffer = args.buf, silent = true, desc = 'Preview in Result Grid' })
-          vim.keymap.set('n', 'K', function()
-            require('sqmeow.ui.drawer').actions.structure()
-          end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
-          vim.keymap.set('n', 'gR', function()
-            require('sqmeow.ui.drawer').actions.relationships()
-          end, { buffer = args.buf, silent = true, desc = 'Table Relationships' })
-          vim.keymap.set('n', 'u', function()
-            require('sqmeow.ui.drawer').actions.use()
-          end, { buffer = args.buf, silent = true, desc = 'Run queries against this connection' })
           vim.keymap.set('n', 'h', function()
             local cur_line = vim.api.nvim_get_current_line()
             if cur_line:match '^%s+' then
@@ -224,10 +199,6 @@ return {
         drawer = {
           toggle = { '<CR>', 'o', 'l' },
           close = 'q',
-          preview_editor = 'p',
-          preview = 'P',
-          structure = 'K',
-          relationships = 'gR',
         },
       },
     },
