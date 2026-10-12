@@ -28,7 +28,9 @@ return {
         if ok_loaders and loaders.load_lazy_loaded then
           local orig_load = loaders.load_lazy_loaded
           loaders.load_lazy_loaded = function(bufnr)
-            if bufnr and not vim.api.nvim_buf_is_valid(bufnr) then return end
+            if bufnr and not vim.api.nvim_buf_is_valid(bufnr) then
+              return
+            end
             pcall(orig_load, bufnr)
           end
         end
@@ -77,7 +79,13 @@ return {
         trigger = {
           show_on_keyword = true,
           show_on_trigger_character = true,
-          show_on_blocked_trigger_characters = { ' ', '\n', '\t' },
+          show_on_blocked_trigger_characters = function()
+            local ft = vim.bo.filetype
+            if ft == 'sql' or ft == 'mysql' or ft == 'plsql' then
+              return { '\n', '\t' }
+            end
+            return { ' ', '\n', '\t' }
+          end,
           show_on_x_blocked_trigger_characters = {},
         },
         list = {
@@ -115,6 +123,38 @@ return {
       -- Fuzzy sorting: prioritize local variables, parameters, and snippets over bare keywords
       fuzzy = {
         sorts = {
+          -- 0. SQL specific priority: Database metadata (Fields/Columns, Classes/Tables, Modules/Schemas) > Functions > Keywords > Snippets
+          function(a, b)
+            local ft = vim.bo.filetype
+            if ft ~= 'sql' and ft ~= 'mysql' and ft ~= 'plsql' then
+              return nil
+            end
+            -- Kind 5: Field (Column), Kind 7: Class (Table), Kind 8: Interface (View), Kind 9: Module (Schema)
+            local is_db_a = a.kind == 5 or a.kind == 7 or a.kind == 8 or a.kind == 9
+            local is_db_b = b.kind == 5 or b.kind == 7 or b.kind == 8 or b.kind == 9
+            if is_db_a ~= is_db_b then
+              return is_db_a
+            end
+            -- Within database items, prioritize Fields (Columns) over Tables/Schemas
+            if is_db_a and is_db_b then
+              local a_col = a.kind == 5
+              local b_col = b.kind == 5
+              if a_col ~= b_col then
+                return a_col
+              end
+            end
+            -- Prioritize Functions (3) over bare Keywords (14)
+            local a_fn = a.kind == 3
+            local b_fn = b.kind == 3
+            local a_kw = a.kind == 14
+            local b_kw = b.kind == 14
+            if a_fn and b_kw then
+              return true
+            end
+            if b_fn and a_kw then
+              return false
+            end
+          end,
           -- 1. Prioritize Variables (6), Parameters (25), Fields (5), Properties (10)
           function(a, b)
             local ft = vim.bo.filetype
@@ -223,15 +263,17 @@ return {
           -- Sqmeow native database completion (schemas, tables, views, columns, query-aware)
           sqmeow = {
             name = 'Sqmeow',
-            module = 'sqmeow.completion.blink',
-            score_offset = 100,
+            module = 'utils.sqmeow-blink',
+            min_keyword_length = 0,
+            score_offset = 200,
           },
 
           -- Standalone SQL keywords, clauses, and boilerplate phrases
           sql_keywords = {
             name = 'SQL',
             module = 'utils.sql-keywords-blink',
-            score_offset = 50,
+            min_keyword_length = 0,
+            score_offset = 30,
           },
 
           -- keep LazyDev provider
@@ -337,7 +379,7 @@ return {
                 while node do
                   if node:type() == 'pipe_table' or node:type() == 'table' then
                     vim.schedule(function()
-                      vim.cmd('MkdnTableNextCell')
+                      vim.cmd 'MkdnTableNextCell'
                     end)
                     return true
                   end
@@ -362,7 +404,7 @@ return {
                 while node do
                   if node:type() == 'pipe_table' or node:type() == 'table' then
                     vim.schedule(function()
-                      vim.cmd('MkdnTablePrevCell')
+                      vim.cmd 'MkdnTablePrevCell'
                     end)
                     return true
                   end

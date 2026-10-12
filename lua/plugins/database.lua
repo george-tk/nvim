@@ -1,4 +1,4 @@
-local db = require('utils.database')
+local db = require 'utils.database'
 
 return {
 
@@ -21,12 +21,12 @@ return {
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
         callback = function(args)
           local buf = args.buf or vim.api.nvim_get_current_buf()
-          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then
+            return
+          end
           local ft = vim.bo[buf].filetype
           local name = vim.api.nvim_buf_get_name(buf)
-          if ft == 'dbui' or ft == 'dbout' or ft == 'sqmeow-drawer' or ft == 'sqmeow-result'
-            or name:find('sqmeow://') ~= nil
-          then
+          if ft == 'dbui' or ft == 'dbout' or ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or name:find 'sqmeow://' ~= nil then
             vim.opt_local.spell = false
             for _, win in ipairs(vim.fn.win_findbuf(buf)) do
               if vim.api.nvim_win_is_valid(win) then
@@ -45,9 +45,13 @@ return {
       vim.api.nvim_create_autocmd('FileType', {
         pattern = { 'sql', 'mysql', 'plsql' },
         callback = function(args)
-          if vim.g.SessionLoad == 1 then return end
+          if vim.g.SessionLoad == 1 then
+            return
+          end
           local buf = args.buf
-          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then
+            return
+          end
 
           local db_url, db_name = db.get_active_db(buf)
           vim.opt_local.spell = false
@@ -57,6 +61,15 @@ return {
               vim.b[buf].sqmeow_connection = db_name
             end)
           end
+          pcall(function()
+            if not vim.b[buf].sqmeow_table then
+              local bname = vim.api.nvim_buf_get_name(buf)
+              local preview_tbl = bname:match '%[Preview:%s*([^%(%]]+)'
+              if preview_tbl then
+                vim.b[buf].sqmeow_table = vim.trim(preview_tbl)
+              end
+            end
+          end)
           pcall(function()
             vim.b[buf].neocodeium_enabled = true
             vim.b[buf].neocodeium_allowed_encoding = true
@@ -69,10 +82,14 @@ return {
         pattern = { 'sqmeow-drawer', 'sqmeow://drawer*' },
         callback = function(args)
           local buf = args.buf or vim.api.nvim_get_current_buf()
-          if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+          if not buf or not vim.api.nvim_buf_is_valid(buf) then
+            return
+          end
           local ft = vim.bo[buf].filetype
           local name = vim.api.nvim_buf_get_name(buf)
-          if ft ~= 'sqmeow-drawer' and not name:find('drawer') then return end
+          if ft ~= 'sqmeow-drawer' and not name:find 'drawer' then
+            return
+          end
 
           vim.b[buf].panel_zone = 'right'
           vim.b[buf].panel_type = 'dbui'
@@ -80,31 +97,53 @@ return {
           vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
           vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
-          vim.keymap.set('n', 'p', function() require('sqmeow.ui.drawer').actions.preview_editor() end, { buffer = args.buf, silent = true, desc = 'Preview in Editor' })
-          vim.keymap.set('n', 'P', function() require('sqmeow.ui.drawer').actions.preview() end, { buffer = args.buf, silent = true, desc = 'Preview in Result Grid' })
-          vim.keymap.set('n', 'K', function() require('sqmeow.ui.drawer').actions.structure() end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
-          vim.keymap.set('n', 'gR', function() require('sqmeow.ui.drawer').actions.relationships() end, { buffer = args.buf, silent = true, desc = 'Table Relationships' })
+          vim.keymap.set('n', 'p', function()
+            local node = pcall(require, 'sqmeow.ui.drawer') and require('sqmeow.ui.drawer').current_node()
+            require('sqmeow.ui.drawer').actions.preview_editor()
+            if node and node.name then
+              local cur_buf = vim.api.nvim_get_current_buf()
+              if vim.bo[cur_buf].filetype == 'sql' then
+                vim.b[cur_buf].sqmeow_table = node.name
+                if node.path and node.path[1] then
+                  vim.b[cur_buf].sqmeow_schema = node.path[1]
+                end
+              end
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Preview in Editor' })
+          vim.keymap.set('n', 'P', function()
+            require('sqmeow.ui.drawer').actions.preview()
+          end, { buffer = args.buf, silent = true, desc = 'Preview in Result Grid' })
+          vim.keymap.set('n', 'K', function()
+            require('sqmeow.ui.drawer').actions.structure()
+          end, { buffer = args.buf, silent = true, desc = 'Table Structure / Schema' })
+          vim.keymap.set('n', 'gR', function()
+            require('sqmeow.ui.drawer').actions.relationships()
+          end, { buffer = args.buf, silent = true, desc = 'Table Relationships' })
           vim.keymap.set('n', 'u', function()
             require('sqmeow.ui.drawer').actions.use()
           end, { buffer = args.buf, silent = true, desc = 'Run queries against this connection' })
           vim.keymap.set('n', 'h', function()
             local cur_line = vim.api.nvim_get_current_line()
-            if cur_line:match('^%s+') then
-              vim.cmd('normal! ^')
-              local col = vim.fn.col('.')
-              while vim.fn.line('.') > 1 and vim.fn.col('.') >= col do
-                vim.cmd('normal! k')
+            if cur_line:match '^%s+' then
+              vim.cmd 'normal! ^'
+              local col = vim.fn.col '.'
+              while vim.fn.line '.' > 1 and vim.fn.col '.' >= col do
+                vim.cmd 'normal! k'
               end
             else
               vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<CR>', true, false, true), 'n', false)
             end
           end, { buffer = args.buf, silent = true, desc = 'Collapse / Parent Node' })
-          vim.keymap.set('n', '<C-j>', function() _G.BottomPanel.toggle_active() end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
+          vim.keymap.set('n', '<C-j>', function()
+            _G.BottomPanel.toggle_active()
+          end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
           vim.keymap.set('n', 'q', function()
             if _G.RightPanel then
               _G.RightPanel.close_all()
             else
-              pcall(function() require('sqmeow.api.view').close_drawer() end)
+              pcall(function()
+                require('sqmeow.api.view').close_drawer()
+              end)
             end
           end, { buffer = args.buf, silent = true, desc = 'Close Database Drawer' })
         end,
@@ -117,10 +156,10 @@ return {
           local buf_ft = vim.bo[args.buf].filetype
           local buf_name = vim.api.nvim_buf_get_name(args.buf)
           -- Guard: Never run on database drawer! sqmeow://drawer is the right sidebar, not query results!
-          if buf_ft == 'sqmeow-drawer' or buf_name:find('drawer') then
+          if buf_ft == 'sqmeow-drawer' or buf_name:find 'drawer' then
             return
           end
-          if buf_ft ~= 'sqmeow-result' and buf_ft ~= 'dbout' and not buf_name:find('sqmeow://result') then
+          if buf_ft ~= 'sqmeow-result' and buf_ft ~= 'dbout' and not buf_name:find 'sqmeow://result' then
             return
           end
 
@@ -139,11 +178,17 @@ return {
           end
 
           -- First/Last column navigation (next/prev column are built-in upstream on <Tab>/<S-Tab> and ]c/[c)
-          vim.keymap.set('n', 'g0', function() db.first_result_column() end, { buffer = args.buf, silent = true, desc = 'First Column' })
-          vim.keymap.set('n', 'g$', function() db.last_result_column() end, { buffer = args.buf, silent = true, desc = 'Last Column' })
+          vim.keymap.set('n', 'g0', function()
+            db.first_result_column()
+          end, { buffer = args.buf, silent = true, desc = 'First Column' })
+          vim.keymap.set('n', 'g$', function()
+            db.last_result_column()
+          end, { buffer = args.buf, silent = true, desc = 'Last Column' })
 
           vim.keymap.set('n', 'q', function()
-            pcall(function() require('sqmeow.api.view').close() end)
+            pcall(function()
+              require('sqmeow.api.view').close()
+            end)
             if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
               _G.BottomPanel.ensure_precedence()
             end
@@ -240,7 +285,9 @@ return {
           if _G.BottomPanel then
             _G.BottomPanel.open_dbout()
           else
-            pcall(function() require('sqmeow.api.view').open() end)
+            pcall(function()
+              require('sqmeow.api.view').open()
+            end)
           end
         end,
         desc = 'Query Output',
@@ -262,14 +309,18 @@ return {
       {
         '<leader>bf',
         function()
-          pcall(function() require('sqmeow.api.view').toggle_float() end)
+          pcall(function()
+            require('sqmeow.api.view').toggle_float()
+          end)
         end,
         desc = 'Toggle Float Result',
       },
       {
         '<leader>bv',
         function()
-          pcall(function() require('sqmeow.api.view').review() end)
+          pcall(function()
+            require('sqmeow.api.view').review()
+          end)
         end,
         desc = 'Review & Apply In-Grid Edits',
       },
@@ -277,8 +328,12 @@ return {
         '<leader>bx',
         function()
           vim.ui.input({ prompt = 'Export Format (csv, json, sql): ', default = 'csv' }, function(fmt)
-            if not fmt or fmt == '' then return end
-            pcall(function() require('sqmeow.api.export').export({ format = vim.trim(fmt), clipboard = true }) end)
+            if not fmt or fmt == '' then
+              return
+            end
+            pcall(function()
+              require('sqmeow.api.export').export { format = vim.trim(fmt), clipboard = true }
+            end)
           end)
         end,
         desc = 'Export Results',

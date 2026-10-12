@@ -128,11 +128,25 @@ local FUNCTIONS = {
   'GEN_RANDOM_UUID()',
 }
 
-local items_cache = nil
+local SELECT_EXPR_KEYWORDS = {
+  'DISTINCT',
+  'CASE',
+  'WHEN',
+  'THEN',
+  'ELSE',
+  'END',
+  'AS',
+  'CAST',
+  'COALESCE',
+  'NULLIF',
+}
 
-local function get_items()
-  if items_cache then
-    return items_cache
+local all_items_cache = nil
+local select_items_cache = nil
+
+local function get_all_items()
+  if all_items_cache then
+    return all_items_cache
   end
   local items = {}
   local seen = {}
@@ -143,24 +157,54 @@ local function get_items()
       table.insert(items, {
         label = label,
         kind = kind,
-        score_offset = score or 50,
+        score_offset = score or 30,
         labelDetails = { description = desc },
       })
     end
   end
 
+  -- Only canonical uppercase - eliminates duplicate 'sql' vs 'SQL' entries
   for _, kw in ipairs(KEYWORDS) do
-    add(kw, 14, 'SQL', 50)
-    add(kw:lower(), 14, 'sql', 50)
+    add(kw, 14, 'SQL', 20)
   end
 
   for _, fn in ipairs(FUNCTIONS) do
-    add(fn, 3, 'SQL fn', 40)
-    add(fn:lower(), 3, 'sql fn', 40)
+    add(fn, 3, 'Function', 25)
   end
 
-  items_cache = items
-  return items_cache
+  all_items_cache = items
+  return all_items_cache
+end
+
+local function get_select_items()
+  if select_items_cache then
+    return select_items_cache
+  end
+  local items = {}
+  local seen = {}
+
+  local function add(label, kind, desc, score)
+    if not seen[label] then
+      seen[label] = true
+      table.insert(items, {
+        label = label,
+        kind = kind,
+        score_offset = score or 20,
+        labelDetails = { description = desc },
+      })
+    end
+  end
+
+  for _, fn in ipairs(FUNCTIONS) do
+    add(fn, 3, 'Function', 25)
+  end
+
+  for _, kw in ipairs(SELECT_EXPR_KEYWORDS) do
+    add(kw, 14, 'SQL', 20)
+  end
+
+  select_items_cache = items
+  return select_items_cache
 end
 
 function M.new()
@@ -168,7 +212,7 @@ function M.new()
 end
 
 function M:get_trigger_characters()
-  return {}
+  return { ' ' }
 end
 
 function M:enabled()
@@ -181,14 +225,49 @@ function M:get_completions(context, callback)
   local col = context.cursor[2] or 0
   local before = line:sub(1, col)
 
-  -- If cursor is immediately after a dot (e.g. "users.", "public."),
-  -- do NOT suggest SQL keywords; let sqmeow handle columns and tables exclusively.
-  if before:match('[%w_%.`"]+%.%s*[%w_]*$') then
+  -- Guard comments and string literals
+  if before:match '%-%-' then
+    return callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
+  end
+  local quotes = select(2, before:gsub("'", ''))
+  if quotes % 2 == 1 then
     return callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
   end
 
+  -- If cursor is immediately after a dot (e.g. "users.", "public."),
+  -- do NOT suggest SQL keywords; let sqmeow handle columns and tables exclusively.
+  if before:match '[%w_%.`"]+%.%s*[%w_]*$' then
+    return callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
+  end
+
+  -- If cursor is in FROM / JOIN / INTO position, do NOT suggest statement keywords;
+  -- schemas and tables have exclusive priority.
+  if
+    before:match '[Ff][Rr][Oo][Mm]%s+[%w_`"\'%[%]]*$'
+    or before:match '[Jj][Oo][Ii][Nn]%s+[%w_`"\'%[%]]*$'
+    or before:match '[Ii][Nn][Tt][Oo]%s+[%w_`"\'%[%]]*$'
+  then
+    return callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
+  end
+
+  -- If cursor is inside a function call (e.g. AVG(, COUNT(), do NOT suggest statement keywords;
+  -- columns have exclusive priority.
+  if before:match '([%w_]+)%s*%([^()]*$' then
+    return callback { items = {}, is_incomplete_forward = false, is_incomplete_backward = false }
+  end
+
+  -- If cursor is in SELECT list, only suggest functions and select-level keywords (DISTINCT, CASE)
+  -- so DDL/DML statements never overwhelm column suggestions.
+  if before:match '[Ss][Ee][Ll][Ee][Cc][Tt]%s+.*$' then
+    return callback {
+      items = get_select_items(),
+      is_incomplete_forward = false,
+      is_incomplete_backward = false,
+    }
+  end
+
   callback {
-    items = get_items(),
+    items = get_all_items(),
     is_incomplete_forward = false,
     is_incomplete_backward = false,
   }
