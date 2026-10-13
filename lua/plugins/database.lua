@@ -186,19 +186,13 @@ return {
           width = 35,
         },
         result = {
-          height = 16,
           page_size = 1000,
-          max_column_width = 48,
           column_icons = true,
-          null_text = 'NULL',
-          sticky_header = true,
-          winbar_column_info = true,
         },
       },
       keymaps = {
         drawer = {
           toggle = { '<CR>', 'o', 'l' },
-          close = 'q',
         },
       },
     },
