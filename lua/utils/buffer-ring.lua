@@ -22,7 +22,7 @@ function M.is_qualifying(buf)
   local name = vim.api.nvim_buf_get_name(buf)
 
   -- Preview buffers from database relation viewer are allowed
-  if vim.b[buf].is_preview_buffer or name:match('%[Preview: ') then
+  if vim.b[buf].is_preview_buffer or name:match '%[Preview: ' then
     return true
   end
 
@@ -66,11 +66,11 @@ function M.is_qualifying(buf)
   end
 
   -- Pattern checks for Git and external tools
-  if filetype:match('^Neogit') or filetype:match('^Diffview') or filetype:match('^fugitive') then
+  if filetype:match '^Neogit' or filetype:match '^Diffview' or filetype:match '^fugitive' then
     return false
   end
 
-  if name:match('^fugitive://') or name:match('^diffview://') or name:match('^term://') or name:match('^octo://') then
+  if name:match '^fugitive://' or name:match '^diffview://' or name:match '^term://' or name:match '^octo://' then
     return false
   end
 
@@ -164,7 +164,7 @@ function M.on_buf_enter(buf)
       if victim and vim.api.nvim_buf_is_valid(victim) and not vim.bo[victim].modified then
         local ok, snacks = pcall(require, 'snacks')
         if ok and snacks.bufdelete then
-          snacks.bufdelete({ buf = victim })
+          snacks.bufdelete { buf = victim }
         else
           pcall(vim.api.nvim_buf_delete, victim, { unload = false })
         end
@@ -175,11 +175,7 @@ function M.on_buf_enter(buf)
     local now = vim.uv and vim.uv.now() or os.time()
     if (now - last_full_warn_time) > 5000 then
       last_full_warn_time = now
-      vim.notify(
-        'Buffer ring full (all slots unsaved or pinned). Save a file (:w) to allow auto-eviction.',
-        vim.log.levels.WARN,
-        { title = 'Buffer Ring' }
-      )
+      vim.notify('Buffer ring full (all slots unsaved or pinned). Save a file (:w) to allow auto-eviction.', vim.log.levels.WARN, { title = 'Buffer Ring' })
     end
   end
 end
@@ -203,7 +199,7 @@ local function get_target_window()
   if not win or not vim.api.nvim_win_is_valid(win) then
     win = vim.api.nvim_get_current_win()
   end
-  if vim.fn.exists('&winfixbuf') == 1 and vim.wo[win].winfixbuf then
+  if vim.fn.exists '&winfixbuf' == 1 and vim.wo[win].winfixbuf then
     vim.wo[win].winfixbuf = false
   end
   return win
@@ -226,7 +222,7 @@ local function switch_to_buf(target)
 
   local win = get_target_window()
   if win and vim.api.nvim_win_is_valid(win) then
-    if vim.fn.exists('&winfixbuf') == 1 and vim.wo[win].winfixbuf then
+    if vim.fn.exists '&winfixbuf' == 1 and vim.wo[win].winfixbuf then
       vim.wo[win].winfixbuf = false
     end
     vim.api.nvim_set_current_win(win)
@@ -358,7 +354,7 @@ function M.new_buffer(filetype, target_slot)
     win = vim.api.nvim_get_current_win()
   end
 
-  if vim.fn.exists('&winfixbuf') == 1 and vim.wo[win].winfixbuf then
+  if vim.fn.exists '&winfixbuf' == 1 and vim.wo[win].winfixbuf then
     vim.wo[win].winfixbuf = false
   end
 
@@ -381,7 +377,9 @@ function M.new_buffer(filetype, target_slot)
   else
     M.on_buf_enter(buf)
   end
-  pcall(function() require('lualine').refresh() end)
+  pcall(function()
+    require('lualine').refresh()
+  end)
 
   return buf
 end
@@ -402,7 +400,9 @@ function M.change_filetype()
       vim.bo[cur_buf].filetype = choice.ft
       local label = choice.ft ~= '' and choice.ft or 'plain text'
       vim.notify(('Filetype set to `%s`'):format(label), vim.log.levels.INFO, { title = 'Filetype' })
-      pcall(function() require('lualine').refresh() end)
+      pcall(function()
+        require('lualine').refresh()
+      end)
     end
   end)
 end
@@ -456,8 +456,8 @@ function M.toggle_pin(buf)
 
   local raw = vim.api.nvim_buf_get_name(buf)
   local name = vim.fs.basename(raw)
-  if vim.b[buf].is_preview_buffer or raw:match('%[Preview: ') then
-    local tbl = raw:match('%[Preview: (.-)%]')
+  if vim.b[buf].is_preview_buffer or raw:match '%[Preview: ' then
+    local tbl = raw:match '%[Preview: (.-)%]'
     name = tbl and ('Preview: ' .. tbl) or 'Preview'
   elseif name == '' then
     name = '[No Name]'
@@ -475,7 +475,9 @@ function M.toggle_pin(buf)
     vim.notify(string.format('Slot %d pinned (%s) 󰐃', slot, name), vim.log.levels.INFO, { title = 'Buffer Ring' })
   end
 
-  pcall(function() require('lualine').refresh() end)
+  pcall(function()
+    require('lualine').refresh()
+  end)
 end
 
 --- Check if buffer is pinned
@@ -525,8 +527,8 @@ function M.lualine_component()
       local raw = vim.api.nvim_buf_get_name(b)
       local name = vim.fs.basename(raw)
 
-      if vim.b[b].is_preview_buffer or raw:match('%[Preview: ') then
-        local tbl = raw:match('%[Preview: (.-)%]')
+      if vim.b[b].is_preview_buffer or raw:match '%[Preview: ' then
+        local tbl = raw:match '%[Preview: (.-)%]'
         name = tbl and tbl or 'preview'
       elseif name == '' then
         name = '[No Name]'
@@ -535,16 +537,20 @@ function M.lualine_component()
       local modified = vim.bo[b].modified and ' ●' or ''
       local pin = M.pinned[b] and '󰐃 ' or ''
 
-      -- Style active vs inactive slots (clean highlight badge without extra separators)
+      -- Style active vs inactive slots (clean highlight badge without numbers)
       if is_active then
-        table.insert(items, string.format('%%#%s# %d %s%s%s %%*', active_hl, i, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %s%s%s %%*', active_hl, pin, name, modified))
       else
-        table.insert(items, string.format('%%#%s# %d %s%s%s %%*', inactive_hl, i, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %s%s%s %%*', inactive_hl, pin, name, modified))
       end
     end
   end
 
-  return table.concat(items, '')
+  if #items == 0 then
+    return ''
+  end
+
+  return '󰓩' .. table.concat(items, '|')
 end
 
 --- Setup autocommands for automatic slot management

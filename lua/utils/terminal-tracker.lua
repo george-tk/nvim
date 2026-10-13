@@ -26,7 +26,7 @@ local function resolve_terminal_label(buf)
     end
   end
   local bname = vim.api.nvim_buf_get_name(buf)
-  local shell_name = bname:match(':(%w+)$')
+  local shell_name = bname:match ':(%w+)$'
   if shell_name and shell_name ~= '' then
     return shell_name
   end
@@ -44,14 +44,16 @@ function M.get_terminals()
   local seen = {}
 
   -- 1. Query Snacks terminal list (canonical registry of active Snacks terminals)
-  local ok_snacks, snacks_term = pcall(function() return Snacks.terminal.list() end)
+  local ok_snacks, snacks_term = pcall(function()
+    return Snacks.terminal.list()
+  end)
   if ok_snacks and type(snacks_term) == 'table' then
     for _, t in ipairs(snacks_term) do
       if t and t:buf_valid() and vim.api.nvim_buf_is_valid(t.buf) then
         local bname = vim.api.nvim_buf_get_name(t.buf):lower()
         local cmd_str = tostring(t.cmd or ''):lower()
-        local is_opencode = cmd_str:find('opencode') ~= nil or bname:find('opencode') ~= nil
-        local is_dbout = bname:find('/sqmeow/') or bname:find('/db_ui/')
+        local is_opencode = cmd_str:find 'opencode' ~= nil or bname:find 'opencode' ~= nil
+        local is_dbout = bname:find '/sqmeow/' or bname:find '/db_ui/'
         if not is_opencode and not is_dbout then
           local st = vim.b[t.buf].snacks_terminal
           local id = (t.opts and t.opts.count) or (st and st.id) or 1
@@ -74,10 +76,10 @@ function M.get_terminals()
       local ft = vim.bo[buf].filetype
       local bt = vim.bo[buf].buftype
       local bname = vim.api.nvim_buf_get_name(buf):lower()
-      local is_term = (bt == 'terminal' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find('^term://') ~= nil)
+      local is_term = (bt == 'terminal' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find '^term://' ~= nil)
       local st = vim.b[buf].snacks_terminal
-      local is_opencode = ft:match('opencode') ~= nil or bname:find('opencode') ~= nil or (st and tostring(st.cmd):find('opencode') ~= nil)
-      local is_dbout = ft == 'dbout' or ft == 'sqmeow-result' or bname:find('/sqmeow/') or bname:find('/db_ui/')
+      local is_opencode = ft:match 'opencode' ~= nil or bname:find 'opencode' ~= nil or (st and tostring(st.cmd):find 'opencode' ~= nil)
+      local is_dbout = ft == 'dbout' or ft == 'sqmeow-result' or bname:find '/sqmeow/' or bname:find '/db_ui/'
 
       if is_term and not is_opencode and not is_dbout then
         local id = (st and st.id) or 1
@@ -93,7 +95,9 @@ function M.get_terminals()
     end
   end
 
-  table.sort(terms, function(a, b) return a.id < b.id end)
+  table.sort(terms, function(a, b)
+    return a.id < b.id
+  end)
   cache.timestamp = now
   cache.items = terms
   return terms
@@ -146,13 +150,13 @@ function M.lualine_component()
   for _, t in ipairs(terms) do
     local is_active = (t.buf == cur_buf or t.buf == win_buf)
     if is_active then
-      table.insert(parts, string.format('%%#%s# %d: %s %%*', active_hl, t.id, t.label))
+      table.insert(parts, string.format('%%#%s# %s %%*', active_hl, t.label))
     else
-      table.insert(parts, string.format('%%#%s# %d: %s %%*', inactive_hl, t.id, t.label))
+      table.insert(parts, string.format('%%#%s# %s %%*', inactive_hl, t.label))
     end
   end
 
-  return table.concat(parts, '')
+  return '' .. table.concat(parts, '|')
 end
 
 -- Setup autocommands to invalidate cache and refresh lualine on terminal lifecycle events only
@@ -167,7 +171,9 @@ function M.setup()
     group = group,
     callback = function()
       M.invalidate()
-      pcall(function() require('lualine').refresh() end)
+      pcall(function()
+        require('lualine').refresh()
+      end)
     end,
     desc = 'Invalidate terminal tracker cache on terminal lifecycle events',
   })

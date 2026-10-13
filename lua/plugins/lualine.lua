@@ -182,7 +182,7 @@ return {
             function()
               return require('utils.buffer-ring').lualine_component()
             end,
-            padding = { left = 0, right = 0 },
+            padding = { left = 1, right = 0 },
           },
         },
 
