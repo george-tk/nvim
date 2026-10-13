@@ -156,7 +156,7 @@ function M.lualine_component()
     end
   end
 
-  return '' .. table.concat(parts, '|')
+  return ' ' .. table.concat(parts, '|')
 end
 
 -- Setup autocommands to invalidate cache and refresh lualine on terminal lifecycle events only

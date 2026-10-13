@@ -4,6 +4,17 @@ This document serves as the single source of truth for auditing, updating, and m
 
 ---
 
+## 0. Git Commit & Push Policy (MANDATORY RULE)
+
+> [!CAUTION]
+> **Personal Neovim Config & Dotfiles (`~/.config/nvim` / dotfiles)**:
+> **NEVER execute `git commit` or `git push`** unless the user specifically and explicitly asks you to after reviewing and being completely satisfied with the changes. Keep changes local and unstaged until an explicit user request is received.
+>
+> **External Repositories (e.g. `sqmeow.nvim` / open source forks)**:
+> This restriction does NOT apply to external repositories where you are managing issues, creating branches, running test suites, and submitting PRs. You retain full Git control over those repositories.
+
+---
+
 ## 1. Upstream Baseline Reference & Inventory
 
 The table below catalogs all **34 installed plugins** managed by `lazy.nvim` as of **October 10, 2026**.

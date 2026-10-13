@@ -64,11 +64,11 @@ return {
         -- Inlay hints: dimmed elegant ghost labels
         LspInlayHint = { fg = colors.overlay0, bg = 'NONE', italic = true },
 
-        -- Lualine transparent statusline: mode-colored active blocks with black text, mode-colored inactive text
+        -- Lualine transparent statusline: mode-colored active blocks with black text, normal text color inactive
         BufferRingActive = { bg = colors.blue, fg = colors.base, bold = true },
-        BufferRingInactive = { bg = 'NONE', fg = colors.blue },
+        BufferRingInactive = { bg = 'NONE', fg = colors.text },
         TerminalTrackerActive = { bg = colors.blue, fg = colors.base, bold = true },
-        TerminalTrackerInactive = { bg = 'NONE', fg = colors.blue },
+        TerminalTrackerInactive = { bg = 'NONE', fg = colors.text },
       }
     end,
   },

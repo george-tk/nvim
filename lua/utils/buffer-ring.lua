@@ -550,7 +550,7 @@ function M.lualine_component()
     return ''
   end
 
-  return '󰓩' .. table.concat(items, '|')
+  return '󰓩 ' .. table.concat(items, '|')
 end
 
 --- Setup autocommands for automatic slot management

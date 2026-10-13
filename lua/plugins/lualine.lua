@@ -13,11 +13,12 @@ return {
       local C = ok and ctp.get_palette 'mocha' or {}
       local blue = C.blue or '#89b4fa'
       local base = C.base or '#1e1e2e'
+      local text = C.text or '#cdd6f4'
 
       vim.api.nvim_set_hl(0, 'BufferRingActive', { bg = blue, fg = base, bold = true, default = true })
-      vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = 'NONE', fg = blue, default = true })
+      vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = 'NONE', fg = text, default = true })
       vim.api.nvim_set_hl(0, 'TerminalTrackerActive', { bg = blue, fg = base, bold = true, default = true })
-      vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = 'NONE', fg = blue, default = true })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = 'NONE', fg = text, default = true })
     end
 
     setup_dock_highlights()
@@ -100,7 +101,7 @@ return {
       return vim.api.nvim_get_current_buf()
     end
 
-    -- Transparent statusline theme: mode-colored active blocks with black text, mode-colored inactive text
+    -- Transparent statusline theme: mode-colored active blocks with black text, normal text color elsewhere
     local function get_theme()
       local ok, ctp = pcall(require, 'catppuccin.palettes')
       if not ok then
@@ -110,22 +111,15 @@ return {
       local function make_mode(accent)
         return {
           a = { bg = accent, fg = C.base, gui = 'bold' },
-          b = { bg = 'NONE', fg = accent },
-          c = { bg = 'NONE', fg = accent },
-          x = { bg = 'NONE', fg = accent },
-          y = { bg = 'NONE', fg = accent },
-          z = { bg = 'NONE', fg = accent },
+          b = { bg = 'NONE', fg = C.text },
+          c = { bg = 'NONE', fg = C.text },
+          x = { bg = 'NONE', fg = C.text },
+          y = { bg = 'NONE', fg = C.text },
+          z = { bg = 'NONE', fg = C.text },
         }
       end
       return {
-        normal = {
-          a = { bg = C.blue, fg = C.base, gui = 'bold' },
-          b = { bg = 'NONE', fg = C.blue },
-          c = { bg = 'NONE', fg = C.blue },
-          x = { bg = 'NONE', fg = C.blue },
-          y = { bg = 'NONE', fg = C.blue },
-          z = { bg = 'NONE', fg = C.blue },
-        },
+        normal = make_mode(C.blue),
         insert = make_mode(C.green),
         terminal = make_mode(C.green),
         command = make_mode(C.peach),
@@ -192,7 +186,7 @@ return {
             function()
               return require('utils.terminal-tracker').lualine_component()
             end,
-            padding = { left = 0, right = 1 },
+            padding = { left = 0, right = 0 },
           },
         },
         lualine_y = {
@@ -310,29 +304,6 @@ return {
                 end
               end
               return icon .. ' ' .. ft
-            end,
-            color = function()
-              local cur_buf = get_active_editor_buf()
-              local ft = vim.bo[cur_buf].filetype
-              local bname = vim.api.nvim_buf_get_name(cur_buf)
-              local is_db = ft == 'sql'
-                or ft == 'mysql'
-                or ft == 'plsql'
-                or ft == 'surql'
-                or ft == 'cql'
-                or ft == 'sqmeow-result'
-                or ft == 'dbout'
-                or vim.b[cur_buf].sqmeow_connection
-                or vim.b[cur_buf].db_name
-                or vim.b[cur_buf].is_preview_buffer
-                or bname:match '%[Preview: '
-                or bname:match '%[Alter: '
-                or bname:find 'sqmeow://'
-
-              if is_db then
-                return { fg = '#fab387', gui = 'bold' }
-              end
-              return nil
             end,
           },
         },
