@@ -194,114 +194,110 @@ return {
             end,
             padding = { left = 0, right = 1 },
           },
-          {
-            function()
-              local cur_buf = get_active_editor_buf()
-              local db_utils = _G.DatabaseUtils
-              if not db_utils then
-                local ok_u, u = pcall(require, 'utils.database')
-                if ok_u then
-                  db_utils = u
-                end
-              end
-
-              local db_name = nil
-              local is_ro = false
-
-              -- 1. Query sqmeow authoritative execution target for this buffer
-              local ok_conn, conn_api = pcall(require, 'sqmeow.api.connection')
-              if ok_conn and conn_api and conn_api.target then
-                local target = conn_api.target(cur_buf)
-                if target and target.name then
-                  db_name = target.name
-                  is_ro = target.read_only == true
-                end
-              end
-
-              -- 2. Buffer-local connection bindings
-              if not db_name or db_name == '' then
-                db_name = vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
-              end
-
-              -- 3. DatabaseUtils active db / current db
-              if not db_name or db_name == '' then
-                if db_utils and db_utils.get_active_db then
-                  local _, dname = db_utils.get_active_db(cur_buf)
-                  db_name = dname
-                end
-              end
-              if not db_name or db_name == '' then
-                if db_utils and db_utils.current_db_name then
-                  db_name = db_utils.current_db_name
-                end
-              end
-
-              -- 4. Result buffer fallback
-              if not db_name or db_name == '' then
-                local ok_st, st = pcall(require, 'sqmeow.core.state')
-                if ok_st and st then
-                  if st.call and st.call.conn_id and st.connections and st.connections[st.call.conn_id] then
-                    local c = st.connections[st.call.conn_id]
-                    db_name = c.name
-                    is_ro = c.read_only == true
-                  elseif st.current and st.connections and st.connections[st.current] then
-                    local c = st.connections[st.current]
-                    db_name = c.name
-                    is_ro = c.read_only == true
-                  end
-                end
-              end
-
-              if not db_name or db_name == '' then
-                return ''
-              end
-
-              if not is_ro then
-                local ok_st, st = pcall(require, 'sqmeow.core.state')
-                if ok_st and st and st.connection_by_name then
-                  local c = st.connection_by_name(db_name)
-                  if c and c.read_only then
-                    is_ro = true
-                  end
-                end
-              end
-
-              local display = '󰆼 ' .. db_name
-              if is_ro then
-                display = display .. ' 󰌾'
-              end
-              return display
-            end,
-            cond = function()
-              local cur_buf = get_active_editor_buf()
-              local ft = vim.bo[cur_buf].filetype
-              local bname = vim.api.nvim_buf_get_name(cur_buf)
-              if ft == 'sql' or ft == 'mysql' or ft == 'plsql' or ft == 'surql' or ft == 'cql' or ft == 'sqmeow-result' or ft == 'dbout' then
-                return true
-              end
-              if vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name or vim.b[cur_buf].is_preview_buffer then
-                return true
-              end
-              if bname:match '%[Preview: ' or bname:match '%[Alter: ' or bname:find 'sqmeow://' then
-                return true
-              end
-              return false
-            end,
-            color = { fg = '#fab387', gui = 'bold' },
-          },
         },
         lualine_y = {
           {
             function()
               local cur_buf = get_active_editor_buf()
-              local bname = vim.api.nvim_buf_get_name(cur_buf)
-              if vim.b[cur_buf].is_preview_buffer or bname:match '%[Preview: ' then
-                return '󰆼 preview'
-              end
-              if bname:match '%[Alter: ' then
-                return '󰆼 alter'
-              end
               local ft = vim.bo[cur_buf].filetype
+              local bname = vim.api.nvim_buf_get_name(cur_buf)
+              local is_db = ft == 'sql'
+                or ft == 'mysql'
+                or ft == 'plsql'
+                or ft == 'surql'
+                or ft == 'cql'
+                or ft == 'sqmeow-result'
+                or ft == 'dbout'
+                or vim.b[cur_buf].sqmeow_connection
+                or vim.b[cur_buf].db_name
+                or vim.b[cur_buf].is_preview_buffer
+                or bname:match '%[Preview: '
+                or bname:match '%[Alter: '
+                or bname:find 'sqmeow://'
+
+              if is_db then
+                local db_utils = _G.DatabaseUtils
+                if not db_utils then
+                  local ok_u, u = pcall(require, 'utils.database')
+                  if ok_u then
+                    db_utils = u
+                  end
+                end
+
+                local db_name = nil
+                local is_ro = false
+
+                -- 1. Query sqmeow authoritative execution target for this buffer
+                local ok_conn, conn_api = pcall(require, 'sqmeow.api.connection')
+                if ok_conn and conn_api and conn_api.target then
+                  local target = conn_api.target(cur_buf)
+                  if target and target.name then
+                    db_name = target.name
+                    is_ro = target.read_only == true
+                  end
+                end
+
+                -- 2. Buffer-local connection bindings
+                if not db_name or db_name == '' then
+                  db_name = vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
+                end
+
+                -- 3. DatabaseUtils active db / current db
+                if not db_name or db_name == '' then
+                  if db_utils and db_utils.get_active_db then
+                    local _, dname = db_utils.get_active_db(cur_buf)
+                    db_name = dname
+                  end
+                end
+                if not db_name or db_name == '' then
+                  if db_utils and db_utils.current_db_name then
+                    db_name = db_utils.current_db_name
+                  end
+                end
+
+                -- 4. Result buffer fallback
+                if not db_name or db_name == '' then
+                  local ok_st, st = pcall(require, 'sqmeow.core.state')
+                  if ok_st and st then
+                    if st.call and st.call.conn_id and st.connections and st.connections[st.call.conn_id] then
+                      local c = st.connections[st.call.conn_id]
+                      db_name = c.name
+                      is_ro = c.read_only == true
+                    elseif st.current and st.connections and st.connections[st.current] then
+                      local c = st.connections[st.current]
+                      db_name = c.name
+                      is_ro = c.read_only == true
+                    end
+                  end
+                end
+
+                if db_name and db_name ~= '' then
+                  if not is_ro then
+                    local ok_st, st = pcall(require, 'sqmeow.core.state')
+                    if ok_st and st and st.connection_by_name then
+                      local c = st.connection_by_name(db_name)
+                      if c and c.read_only then
+                        is_ro = true
+                      end
+                    end
+                  end
+
+                  local display = '󰆼 ' .. db_name
+                  if is_ro then
+                    display = display .. ' 󰌾'
+                  end
+                  return display
+                end
+
+                if vim.b[cur_buf].is_preview_buffer or bname:match '%[Preview: ' then
+                  return '󰆼 preview'
+                end
+                if bname:match '%[Alter: ' then
+                  return '󰆼 alter'
+                end
+                return '󰆼 sql'
+              end
+
               if not ft or ft == '' then
                 return '󰈔 none'
               end
@@ -314,6 +310,29 @@ return {
                 end
               end
               return icon .. ' ' .. ft
+            end,
+            color = function()
+              local cur_buf = get_active_editor_buf()
+              local ft = vim.bo[cur_buf].filetype
+              local bname = vim.api.nvim_buf_get_name(cur_buf)
+              local is_db = ft == 'sql'
+                or ft == 'mysql'
+                or ft == 'plsql'
+                or ft == 'surql'
+                or ft == 'cql'
+                or ft == 'sqmeow-result'
+                or ft == 'dbout'
+                or vim.b[cur_buf].sqmeow_connection
+                or vim.b[cur_buf].db_name
+                or vim.b[cur_buf].is_preview_buffer
+                or bname:match '%[Preview: '
+                or bname:match '%[Alter: '
+                or bname:find 'sqmeow://'
+
+              if is_db then
+                return { fg = '#fab387', gui = 'bold' }
+              end
+              return nil
             end,
           },
         },
