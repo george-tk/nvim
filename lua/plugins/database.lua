@@ -73,6 +73,12 @@ return {
             end
           end
 
+          for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].winbar = ''
+            end
+          end
+
           pcall(function()
             vim.b[buf].neocodeium_enabled = true
             vim.b[buf].neocodeium_allowed_encoding = true
@@ -153,6 +159,11 @@ return {
             if vim.api.nvim_win_is_valid(w) then
               vim.wo[w].winfixheight = true
               vim.wo[w].winfixbuf = true
+              local wb = vim.wo[w].winbar
+              if wb and wb ~= '' then
+                local stripped = wb:gsub('^%%#SqmeowWinbar#.-%%%*%s*', '')
+                vim.wo[w].winbar = stripped ~= '' and (' ' .. stripped) or ''
+              end
             end
           end
           if _G.BottomPanel then

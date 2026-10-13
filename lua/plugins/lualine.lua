@@ -266,17 +266,7 @@ return {
                 end
               end
 
-              local tbl = nil
-              if db_utils and db_utils.get_active_table then
-                tbl = db_utils.get_active_table(cur_buf)
-              else
-                tbl = vim.b[cur_buf].sqmeow_table
-              end
-
               local display = '󰆼 ' .. db_name
-              if tbl and tbl ~= '' then
-                display = display .. ' 󰓫 ' .. tbl
-              end
               if is_ro then
                 display = display .. ' 󰌾'
               end

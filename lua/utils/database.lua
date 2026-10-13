@@ -733,6 +733,46 @@ function M.setup_drawer_helpers()
       return res
     end
   end
+
+  -- 3. Hook sqmeow.ui.editor to suppress redundant connection header in query editor windows
+  local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
+  if ok_ed and editor and not M._editor_winbar_hooked then
+    M._editor_winbar_hooked = true
+    editor.update_winbar = function()
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_is_valid(win) then
+          local buf = vim.api.nvim_win_get_buf(win)
+          if editor.is_scratchpad(buf) or vim.b[buf].sqmeow_connection or vim.bo[buf].filetype == 'sql' then
+            vim.wo[win].winbar = ''
+          end
+        end
+      end
+    end
+  end
+
+  -- 4. Hook sqmeow.ui.result to strip connection name from the result winbar header
+  local ok_res, result = pcall(require, 'sqmeow.ui.result')
+  if ok_res and result and not M._result_winbar_hooked then
+    M._result_winbar_hooked = true
+    local orig_result_update_winbar = result.update_winbar
+    result.update_winbar = function(summary)
+      orig_result_update_winbar(summary)
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_is_valid(win) then
+          local buf = vim.api.nvim_win_get_buf(win)
+          local ft = vim.bo[buf].filetype
+          local bname = vim.api.nvim_buf_get_name(buf)
+          if ft == 'sqmeow-result' or ft == 'dbout' or bname:find 'sqmeow://result' then
+            local wb = vim.wo[win].winbar
+            if wb and wb ~= '' then
+              local stripped = wb:gsub('^%%#SqmeowWinbar#.-%%%*%s*', '')
+              vim.wo[win].winbar = stripped ~= '' and (' ' .. stripped) or ''
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 -------------------------------------------------------------------------------
