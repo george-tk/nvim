@@ -150,7 +150,7 @@ function M.is_accessible(url)
   return accessible
 end
 
--- Restore last active connection (with online verification)
+-- Restore last active connection
 function M.load_active_connection()
   local conns = M.get_all_connections()
   if #conns == 0 then
@@ -166,18 +166,24 @@ function M.load_active_connection()
       if ok_json and type(parsed) == 'table' and parsed.name and parsed.url then
         local found = false
         for _, c in ipairs(conns) do
-          if c.name == parsed.name and c.url == parsed.url then
+          if c.name == parsed.name then
             found = true
             break
           end
         end
-        if found and M.is_accessible(parsed.url) then
+        if found then
           M.current_db = parsed.url
           M.current_db_name = parsed.name
           return parsed.url, parsed.name
         end
       end
     end
+  end
+
+  if #conns > 0 then
+    M.current_db = conns[1].url
+    M.current_db_name = conns[1].name
+    return conns[1].url, conns[1].name
   end
 
   M.current_db = nil
@@ -315,6 +321,11 @@ function M.set_active_connection(name, url)
 
   -- Connect & use connection in sqmeow without duplicating
   M.ensure_sqmeow_connection(name)
+
+  local ok_lualine, lualine = pcall(require, 'lualine')
+  if ok_lualine and lualine.refresh then
+    lualine.refresh()
+  end
 end
 
 -- Initialize persistent connections & state
@@ -325,6 +336,99 @@ end
 
 M.init()
 
+-- Extract table name from a SQL query string
+function M.detect_table_from_sql(sql)
+  if not sql or type(sql) ~= 'string' then
+    return nil
+  end
+  local raw = sql:match '[Ff][Rr][Oo][Mm]%s+([%w_%.%"`%[%]]+)'
+    or sql:match '[Ii][Nn][Ss][Ee][Rr][Tt]%s+[Ii][Nn][Tt][Oo]%s+([%w_%.%"`%[%]]+)'
+    or sql:match '[Uu][Pp][Dd][Aa][Tt][Ee]%s+([%w_%.%"`%[%]]+)'
+    or sql:match '[Tt][Aa][Bb][Ll][Ee]%s+([%w_%.%"`%[%]]+)'
+  if raw then
+    raw = raw:gsub('["`%[%]]', '')
+    local upper = raw:upper()
+    local ignored = {
+      WHERE = true,
+      SET = true,
+      SELECT = true,
+      VALUES = true,
+      JOIN = true,
+      IF = true,
+      ONLY = true,
+      DUAL = true,
+    }
+    if not ignored[upper] and raw ~= '' then
+      return raw
+    end
+  end
+  return nil
+end
+
+-- Detect table name from buffer lines (checks first 30 lines)
+function M.detect_table_from_buffer(buf)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return nil
+  end
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, 30, false)
+  if #lines == 0 then
+    return nil
+  end
+  local text = table.concat(lines, ' ')
+  return M.detect_table_from_sql(text)
+end
+
+-- Resolve the active table for any buffer
+function M.get_active_table(buf)
+  buf = buf or vim.api.nvim_get_current_buf()
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return nil
+  end
+
+  -- 1. Explicit buffer variable
+  if vim.b[buf].sqmeow_table and vim.b[buf].sqmeow_table ~= '' then
+    return vim.b[buf].sqmeow_table
+  end
+
+  -- 2. Buffer name pattern: [Preview: <table>] or [Alter: <table>]
+  local bname = vim.api.nvim_buf_get_name(buf)
+  local tbl = bname:match '%[Preview:%s*([^%]]+)%]' or bname:match '%[Alter:%s*([^%]]+)%]'
+  if tbl then
+    tbl = tbl:gsub('%s*%(%d+%)', '')
+    tbl = vim.trim(tbl)
+    if tbl ~= '' then
+      return tbl
+    end
+  end
+
+  -- 3. Result buffer (sqmeow-result / dbout)
+  local ft = vim.bo[buf].filetype
+  if ft == 'sqmeow-result' or ft == 'dbout' or bname:find 'sqmeow://result' then
+    local ok_st, st = pcall(require, 'sqmeow.core.state')
+    if ok_st and st and st.call then
+      if st.call.source and st.call.source.name then
+        return st.call.source.name
+      end
+      if st.call.statement then
+        local t = M.detect_table_from_sql(st.call.statement)
+        if t then
+          return t
+        end
+      end
+    end
+  end
+
+  -- 4. Parse SQL statements from buffer content
+  if ft == 'sql' or ft == 'mysql' or ft == 'plsql' or ft == 'surql' or ft == 'cql' or vim.b[buf].sqmeow_editor then
+    local t = M.detect_table_from_buffer(buf)
+    if t then
+      return t
+    end
+  end
+
+  return nil
+end
+
 -- Resolve the active database for any buffer
 function M.get_active_db(buf)
   buf = buf or vim.api.nvim_get_current_buf()
@@ -332,7 +436,17 @@ function M.get_active_db(buf)
     return nil, nil
   end
 
-  -- 1. If buffer already has an assigned sqmeow_connection, respect it
+  -- 1. Check authoritative sqmeow target connection for this buffer
+  local ok_target, conn_api = pcall(require, 'sqmeow.api.connection')
+  if ok_target and conn_api and conn_api.target then
+    local target = conn_api.target(buf)
+    if target and target.name then
+      local url = M.get_connection_url(target.name) or target.url
+      return url, target.name
+    end
+  end
+
+  -- 2. Check buffer-local connection bindings
   local ok_sq, sq_conn = pcall(function()
     return vim.b[buf].sqmeow_connection
   end)
@@ -348,10 +462,9 @@ function M.get_active_db(buf)
     end
   end
 
-  -- 2. Buffer path belongs to a specific database folder
+  -- 3. Buffer path belongs to a specific database folder
   local buf_path = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
   if buf_path ~= '' then
-    -- Collect all known connections (both persistent and active in state)
     local candidates = {}
     local seen = {}
 
@@ -376,7 +489,6 @@ function M.get_active_db(buf)
       end
     end
 
-    -- Sort candidates by name length descending so child connections match before parent
     table.sort(candidates, function(a, b)
       return #a.name > #b.name
     end)
@@ -385,7 +497,6 @@ function M.get_active_db(buf)
       local pattern = '/' .. c.name:gsub('([^%w])', '%%%1') .. '/'
       local pattern_under = '/' .. c.name:gsub('([^%w])', '%%%1') .. '_'
       if buf_path:find(pattern) or buf_path:find(pattern_under) then
-        -- Check if path contains a child database subfolder (e.g. .../scratch/cluster/testdb/...)
         local sub_db = buf_path:match('/' .. c.name:gsub('([^%w])', '%%%1') .. '/([^/]+)/')
         if sub_db then
           local child_name = c.name .. '/' .. sub_db
@@ -394,19 +505,6 @@ function M.get_active_db(buf)
         end
         local conn_url = M.get_connection_url(c.name) or c.url
         return conn_url, c.name
-      end
-    end
-  end
-
-  -- 3. Buffer already has an assigned database or sqmeow connection
-  if ok_sq and sq_conn and sq_conn ~= '' then
-    local url = M.get_connection_url(sq_conn)
-    if url then
-      return url, sq_conn
-    end
-    for _, c in ipairs(M.get_all_connections()) do
-      if c.name == sq_conn then
-        return c.url, c.name
       end
     end
   end
@@ -422,8 +520,23 @@ function M.get_active_db(buf)
     return db_val, name
   end
 
-  -- 4. Fallback to active connection
-  if M.current_db and M.is_accessible(M.current_db) then
+  if ok_name and db_name_val and db_name_val ~= '' then
+    local url = M.get_connection_url(db_name_val)
+    return url, db_name_val
+  end
+
+  -- 4. Active sqmeow state connection
+  local ok_state, state = pcall(require, 'sqmeow.core.state')
+  if ok_state and state and state.current_connection then
+    local curr = state.current_connection()
+    if curr and curr.name then
+      local url = M.get_connection_url(curr.name) or curr.url
+      return url, curr.name
+    end
+  end
+
+  -- 5. Fallback to active connection
+  if M.current_db_name and M.current_db_name ~= '' then
     return M.current_db, M.current_db_name
   end
 
@@ -498,6 +611,24 @@ function M.setup_drawer_helpers()
         vim.b[buf].is_preview_buffer = true
 
         local node = drawer.current_node and drawer.current_node()
+        local conn_name = nil
+        if node and node.conn_id then
+          local ok_st, st = pcall(require, 'sqmeow.core.state')
+          if ok_st and st and st.connections and st.connections[node.conn_id] then
+            conn_name = st.connections[node.conn_id].name
+          end
+        end
+        conn_name = conn_name or vim.b[buf].sqmeow_connection or M.current_db_name
+        if conn_name then
+          vim.b[buf].db_name = conn_name
+          vim.b[buf].sqmeow_connection = conn_name
+          M.current_db_name = conn_name
+          local url = M.get_connection_url(conn_name)
+          if url then
+            M.current_db = url
+          end
+        end
+
         if node and node.name then
           vim.b[buf].sqmeow_table = node.name
           if node.path and node.path[1] then
@@ -505,9 +636,6 @@ function M.setup_drawer_helpers()
           end
         end
 
-        if M.current_db_name then
-          vim.b[buf].db_name = M.current_db_name
-        end
         local group = vim.api.nvim_create_augroup('SqmeowPreviewSave', { clear = false })
         pcall(vim.api.nvim_clear_autocmds, { buffer = buf, group = group })
         vim.api.nvim_create_autocmd('BufWriteCmd', {
@@ -563,6 +691,10 @@ function M.setup_drawer_helpers()
           _G.BottomPanel.ensure_precedence()
         end
       end
+      local ok_lualine, lualine = pcall(require, 'lualine')
+      if ok_lualine and lualine.refresh then
+        lualine.refresh()
+      end
       return res
     end
   end
@@ -591,6 +723,11 @@ function M.setup_drawer_helpers()
         if buf and vim.api.nvim_buf_is_valid(buf) and (vim.bo[buf].filetype == 'sql' or vim.b[buf].sqmeow_connection) then
           vim.b[buf].db_name = conn.name
           vim.b[buf].sqmeow_connection = conn.name
+        end
+
+        local ok_lualine, lualine = pcall(require, 'lualine')
+        if ok_lualine and lualine.refresh then
+          lualine.refresh()
         end
       end
       return res
@@ -971,12 +1108,16 @@ function M.open_query_scratchpad()
     local default_prefix = M.current_db_name and (M.current_db_name .. '/') or nil
     view_api.scratchpad(nil, default_prefix)
     local cur_buf = vim.api.nvim_get_current_buf()
-    if M.current_db then
+    if M.current_db_name then
       vim.b[cur_buf].db_name = M.current_db_name
       vim.b[cur_buf].sqmeow_connection = M.current_db_name
     end
     vim.b[cur_buf].neocodeium_enabled = true
     vim.b[cur_buf].neocodeium_allowed_encoding = true
+    local ok_lualine, lualine = pcall(require, 'lualine')
+    if ok_lualine and lualine.refresh then
+      lualine.refresh()
+    end
   end
 end
 
@@ -1010,8 +1151,6 @@ function M.run_query()
     if M.current_db_name then
       db_name = M.current_db_name
       db_url = M.current_db
-      vim.b[cur_buf].db_name = db_name
-      vim.b[cur_buf].sqmeow_connection = db_name
     else
       M.select_connection(function(selected_url, selected_name)
         if selected_name then
@@ -1019,6 +1158,20 @@ function M.run_query()
         end
       end)
       return
+    end
+  end
+
+  -- Synchronize buffer-local connection bindings and active state
+  vim.b[cur_buf].db_name = db_name
+  vim.b[cur_buf].sqmeow_connection = db_name
+  M.current_db_name = db_name
+  M.current_db = db_url or M.get_connection_url(db_name)
+
+  -- Detect active table if not already assigned
+  if not vim.b[cur_buf].sqmeow_table then
+    local tbl = M.get_active_table(cur_buf)
+    if tbl then
+      vim.b[cur_buf].sqmeow_table = tbl
     end
   end
 
@@ -1047,6 +1200,11 @@ function M.run_query()
     if _G.BottomPanel.ensure_precedence then
       _G.BottomPanel.ensure_precedence()
     end
+  end
+
+  local ok_lualine, lualine = pcall(require, 'lualine')
+  if ok_lualine and lualine.refresh then
+    lualine.refresh()
   end
 end
 
@@ -1094,8 +1252,11 @@ function M.save_query(force_prompt)
     return
   end
 
-  local default_name = (vim.b[buf].sqmeow_table and vim.b[buf].sqmeow_table)
-    or (current_name ~= '' and not current_name:find 'scratch' and not current_name:find 'Preview' and vim.fn.fnamemodify(current_name, ':t:r'))
+  local default_name = M.get_active_table(buf)
+    or (current_name ~= '' and not current_name:find 'scratch' and not current_name:find 'Preview' and not current_name:find 'Alter' and vim.fn.fnamemodify(
+      current_name,
+      ':t:r'
+    ))
     or ('query_' .. os.date '%Y%m%d_%H%M%S')
 
   vim.ui.input({
@@ -1202,7 +1363,19 @@ function M.select_saved_query()
     if target_db then
       vim.b[buf].db_name = target_db
       vim.b[buf].sqmeow_connection = target_db
+      M.current_db_name = target_db
+      M.current_db = M.get_connection_url(target_db)
       M.ensure_sqmeow_connection(target_db)
+    end
+    if not vim.b[buf].sqmeow_table then
+      local tbl = M.get_active_table(buf)
+      if tbl then
+        vim.b[buf].sqmeow_table = tbl
+      end
+    end
+    local ok_lualine, lualine = pcall(require, 'lualine')
+    if ok_lualine and lualine.refresh then
+      lualine.refresh()
     end
   end)
 end

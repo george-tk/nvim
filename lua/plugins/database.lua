@@ -42,38 +42,46 @@ return {
       })
 
       -- Automatically bind active database and enable AI completion for any opened .sql file
-      vim.api.nvim_create_autocmd('FileType', {
-        pattern = { 'sql', 'mysql', 'plsql' },
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufEnter' }, {
+        pattern = { 'sql', 'mysql', 'plsql', 'surql', 'cql' },
         callback = function(args)
           if vim.g.SessionLoad == 1 then
             return
           end
-          local buf = args.buf
+          local buf = args.buf or vim.api.nvim_get_current_buf()
           if not buf or not vim.api.nvim_buf_is_valid(buf) then
             return
           end
 
-          local db_url, db_name = db.get_active_db(buf)
           vim.opt_local.spell = false
-          if db_url and db.is_accessible(db_url) then
-            pcall(function()
-              vim.b[buf].db_name = db_name
-              vim.b[buf].sqmeow_connection = db_name
-            end)
+
+          local db_url, db_name = db.get_active_db(buf)
+          if not db_name and db.current_db_name then
+            db_name = db.current_db_name
+            db_url = db.current_db
           end
-          pcall(function()
-            if not vim.b[buf].sqmeow_table then
-              local bname = vim.api.nvim_buf_get_name(buf)
-              local preview_tbl = bname:match '%[Preview:%s*([^%(%]]+)'
-              if preview_tbl then
-                vim.b[buf].sqmeow_table = vim.trim(preview_tbl)
-              end
+
+          if db_name then
+            vim.b[buf].db_name = db_name
+            vim.b[buf].sqmeow_connection = db_name
+          end
+
+          if not vim.b[buf].sqmeow_table then
+            local tbl = db.get_active_table(buf)
+            if tbl then
+              vim.b[buf].sqmeow_table = tbl
             end
-          end)
+          end
+
           pcall(function()
             vim.b[buf].neocodeium_enabled = true
             vim.b[buf].neocodeium_allowed_encoding = true
           end)
+
+          local ok_lualine, lualine = pcall(require, 'lualine')
+          if ok_lualine and lualine.refresh then
+            lualine.refresh()
+          end
         end,
       })
 
