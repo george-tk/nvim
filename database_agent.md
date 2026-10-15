@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `0c2db40` (`chore(master): release 3.0.0 (#73)`, tag `v3.0.0`, Fri Oct 9 2026)
+- **Baseline Commit Pinned**: `c6592fc` (`feat(drawer): keymap to edit function/procedure/table (#84)`, Thu Oct 15 2026)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,21 +17,19 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 0c2db40..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log c6592fc..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 0c2db40..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff c6592fc..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
-
-
 
 ## 2. Classification of Local Modifications
 
 We separate our code into two distinct buckets:
 1. **Upstream Deficiencies & Bug Fixes**: Architectural problems or missing core features in `sqmeow.nvim`. These should be submitted to the upstream maintainer and removed from our config once merged.
-2. **Personal Preferences & Workflow Integrations**: Custom keybindings, Snacks UI integration, Dadbod AST parsing for `blink.cmp`, window dimensions, and persistence paths. These belong in our user configuration permanently.
+2. **Personal Preferences & Workflow Integrations**: Custom keybindings, Snacks UI integration, window dimensions, and persistence paths. These belong in our user configuration permanently.
 
 ```mermaid
 flowchart TD
@@ -52,11 +50,15 @@ flowchart TD
         S["v3: Foreign Key Relationships Browser (gR) (738aab0)"]
         T["v3: Parameterized Scratchpads (:param / -- @param) (1cf3a2a / 27082d1)"]
         U["v3: Distinct preview (grid) vs preview_editor (buffer) Actions"]
+        W["v3.1: Trigger Chars & Buffer Relation Completion in Blink (PR #81 / 316891d / 3913082)"]
+        X["v3.1: Full Multiline Values in Row Details Popup (K) (PR #82 / e12c15d)"]
+        Y["v3.1: Edit Table Schemas & Routine Definitions (e / K) (PR #84 / c6592fc)"]
+        Z["v3.1: History Query Preview & Reopen (p / P) (PR #80 / b657e5f)"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
         E["Snacks.picker integration for Saved Queries"]
-        F["Native sqmeow blink source + standalone SQL keywords (sql-keywords-blink.lua)"]
+        F["Native sqmeow.completion.blink source + standalone SQL keywords (sql-keywords-blink.lua)"]
         G["BottomPanel / RightPanel layout docking and coordinator"]
         H["Per-database directory structure: scratch/{db_name}/*.sql"]
         M["Two-Step Connection Switcher (<leader>bs)"]
@@ -88,6 +90,10 @@ flowchart TD
 | **16. Snapshot Aggregation (`gG`)** | Upstream `keymaps.result` (`gG`) & `api.view.aggregate` | No way to group and aggregate query results without issuing new queries to the server. | **RESOLVED UPSTREAM (v3.0.0, commit `b66fb37`)**. Dedicated `GROUP BY`, `AGGREGATE`, `HAVING` interactive bar powered by Polars. |
 | **17. Foreign Key Relationships Browser (`gR`)** | Upstream `keymaps.drawer` / `keymaps.result` (`gR`) | Discovering table relationships required complex metadata queries. | **RESOLVED UPSTREAM (v3.0.0, commit `738aab0`)**. Built-in relationship modal with Belongs to / Referenced by inspection and `<CR>` navigation. |
 | **18. Parameterized Scratchpads (`:param` / `-- @param`)** | Upstream `api.query` and engine | Scratchpads had no clean parameter prompt or driver-level binding. | **RESOLVED UPSTREAM (v3.0.0, commits `1cf3a2a`, `27082d1`)**. Header comments declare types/defaults; query execution prompts for missing parameters across all adapters. |
+| **19. Trigger Characters & Buffer Relation Completion** | Upstream native `sqmeow.completion.blink` | `sqmeow.completion.blink` previously lacked trigger characters (` `, `,`, `(`) and could not complete columns for buffer-bound relations or preview buffers without a `FROM` clause. | **RESOLVED & MERGED UPSTREAM ([PR #81](https://github.com/2giosangmitom/sqmeow.nvim/pull/81) / [Issue #77](https://github.com/2giosangmitom/sqmeow.nvim/issues/77), Commits `316891d`, `bd2f359`, `3913082`)**. Native trigger characters and buffer relation completion merged; explicit schema qualifier precedence added. Local 504-line `lua/utils/sqmeow-blink.lua` retired completely. |
+| **20. Full Multiline Values in Row Details (`K`)** | Upstream native `sqmeow.ui.detail` (`K` in results) | Long and multiline cell values (JSON, error dumps, multiline text) were truncated or flattened to single line with ellipses in row details. | **RESOLVED & MERGED UPSTREAM ([PR #82](https://github.com/2giosangmitom/sqmeow.nvim/pull/82) / [Issue #79](https://github.com/2giosangmitom/sqmeow.nvim/issues/79), Commit `e12c15d`)**. Full multiline values displayed indented under column value, with `wrap = true`, tabstop alignment, CRLF normalization, search (`/`), and yank (`y`). |
+| **21. Drawer Keymap to Edit Table Schemas and Routines (`e` / `K`)** | Upstream native `drawer.actions.edit` (`e`) & `structure` (`K`) | Routine nodes were read-only with no source inspection or editing capability. Table schema modifications required manual ALTER TABLE authoring. | **RESOLVED & MERGED UPSTREAM ([PR #84](https://github.com/2giosangmitom/sqmeow.nvim/pull/84) / [Issue #78](https://github.com/2giosangmitom/sqmeow.nvim/issues/78), Commit `c6592fc`)**. Pressing `e` opens dialect-appropriate `ALTER TABLE` scaffold or `CREATE OR REPLACE` routine definition; `K` inspects routine parameters, return types, and definitions. |
+| **22. Drawer History Query Preview and Reopen (`p` / `P`)** | Upstream native `drawer.actions.preview` (`p` / `P`) | Recorded history entries under the History node in the drawer could only be opened via `<CR>`. | **RESOLVED & MERGED UPSTREAM ([PR #80](https://github.com/2giosangmitom/sqmeow.nvim/pull/80) / [Issue #76](https://github.com/2giosangmitom/sqmeow.nvim/issues/76), Commit `b657e5f`)**. Pressing `p` reopens query directly into result grid; pressing `P` opens query into editor buffer. |
 
 
 
@@ -587,4 +593,71 @@ Mirroring `actions.yank_select`, updated `actions.preview()` in `lua/sqmeow/ui/d
 - Consistent with `actions.yank_select`, which already uses `ui.result.page_size`.
 - If `ui.result.page_size` is disabled or `0`, passes `nil` (fetching all rows).
 - Includes unit test coverage in `tests/test_drawer.lua`.
+
+---
+
+### Issue 13: Granular winbar toggles (editor vs result) & native statusline helper [OPEN - Issue #85]
+
+> **Status**: **OPEN** ([Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85)).
+
+**Title**: `feat(ui): granular winbar toggles (editor vs result) & native statusline helper`
+
+**Problem**:
+1. `config.ui.winbar = true | false` is currently an all-or-nothing boolean toggle. Setting `ui.winbar = false` suppresses editor winbars but completely removes result execution metrics (`100 rows in 12ms`) and active column tracking (`󰠵 id (int) [1/12]`).
+2. When displaying the active connection in a global statusline (`lualine.nvim`, `heirline.nvim`), repeating `%#SqmeowWinbar# connection %*` on every single query editor window and at the start of the result winbar is redundant and consumes vertical space.
+3. Keeping result metrics while hiding connection labels currently requires monkey-patching `editor.update_winbar` and regex-stripping `result.update_winbar`.
+4. Integrating database context into statuslines currently requires inspecting `api.connection.target`, buffer-local variables, and buffer naming conventions (`[Preview: ...]`, `[Alter: ...]`, `[Routine: ...]`).
+
+**Proposed Implementation**:
+1. Granular options in `config.ui.winbar`:
+   ```lua
+   ui = {
+     winbar = {
+       editor = false,             -- disable winbars in SQL editors / scratchpads
+       result = true,              -- keep winbars in query results
+       show_connection = false,    -- hide connection name from winbars
+     },
+   }
+   ```
+2. Native statusline helper:
+   ```lua
+   local status = require('sqmeow.api.connection').status(bufnr)
+   -- or ready-to-use formatted component:
+   require('sqmeow.statusline').component()
+   ```
+
+---
+
+### Issue 14: Relational row drilldown / follow foreign keys in results (`gd` / `gr`) [OPEN - Issue #86]
+
+> **Status**: **OPEN** ([Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86)).
+
+**Title**: `feat(result): navigate foreign key records and drill down into referenced rows (gd / gr)`
+
+**Problem**:
+In DBeaver (`F4`) and DataGrip (`Ctrl+B`), users can navigate from a foreign key cell to the referenced row directly. `sqmeow` has `gR`, but it only displays a static constraint metadata popup (`-- Browse declared foreign keys one table at a time; never query selected row values`). It cannot jump to or query actual row data.
+
+**Proposed Implementation**:
+1. `gd` (Go to Definition / Referenced Record): On a foreign key cell, query `SELECT * FROM <target_table> WHERE <target_col> = <cell_value>`.
+2. `gr` (Go to References / Find Child Records): On a primary key cell, query referencing records `SELECT * FROM <child_table> WHERE <child_fk_col> = <cell_value>` (prompting if multiple child tables exist).
+3. Utilizes the existing `relationships` RPC endpoint in the engine with zero additional backend engine work required.
+
+---
+
+### Issue 15: Microsoft Entra ID (Azure AD) SSO authentication for MSSQL / Azure SQL [OPEN - Issue #87]
+
+> **Status**: **OPEN** ([Issue #87](https://github.com/2giosangmitom/sqmeow.nvim/issues/87)).
+
+**Title**: `feat(adapters): support Microsoft Entra ID (Azure AD) SSO authentication for MSSQL / Azure SQL`
+
+**Problem**:
+`sqmeow`'s MSSQL adapter in `core/sqmeow-adapters/src/mssql.rs` hardcodes SQL Server username/password authentication (`Error::driver("MSSQL requires a SQL authentication user")`). In modern enterprise environments (Azure SQL Database, Synapse, Managed Instance), corporate security policies often disable SQL authentication entirely and mandate Entra ID SSO / MFA.
+
+**Proposed Implementation**:
+1. Support `auth=azure-ad` / `auth=token` in connection URLs.
+2. Acquire access token via active Azure CLI session (`az account get-access-token --resource https://database.windows.net`), device-code flow, or custom token command.
+3. Pass token to `tiberius` via `AuthMethod::AADToken(token.into())` using the TDS protocol's native `FEDAUTH` extension.
+
+
+
 

@@ -530,6 +530,12 @@ function M.lualine_component()
       if vim.b[b].is_preview_buffer or raw:match '%[Preview: ' then
         local tbl = raw:match '%[Preview: (.-)%]'
         name = tbl and tbl or 'preview'
+      elseif raw:match '%[Alter: ' then
+        local tbl = raw:match '%[Alter: (.-)%]'
+        name = tbl and ('alter:' .. tbl) or 'alter'
+      elseif raw:match '%[Routine: ' then
+        local routine = raw:match '%[Routine: (.-)%]'
+        name = routine and ('routine:' .. routine) or 'routine'
       elseif name == '' then
         name = '[No Name]'
       end

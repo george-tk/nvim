@@ -207,6 +207,7 @@ return {
                 or vim.b[cur_buf].is_preview_buffer
                 or bname:match '%[Preview: '
                 or bname:match '%[Alter: '
+                or bname:match '%[Routine: '
                 or bname:find 'sqmeow://'
 
               if is_db then
@@ -288,6 +289,9 @@ return {
                 end
                 if bname:match '%[Alter: ' then
                   return '󰆼 alter'
+                end
+                if bname:match '%[Routine: ' then
+                  return '󰆼 routine'
                 end
                 return '󰆼 sql'
               end

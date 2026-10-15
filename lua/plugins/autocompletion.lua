@@ -263,7 +263,7 @@ return {
           -- Sqmeow native database completion (schemas, tables, views, columns, query-aware)
           sqmeow = {
             name = 'Sqmeow',
-            module = 'utils.sqmeow-blink',
+            module = 'sqmeow.completion.blink',
             min_keyword_length = 0,
             score_offset = 200,
           },
