@@ -8,7 +8,6 @@ return {
     -- Snippets (LuaSnip + friendly-snippets)
     {
       'L3MON4D3/LuaSnip',
-      version = 'v2.*',
       build = (function()
         if vim.fn.has 'win32' == 0 and vim.fn.executable 'make' == 1 then
           return 'make install_jsregexp'

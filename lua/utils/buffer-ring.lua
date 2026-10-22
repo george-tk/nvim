@@ -527,27 +527,68 @@ function M.lualine_component()
       local raw = vim.api.nvim_buf_get_name(b)
       local name = vim.fs.basename(raw)
 
+      local ft = vim.bo[b].filetype
+      local is_db = ft == 'sql'
+        or ft == 'mysql'
+        or ft == 'plsql'
+        or ft == 'surql'
+        or ft == 'cql'
+        or vim.b[b].is_preview_buffer
+        or vim.b[b].sqmeow_connection
+        or vim.b[b].db_name
+        or raw:match '%[Preview: '
+        or raw:match '%[Alter: '
+        or raw:match '%[Routine: '
+        or raw:find 'sqmeow://'
+
       if vim.b[b].is_preview_buffer or raw:match '%[Preview: ' then
         local tbl = raw:match '%[Preview: (.-)%]'
+        if tbl then
+          tbl = tbl:gsub('%s*%(%d+%)', '')
+          tbl = tbl:match '%.([^%.]+)$' or tbl
+        end
         name = tbl and tbl or 'preview'
       elseif raw:match '%[Alter: ' then
         local tbl = raw:match '%[Alter: (.-)%]'
+        if tbl then
+          tbl = tbl:gsub('%s*%(%d+%)', '')
+          tbl = tbl:match '%.([^%.]+)$' or tbl
+        end
         name = tbl and ('alter:' .. tbl) or 'alter'
       elseif raw:match '%[Routine: ' then
         local routine = raw:match '%[Routine: (.-)%]'
+        if routine then
+          routine = routine:gsub('%s*%(%d+%)', '')
+          routine = routine:match '%.([^%.]+)$' or routine
+        end
         name = routine and ('routine:' .. routine) or 'routine'
       elseif name == '' then
         name = '[No Name]'
       end
 
+      local icon = '󰈔'
+      if is_db then
+        icon = '󰆼'
+      else
+        local ok_dev, devicons = pcall(require, 'nvim-web-devicons')
+        if ok_dev then
+          local ext = vim.fn.fnamemodify(raw, ':e')
+          local i = (devicons.get_icon and devicons.get_icon(name, ext, { default = false }))
+            or (ft ~= '' and devicons.get_icon_by_filetype and devicons.get_icon_by_filetype(ft, { default = true }))
+          if i and i ~= '' then
+            icon = i
+          end
+        end
+      end
+
       local modified = vim.bo[b].modified and ' ●' or ''
       local pin = M.pinned[b] and '󰐃 ' or ''
 
-      -- Style active vs inactive slots (clean highlight badge without numbers)
+      -- Style active vs inactive slots (per-buffer filetype icon, no generic prefix icon)
       if is_active then
-        table.insert(items, string.format('%%#%s# %s%s%s %%*', active_hl, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %s%s %s%s %%*', active_hl, pin, icon, name, modified))
       else
-        table.insert(items, string.format('%%#%s# %s%s%s %%*', inactive_hl, pin, name, modified))
+        table.insert(items, string.format('%%#%s# %s%s %s%s %%*', inactive_hl, pin, icon, name, modified))
       end
     end
   end
@@ -556,7 +597,7 @@ function M.lualine_component()
     return ''
   end
 
-  return '󰓩 ' .. table.concat(items, '|')
+  return table.concat(items, '|')
 end
 
 --- Setup autocommands for automatic slot management

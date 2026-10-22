@@ -19,6 +19,8 @@ return {
       vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = 'NONE', fg = text, default = true })
       vim.api.nvim_set_hl(0, 'TerminalTrackerActive', { bg = blue, fg = base, bold = true, default = true })
       vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = 'NONE', fg = text, default = true })
+      local green = C.green or '#a6e3a1'
+      vim.api.nvim_set_hl(0, 'TerminalTrackerRunning', { bg = 'NONE', fg = green, bold = true, default = true })
     end
 
     setup_dock_highlights()
@@ -28,6 +30,28 @@ return {
 
     require('utils.buffer-ring').setup()
     require('utils.terminal-tracker').setup()
+
+    local macro_group = vim.api.nvim_create_augroup('LualineMacroRefresh', { clear = true })
+    vim.api.nvim_create_autocmd('RecordingEnter', {
+      group = macro_group,
+      callback = function()
+        local ok_l, lualine = pcall(require, 'lualine')
+        if ok_l then
+          lualine.refresh { place = { 'statusline' } }
+        end
+      end,
+    })
+    vim.api.nvim_create_autocmd('RecordingLeave', {
+      group = macro_group,
+      callback = function()
+        vim.schedule(function()
+          local ok_l, lualine = pcall(require, 'lualine')
+          if ok_l then
+            lualine.refresh { place = { 'statusline' } }
+          end
+        end)
+      end,
+    })
   end,
 
   opts = function()
@@ -101,13 +125,42 @@ return {
       return vim.api.nvim_get_current_buf()
     end
 
+    local last_main_zone = 'editor'
+
+    local function get_focused_zone()
+      local ok_layout, layout = pcall(require, 'utils.layout')
+      if ok_layout and layout.get_win_info then
+        local info = layout.get_win_info(vim.api.nvim_get_current_win())
+        if info.zone == 'bottom' or info.zone == 'right' or info.zone == 'editor' then
+          last_main_zone = info.zone
+          return info.zone
+        end
+      end
+      return last_main_zone
+    end
+
+    vim.api.nvim_create_autocmd({ 'WinEnter', 'BufEnter' }, {
+      callback = function()
+        local prev = last_main_zone
+        local now_zone = get_focused_zone()
+        if now_zone ~= prev or now_zone == 'right' then
+          local ok_l, lualine = pcall(require, 'lualine')
+          if ok_l then
+            lualine.refresh { place = { 'statusline' } }
+          end
+        end
+      end,
+    })
+
+    local ok_ctp, ctp = pcall(require, 'catppuccin.palettes')
+    local C = ok_ctp and ctp.get_palette 'mocha' or {}
+    local red = C.red or '#f38ba9'
+
     -- Transparent statusline theme: mode-colored active blocks with black text, normal text color elsewhere
     local function get_theme()
-      local ok, ctp = pcall(require, 'catppuccin.palettes')
-      if not ok then
+      if not ok_ctp then
         return 'auto'
       end
-      local C = ctp.get_palette 'mocha'
       local function make_mode(accent)
         return {
           a = { bg = accent, fg = C.base, gui = 'bold' },
@@ -174,22 +227,34 @@ return {
         lualine_c = {
           {
             function()
+              local zone = get_focused_zone()
+              if zone == 'bottom' then
+                return require('utils.terminal-tracker').lualine_component()
+              elseif zone == 'right' then
+                local ok_layout, layout = pcall(require, 'utils.layout')
+                if ok_layout and layout.RightPanel and layout.RightPanel.lualine_component then
+                  return layout.RightPanel.lualine_component()
+                end
+              end
               return require('utils.buffer-ring').lualine_component()
-            end,
-            padding = { left = 1, right = 0 },
-          },
-        },
-
-        -- Right-side sections: Terminal Instances tracker & Active database
-        lualine_x = {
-          {
-            function()
-              return require('utils.terminal-tracker').lualine_component()
             end,
             padding = { left = 0, right = 0 },
           },
         },
+
+        -- Right-side sections: Active macro / database / filetype
+        lualine_x = {},
         lualine_y = {
+          -- Active macro recording indicator (takes priority over database & filetype)
+          {
+            function()
+              return '● @' .. vim.fn.reg_recording()
+            end,
+            cond = function()
+              return vim.fn.reg_recording() ~= ''
+            end,
+            color = { fg = red, gui = 'bold' },
+          },
           {
             function()
               local cur_buf = get_active_editor_buf()
@@ -308,6 +373,9 @@ return {
                 end
               end
               return icon .. ' ' .. ft
+            end,
+            cond = function()
+              return vim.fn.reg_recording() == ''
             end,
           },
         },

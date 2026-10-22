@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `c6592fc` (`feat(drawer): keymap to edit function/procedure/table (#84)`, Thu Oct 15 2026)
+- **Baseline Commit Pinned**: `7a6d1fd` (`fix(ui): prevent replacing drawer and result buffers (#97)`, Wed Oct 21 2026, `v3.1.0`)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log c6592fc..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7a6d1fd..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff c6592fc..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7a6d1fd..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -94,6 +94,9 @@ flowchart TD
 | **20. Full Multiline Values in Row Details (`K`)** | Upstream native `sqmeow.ui.detail` (`K` in results) | Long and multiline cell values (JSON, error dumps, multiline text) were truncated or flattened to single line with ellipses in row details. | **RESOLVED & MERGED UPSTREAM ([PR #82](https://github.com/2giosangmitom/sqmeow.nvim/pull/82) / [Issue #79](https://github.com/2giosangmitom/sqmeow.nvim/issues/79), Commit `e12c15d`)**. Full multiline values displayed indented under column value, with `wrap = true`, tabstop alignment, CRLF normalization, search (`/`), and yank (`y`). |
 | **21. Drawer Keymap to Edit Table Schemas and Routines (`e` / `K`)** | Upstream native `drawer.actions.edit` (`e`) & `structure` (`K`) | Routine nodes were read-only with no source inspection or editing capability. Table schema modifications required manual ALTER TABLE authoring. | **RESOLVED & MERGED UPSTREAM ([PR #84](https://github.com/2giosangmitom/sqmeow.nvim/pull/84) / [Issue #78](https://github.com/2giosangmitom/sqmeow.nvim/issues/78), Commit `c6592fc`)**. Pressing `e` opens dialect-appropriate `ALTER TABLE` scaffold or `CREATE OR REPLACE` routine definition; `K` inspects routine parameters, return types, and definitions. |
 | **22. Drawer History Query Preview and Reopen (`p` / `P`)** | Upstream native `drawer.actions.preview` (`p` / `P`) | Recorded history entries under the History node in the drawer could only be opened via `<CR>`. | **RESOLVED & MERGED UPSTREAM ([PR #80](https://github.com/2giosangmitom/sqmeow.nvim/pull/80) / [Issue #76](https://github.com/2giosangmitom/sqmeow.nvim/issues/76), Commit `b657e5f`)**. Pressing `p` reopens query directly into result grid; pressing `P` opens query into editor buffer. |
+| **23. Native Window Buffer Locking (`winfixbuf`) on Drawer & Result** | Upstream native `sqmeow.ui.layout.fixbuf` & `set_buffer` | Jumping or running `:edit` from the drawer or result grid replaced the plugin's buffer in place. | **RESOLVED & MERGED UPSTREAM ([PR #97](https://github.com/2giosangmitom/sqmeow.nvim/pull/97), Commit `7a6d1fd`)**. Upstream natively locks drawer and result windows with `winfixbuf = true` and lifts/restores the lock around internal buffer swaps. Redundant manual `winfixbuf` / `winfixheight` loop removed from `lua/plugins/database.lua`. |
+| **24. Sticky Header Alignment & Window Leak Fix** | Upstream native `sqmeow.ui.result` | Sticky header previously copied lines/extmarks into a separate buffer and could misalign with gutter columns or leak windows if Neovim refused float creation. | **RESOLVED & MERGED UPSTREAM ([PR #94](https://github.com/2giosangmitom/sqmeow.nvim/pull/94) & [PR #96](https://github.com/2giosangmitom/sqmeow.nvim/pull/96), Commits `67c8544`, `3d8cf20`)**. Sticky header now views line 1 of the result buffer directly with matching gutter/sign options. |
+| **25. Named Scratch Buffer Reuse & Winbar Suppression** | Upstream `sqmeow.ui.buffer.scratch` & `opts.ui.winbar = false` | Restoring sessions or reopening named `sqmeow://` buffers could collide; result/editor winbars duplicated global lualine context. | **RESOLVED UPSTREAM ([Issue #88](https://github.com/2giosangmitom/sqmeow.nvim/issues/88), Commit `14a864f`) & CONFIGURED LOCALLY**. Set `opts.ui.winbar = false` in `lua/plugins/database.lua`, retiring all custom `editor.update_winbar` and `result.update_winbar` hooks from `lua/utils/database.lua`. |
 
 
 

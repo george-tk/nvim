@@ -15,9 +15,12 @@ local RightPanel = {
 }
 
 local BottomPanel = {
-  active_mode = 'terminal', -- 'terminal' | 'dbout'
+  active_mode = 'terminal', -- 'terminal' | 'dbout' | 'qf'
   active_terminal_count = 1,
   last_dbout_buf = nil,
+  dbout_open = false,
+  last_qf_buf = nil,
+  qf_open = false,
 }
 
 -------------------------------------------------------------------------------
@@ -26,7 +29,9 @@ local BottomPanel = {
 
 local function get_win_info(win)
   win = win or vim.api.nvim_get_current_win()
-  if not vim.api.nvim_win_is_valid(win) then return {} end
+  if not vim.api.nvim_win_is_valid(win) then
+    return {}
+  end
 
   local buf = vim.api.nvim_win_get_buf(win)
   local ft = vim.bo[buf].filetype
@@ -36,9 +41,14 @@ local function get_win_info(win)
   local zone = vim.b[buf].panel_zone
   local ptype = vim.b[buf].panel_type
 
-  local is_explorer = (ptype == 'explorer') or (ft:match('^snacks_picker') ~= nil or ft:match('^snacks_layout') ~= nil)
-  local is_dbui = (ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find('sqmeow://drawer') ~= nil)
-  local is_opencode = (ptype == 'opencode') or (ft:match('opencode') ~= nil or bname:find('opencode') ~= nil or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find('opencode') ~= nil))
+  local is_explorer = (ptype == 'explorer') or (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil)
+  local is_dbui = (ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil)
+  local is_opencode = (ptype == 'opencode')
+    or (
+      ft:match 'opencode' ~= nil
+      or bname:find 'opencode' ~= nil
+      or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
+    )
 
   -- Right panel zone takes absolute precedence over bottom terminal
   if is_explorer or is_dbui or is_opencode or zone == 'right' then
@@ -55,9 +65,10 @@ local function get_win_info(win)
     }
   end
 
-  local is_dbout = (ptype == 'dbout') or (ft == 'dbout' or ft == 'sqmeow-result' or bname:find('sqmeow://result') ~= nil)
-  local is_term = (ptype == 'terminal') or (ft == 'snacks_terminal' or ft == 'terminal' or vim.bo[buf].buftype == 'terminal' or bname:find('term://') ~= nil)
-  local is_terminal = (zone == 'bottom') or is_dbout or is_term
+  local is_dbout = (ptype == 'dbout') or (ft == 'dbout' or ft == 'sqmeow-result' or bname:find 'sqmeow://result' ~= nil)
+  local is_qf = (ptype == 'qf') or (ft == 'qf' or vim.bo[buf].buftype == 'quickfix')
+  local is_term = (ptype == 'terminal') or (ft == 'snacks_terminal' or ft == 'terminal' or vim.bo[buf].buftype == 'terminal' or bname:find 'term://' ~= nil)
+  local is_terminal = (zone == 'bottom') or is_dbout or is_qf or is_term
 
   local is_editor = not is_terminal and ft ~= 'snacks_dashboard'
 
@@ -155,7 +166,9 @@ local function equalize_splits()
   local avail_w = vim.o.columns - (has_sidebar and (sidebar_w + 1) or 0)
 
   local function balance_group(wins, has_custom_flag)
-    if #wins <= 1 then return end
+    if #wins <= 1 then
+      return
+    end
 
     -- Group windows by unique horizontal column position
     local col_map = {}
@@ -168,13 +181,17 @@ local function equalize_splits()
       end
     end
 
-    if #cols <= 1 then return end
+    if #cols <= 1 then
+      return
+    end
     table.sort(cols)
 
     local n = #cols
     local seps = n - 1
     local net_w = avail_w - seps
-    if net_w <= 0 then return end
+    if net_w <= 0 then
+      return
+    end
 
     if not has_custom_flag then
       local target = math.floor(net_w / n)
@@ -200,7 +217,7 @@ local function ensure_right_sidebar_precedence()
   local r_win = get_right_sidebar_win()
   if r_win and vim.api.nvim_win_is_valid(r_win) then
     vim.api.nvim_win_call(r_win, function()
-      vim.cmd('wincmd L')
+      vim.cmd 'wincmd L'
       local info = get_win_info(r_win)
       local custom = RightPanel.custom_widths or {}
       local width
@@ -233,14 +250,14 @@ local function reset_window_layout()
   local r_win = get_right_sidebar_win()
   if r_win and vim.api.nvim_win_is_valid(r_win) then
     vim.api.nvim_win_call(r_win, function()
-      vim.cmd('wincmd L')
+      vim.cmd 'wincmd L'
       local info = get_win_info(r_win)
       local width = info.is_opencode and math.max(45, math.floor(vim.o.columns * 0.38)) or 35
       vim.cmd('vertical resize ' .. width)
     end)
   end
 
-  local bot_win = find_win_type('is_terminal')
+  local bot_win = find_win_type 'is_terminal'
   if bot_win and vim.api.nvim_win_is_valid(bot_win) then
     pcall(vim.api.nvim_win_set_height, bot_win, default_bot_height)
   end
@@ -251,7 +268,7 @@ end
 
 local function prepare_nav()
   if vim.api.nvim_get_mode().mode == 't' then
-    vim.cmd('stopinsert')
+    vim.cmd 'stopinsert'
   end
 end
 
@@ -266,9 +283,9 @@ end
 -------------------------------------------------------------------------------
 
 local function get_opencode_cmd()
-  local binary = vim.fn.exepath('opencode')
+  local binary = vim.fn.exepath 'opencode'
   if binary == '' then
-    local fallback = vim.fn.expand('~/.opencode/bin/opencode')
+    local fallback = vim.fn.expand '~/.opencode/bin/opencode'
     if (vim.uv or vim.loop).fs_stat(fallback) then
       binary = fallback
     else
@@ -282,10 +299,14 @@ function RightPanel.close_all()
   local closed = false
 
   -- Close Snacks File Explorer picker if open
-  local ok, pickers = pcall(function() return Snacks.picker.get({ source = 'explorer' }) end)
+  local ok, pickers = pcall(function()
+    return Snacks.picker.get { source = 'explorer' }
+  end)
   if ok and pickers and #pickers > 0 then
     for _, p in ipairs(pickers) do
-      pcall(function() p:close() end)
+      pcall(function()
+        p:close()
+      end)
       closed = true
     end
   end
@@ -300,7 +321,9 @@ function RightPanel.close_all()
   local opencode_cmd = get_opencode_cmd()
   local opencode_term = Snacks.terminal.get(opencode_cmd, { create = false })
   if opencode_term and opencode_term.win and vim.api.nvim_win_is_valid(opencode_term.win) then
-    pcall(function() opencode_term:hide() end)
+    pcall(function()
+      opencode_term:hide()
+    end)
     closed = true
   end
 
@@ -327,12 +350,27 @@ local function ensure_explorer_git_ready(cwd)
   end
 end
 
-function RightPanel.open_explorer()
+function RightPanel.open_explorer(no_toggle)
   local info = get_win_info()
   if info.is_explorer then
+    if no_toggle then
+      return
+    end
     RightPanel.close_all()
     local ed = get_editor_win()
-    if ed then vim.api.nvim_set_current_win(ed) end
+    if ed then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_exp = find_win_type 'is_explorer'
+  if existing_exp and vim.api.nvim_win_is_valid(existing_exp) then
+    RightPanel.active_mode = 'explorer'
+    vim.api.nvim_set_current_win(existing_exp)
+    pcall(function()
+      require('lualine').refresh()
+    end)
     return
   end
 
@@ -348,25 +386,39 @@ function RightPanel.open_explorer()
 
   local width_opt = (RightPanel.custom_widths and RightPanel.custom_widths['explorer']) or 35
 
-  Snacks.explorer({
+  Snacks.explorer {
     layout = { layout = { position = 'right', width = width_opt } },
     jump = { close = false },
-  })
-  vim.schedule(ensure_right_sidebar_precedence)
+  }
+  vim.schedule(function()
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+  end)
 end
 
-function RightPanel.open_dbui()
+function RightPanel.open_dbui(no_toggle)
   local info = get_win_info()
   if info.is_dbui then
+    if no_toggle then
+      return
+    end
     RightPanel.close_all()
     local ed = get_editor_win()
-    if ed then vim.api.nvim_set_current_win(ed) end
+    if ed then
+      vim.api.nvim_set_current_win(ed)
+    end
     return
   end
 
-  local existing_dbui = find_win_type('is_dbui')
+  local existing_dbui = find_win_type 'is_dbui'
   if existing_dbui and vim.api.nvim_win_is_valid(existing_dbui) then
+    RightPanel.active_mode = 'dbui'
     vim.api.nvim_set_current_win(existing_dbui)
+    pcall(function()
+      require('lualine').refresh()
+    end)
     return
   end
 
@@ -375,20 +427,42 @@ function RightPanel.open_dbui()
 
   if _G.DatabaseUtils and _G.DatabaseUtils.open_drawer then
     _G.DatabaseUtils.open_drawer()
-  elseif vim.fn.exists(':Sqmeow') == 2 then
-    vim.cmd('Sqmeow drawer')
-  elseif vim.fn.exists(':DBUI') == 2 then
-    vim.cmd('DBUI')
+  elseif vim.fn.exists ':Sqmeow' == 2 then
+    vim.cmd 'Sqmeow drawer'
+  elseif vim.fn.exists ':DBUI' == 2 then
+    vim.cmd 'DBUI'
   end
-  vim.schedule(ensure_right_sidebar_precedence)
+  vim.schedule(function()
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+  end)
 end
 
-function RightPanel.open_opencode()
+function RightPanel.open_opencode(no_toggle)
   local info = get_win_info()
   if info.is_opencode then
+    if no_toggle then
+      vim.cmd 'startinsert'
+      return
+    end
     RightPanel.close_all()
     local ed = get_editor_win()
-    if ed then vim.api.nvim_set_current_win(ed) end
+    if ed then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_oc = find_win_type 'is_opencode'
+  if existing_oc and vim.api.nvim_win_is_valid(existing_oc) then
+    RightPanel.active_mode = 'opencode'
+    vim.api.nvim_set_current_win(existing_oc)
+    vim.cmd 'startinsert'
+    pcall(function()
+      require('lualine').refresh()
+    end)
     return
   end
 
@@ -403,20 +477,94 @@ function RightPanel.open_opencode()
   local width_opt = (RightPanel.custom_widths and RightPanel.custom_widths['opencode']) or 0.38
   local cmd = get_opencode_cmd()
 
-  Snacks.terminal.toggle(cmd, {
+  local term = Snacks.terminal.get(cmd, {
+    create = true,
     win = {
       position = 'right',
       width = width_opt,
       relative = 'editor',
       wo = { winbar = '', winfixwidth = true, winfixbuf = true },
-      on_buf = function(term)
-        vim.b[term.buf].panel_zone = 'right'
-        vim.b[term.buf].panel_type = 'opencode'
-        vim.keymap.set('t', '<leader>t', '<Space>t', { buffer = term.buf, noremap = true, silent = true })
+      on_buf = function(t)
+        vim.b[t.buf].panel_zone = 'right'
+        vim.b[t.buf].panel_type = 'opencode'
+        vim.keymap.set('t', '<leader>t', '<Space>t', { buffer = t.buf, noremap = true, silent = true })
       end,
     },
   })
-  vim.schedule(ensure_right_sidebar_precedence)
+  if term then
+    term:show()
+    if term.buf and vim.api.nvim_buf_is_valid(term.buf) then
+      vim.b[term.buf].panel_zone = 'right'
+      vim.b[term.buf].panel_type = 'opencode'
+    end
+    if term.win and vim.api.nvim_win_is_valid(term.win) then
+      vim.api.nvim_set_current_win(term.win)
+      vim.cmd 'startinsert'
+    end
+  end
+  vim.schedule(function()
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+  end)
+end
+
+function RightPanel.open_slot(slot_idx)
+  local m = vim.api.nvim_get_mode().mode
+  if (m == 't' or m == 'i') and slot_idx ~= 3 then
+    vim.cmd 'stopinsert'
+  end
+  if slot_idx == 1 then
+    RightPanel.open_explorer(true)
+  elseif slot_idx == 2 then
+    RightPanel.open_dbui(true)
+  elseif slot_idx == 3 then
+    RightPanel.open_opencode(true)
+  end
+end
+
+function RightPanel.lualine_component()
+  local ok_hl, hl = pcall(require, 'lualine.highlight')
+  local active_hl = 'BufferRingActive'
+  local inactive_hl = 'BufferRingInactive'
+  if ok_hl and hl.get_mode_suffix then
+    local a_name = 'lualine_a' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(a_name) == 1 then
+      active_hl = a_name
+    end
+    local b_name = 'lualine_b' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(b_name) == 1 then
+      inactive_hl = b_name
+    end
+  end
+
+  local info = get_win_info(vim.api.nvim_get_current_win())
+  local cur_mode = RightPanel.active_mode or 'explorer'
+  if info.is_explorer then
+    cur_mode = 'explorer'
+    RightPanel.active_mode = 'explorer'
+  elseif info.is_dbui then
+    cur_mode = 'dbui'
+    RightPanel.active_mode = 'dbui'
+  elseif info.is_opencode then
+    cur_mode = 'opencode'
+    RightPanel.active_mode = 'opencode'
+  end
+
+  local slots = {
+    { mode = 'explorer', label = '󰙅' },
+    { mode = 'dbui', label = '󰆼' },
+    { mode = 'opencode', label = '󰚩' },
+  }
+
+  local parts = {}
+  for _, s in ipairs(slots) do
+    local group = (s.mode == cur_mode) and active_hl or inactive_hl
+    table.insert(parts, string.format('%%#%s# %s %%*', group, s.label))
+  end
+
+  return table.concat(parts, '|')
 end
 
 function RightPanel.toggle_active()
@@ -426,14 +574,14 @@ function RightPanel.toggle_active()
   if info.is_explorer or info.is_dbui or info.is_opencode then
     RightPanel.close_all()
     local ed = get_editor_win()
-    if ed then vim.api.nvim_set_current_win(ed) end
+    if ed then
+      vim.api.nvim_set_current_win(ed)
+    end
     return
   end
 
   -- 2. If a right panel is already visible on screen: focus into it!
-  local visible_right = find_win_type('is_explorer')
-    or find_win_type('is_dbui')
-    or find_win_type('is_opencode')
+  local visible_right = find_win_type 'is_explorer' or find_win_type 'is_dbui' or find_win_type 'is_opencode'
 
   if visible_right and vim.api.nvim_win_is_valid(visible_right) then
     vim.api.nvim_set_current_win(visible_right)
@@ -459,7 +607,14 @@ RightPanel.equalize_splits = equalize_splits
 -- Unified Bottom-Panel Manager (Persistent Terminals | SQL Results)
 -------------------------------------------------------------------------------
 
-local function close_dbout_win()
+local function close_dbout_win(explicit)
+  if explicit then
+    BottomPanel.dbout_open = false
+    if BottomPanel.last_dbout_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_dbout_buf) then
+      vim.b[BottomPanel.last_dbout_buf].bottom_order_seq = nil
+    end
+  end
+
   local ok_v, view_api = pcall(require, 'sqmeow.api.view')
   if ok_v and view_api and view_api.close then
     pcall(view_api.close)
@@ -470,7 +625,31 @@ local function close_dbout_win()
       local buf = vim.api.nvim_win_get_buf(win)
       local ft = vim.bo[buf].filetype
       local name = vim.api.nvim_buf_get_name(buf)
-      if (ft == 'dbout' or ft == 'sqmeow-result' or name:find('sqmeow://result')) and not name:find('drawer') then
+      if (ft == 'dbout' or ft == 'sqmeow-result' or name:find 'sqmeow://result') and not name:find 'drawer' then
+        if explicit then
+          vim.b[buf].bottom_order_seq = nil
+        end
+        pcall(vim.api.nvim_win_close, win, true)
+      end
+    end
+  end
+end
+
+local function close_qf_win(explicit)
+  if explicit then
+    BottomPanel.qf_open = false
+    if BottomPanel.last_qf_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_qf_buf) then
+      vim.b[BottomPanel.last_qf_buf].bottom_order_seq = nil
+    end
+  end
+
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      if vim.bo[buf].filetype == 'qf' or vim.bo[buf].buftype == 'quickfix' then
+        if explicit then
+          vim.b[buf].bottom_order_seq = nil
+        end
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
@@ -478,11 +657,15 @@ local function close_dbout_win()
 end
 
 local function hide_terminal_if_visible()
-  local ok, list = pcall(function() return Snacks.terminal.list() end)
+  local ok, list = pcall(function()
+    return Snacks.terminal.list()
+  end)
   if ok and type(list) == 'table' then
     for _, t in ipairs(list) do
       if t and t.win and vim.api.nvim_win_is_valid(t.win) and vim.b[t.buf].panel_zone == 'bottom' then
-        pcall(function() t:hide() end)
+        pcall(function()
+          t:hide()
+        end)
       end
     end
   end
@@ -490,7 +673,8 @@ local function hide_terminal_if_visible()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       local info = get_win_info(win)
-      if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' and vim.bo[info.buf].filetype ~= 'sqmeow-result' then
+      local ft = vim.bo[info.buf].filetype
+      if info.is_terminal and ft ~= 'dbout' and ft ~= 'sqmeow-result' and ft ~= 'qf' and vim.bo[info.buf].buftype ~= 'quickfix' then
         pcall(vim.api.nvim_win_close, win, true)
       end
     end
@@ -501,7 +685,8 @@ local function get_visible_terminal_info()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       local info = get_win_info(win)
-      if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' and vim.bo[info.buf].filetype ~= 'sqmeow-result' then
+      local ft = vim.bo[info.buf].filetype
+      if info.is_terminal and ft ~= 'dbout' and ft ~= 'sqmeow-result' and ft ~= 'qf' and vim.bo[info.buf].buftype ~= 'quickfix' then
         local st = vim.b[info.buf].snacks_terminal
         local term_id = st and st.id or 1
         return win, info.buf, term_id
@@ -511,9 +696,10 @@ local function get_visible_terminal_info()
   return nil, nil, nil
 end
 
-function BottomPanel.close_all()
+function BottomPanel.close_all(explicit)
   hide_terminal_if_visible()
-  close_dbout_win()
+  close_dbout_win(explicit)
+  close_qf_win(explicit)
   equalize_splits()
   pcall(function()
     require('utils.terminal-tracker').invalidate()
@@ -521,20 +707,21 @@ function BottomPanel.close_all()
   end)
 end
 
-function BottomPanel.open_terminal(count)
+function BottomPanel.open_terminal(count, no_toggle)
   local explicit = (count and count > 0 and count) or (vim.v.count > 0 and vim.v.count) or nil
   if explicit then
     BottomPanel.active_terminal_count = explicit
   end
   local target_count = BottomPanel.active_terminal_count or 1
 
-  close_dbout_win()
+  close_dbout_win(false)
+  close_qf_win(false)
   BottomPanel.active_mode = 'terminal'
 
   local vis_win, vis_buf, vis_id = get_visible_terminal_info()
 
   -- If the requested terminal is already visible and no explicit count was given: toggle/hide it
-  if vis_win and vis_id == target_count and not explicit then
+  if vis_win and vis_id == target_count and not explicit and not no_toggle then
     hide_terminal_if_visible()
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -593,11 +780,11 @@ function BottomPanel.open_terminal(count)
   if target_term and target_term.win and vim.api.nvim_win_is_valid(target_term.win) then
     vim.api.nvim_set_current_win(target_term.win)
   end
-  vim.cmd('startinsert')
+  vim.cmd 'startinsert'
   vim.schedule(function()
     if target_term and target_term.win and vim.api.nvim_win_is_valid(target_term.win) then
       vim.api.nvim_set_current_win(target_term.win)
-      vim.cmd('startinsert')
+      vim.cmd 'startinsert'
     end
   end)
 
@@ -612,7 +799,7 @@ function BottomPanel.split_terminal(count)
   local info = get_win_info(cur_win)
 
   if not info.is_terminal then
-    local bot_win = find_win_type('is_terminal')
+    local bot_win = find_win_type 'is_terminal'
     if bot_win and vim.api.nvim_win_is_valid(bot_win) then
       vim.api.nvim_set_current_win(bot_win)
     else
@@ -666,7 +853,7 @@ function BottomPanel.split_terminal(count)
   BottomPanel.active_terminal_count = target_count
   BottomPanel.active_mode = 'terminal'
 
-  vim.cmd('startinsert')
+  vim.cmd 'startinsert'
   vim.schedule(function()
     ensure_right_sidebar_precedence()
     equalize_splits()
@@ -677,10 +864,10 @@ function BottomPanel.split_terminal(count)
   end)
 end
 
-function BottomPanel.open_dbout()
+function BottomPanel.open_dbout(no_toggle)
   local info = get_win_info()
-  if info.is_terminal and (vim.bo[info.buf].filetype == 'dbout' or vim.bo[info.buf].filetype == 'sqmeow-result') then
-    close_dbout_win()
+  if not no_toggle and info.is_terminal and (vim.bo[info.buf].filetype == 'dbout' or vim.bo[info.buf].filetype == 'sqmeow-result') then
+    close_dbout_win(false)
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
       vim.api.nvim_set_current_win(ed)
@@ -690,7 +877,9 @@ function BottomPanel.open_dbout()
 
   local ok_v, view_api = pcall(require, 'sqmeow.api.view')
   if not ok_v then
-    pcall(function() require('lazy').load({ plugins = { 'sqmeow.nvim' } }) end)
+    pcall(function()
+      require('lazy').load { plugins = { 'sqmeow.nvim' } }
+    end)
     ok_v, view_api = pcall(require, 'sqmeow.api.view')
   end
   if not ok_v then
@@ -698,7 +887,9 @@ function BottomPanel.open_dbout()
   end
   if ok_v and view_api and view_api.open then
     hide_terminal_if_visible()
+    close_qf_win(false)
     BottomPanel.active_mode = 'dbout'
+    BottomPanel.dbout_open = true
     view_api.open()
 
     local res_win = nil
@@ -721,7 +912,13 @@ function BottomPanel.open_dbout()
       vim.wo[res_win].winfixbuf = true
     end
 
-    vim.schedule(ensure_right_sidebar_precedence)
+    vim.schedule(function()
+      ensure_right_sidebar_precedence()
+      pcall(function()
+        require('utils.terminal-tracker').invalidate()
+        require('lualine').refresh()
+      end)
+    end)
     return
   end
 
@@ -742,7 +939,9 @@ function BottomPanel.open_dbout()
   end
 
   hide_terminal_if_visible()
+  close_qf_win(false)
   BottomPanel.active_mode = 'dbout'
+  BottomPanel.dbout_open = true
   local ed = get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
     vim.api.nvim_set_current_win(ed)
@@ -765,20 +964,115 @@ function BottomPanel.open_dbout()
   vim.wo[win].winfixbuf = true
   ensure_right_sidebar_precedence()
   equalize_splits()
+  pcall(function()
+    require('utils.terminal-tracker').invalidate()
+    require('lualine').refresh()
+  end)
+end
+
+function BottomPanel.open_qf(no_toggle)
+  local info = get_win_info()
+  if not no_toggle and info.is_terminal and (vim.bo[info.buf].filetype == 'qf' or vim.bo[info.buf].buftype == 'quickfix') then
+    close_qf_win(false)
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  hide_terminal_if_visible()
+  close_dbout_win(false)
+  BottomPanel.active_mode = 'qf'
+  BottomPanel.qf_open = true
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  local qf_height = math.floor(vim.o.lines * 0.35)
+  vim.cmd('botright copen ' .. qf_height)
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_win_get_buf(win)
+  vim.b[buf].panel_zone = 'bottom'
+  vim.b[buf].panel_type = 'qf'
+  BottomPanel.last_qf_buf = buf
+  vim.wo[win].winfixheight = true
+  vim.wo[win].winfixbuf = true
+  ensure_right_sidebar_precedence()
+  equalize_splits()
+  pcall(function()
+    require('utils.terminal-tracker').invalidate()
+    require('lualine').refresh()
+  end)
+end
+
+function BottomPanel.open_slot(slot_idx)
+  local tracker_ok, tracker = pcall(require, 'utils.terminal-tracker')
+  local items = {}
+  if tracker_ok and tracker.get_terminals then
+    tracker.invalidate()
+    items = tracker.get_terminals()
+  end
+
+  local target = items[slot_idx]
+  if target then
+    if target.kind == 'dbout' then
+      if vim.api.nvim_get_mode().mode == 't' then
+        vim.cmd 'stopinsert'
+      end
+      BottomPanel.open_dbout(true)
+      return
+    elseif target.kind == 'qf' then
+      if vim.api.nvim_get_mode().mode == 't' then
+        vim.cmd 'stopinsert'
+      end
+      BottomPanel.open_qf(true)
+      return
+    else
+      BottomPanel.open_terminal(target.id, true)
+      return
+    end
+  end
+
+  -- Pressing an empty slot number spawns a new terminal with the lowest unused ID
+  local used_ids = {}
+  for _, it in ipairs(items) do
+    if it.kind == 'terminal' and type(it.id) == 'number' then
+      used_ids[it.id] = true
+    end
+  end
+  local new_id = 1
+  while used_ids[new_id] do
+    new_id = new_id + 1
+  end
+  BottomPanel.open_terminal(new_id, true)
 end
 
 function BottomPanel.toggle_active(count)
   local explicit_count = (count and count > 0 and count) or (vim.v.count > 0 and vim.v.count) or nil
   if explicit_count then
-    BottomPanel.active_terminal_count = explicit_count
+    BottomPanel.open_slot(explicit_count)
+    return
   end
   local target_count = BottomPanel.active_terminal_count or 1
 
   local info = get_win_info()
 
-  -- 1. If currently inside dbout / sqmeow-result, close it
+  -- 1. If currently inside dbout / sqmeow-result, hide it
   if info.is_terminal and (vim.bo[info.buf].filetype == 'dbout' or vim.bo[info.buf].filetype == 'sqmeow-result') then
-    close_dbout_win()
+    close_dbout_win(false)
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  -- 1b. If currently inside quickfix, hide it
+  if info.is_terminal and (vim.bo[info.buf].filetype == 'qf' or vim.bo[info.buf].buftype == 'quickfix') then
+    close_qf_win(false)
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
       vim.api.nvim_set_current_win(ed)
@@ -788,30 +1082,28 @@ function BottomPanel.toggle_active(count)
 
   -- 2. If currently inside a terminal:
   if info.is_terminal and vim.bo[info.buf].filetype ~= 'dbout' and vim.bo[info.buf].filetype ~= 'sqmeow-result' then
-    local current_term_id = (vim.b[info.buf].snacks_terminal and vim.b[info.buf].snacks_terminal.id) or target_count
-    if not explicit_count or explicit_count == current_term_id then
-      hide_terminal_if_visible()
-      local ed = get_editor_win()
-      if ed and vim.api.nvim_win_is_valid(ed) then
-        vim.api.nvim_set_current_win(ed)
-      end
-      return
-    else
-      BottomPanel.open_terminal(explicit_count)
-      return
+    hide_terminal_if_visible()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
     end
+    return
   end
 
   -- 3. If currently in an explorer/sidebar, focus existing bottom output or open it
-  local existing_bot = find_win_type('is_terminal')
+  local existing_bot = find_win_type 'is_terminal'
   if existing_bot and vim.api.nvim_win_is_valid(existing_bot) then
     vim.api.nvim_set_current_win(existing_bot)
     return
   end
 
-  -- 4. If in editor and dbout mode is active AND no numeric count was given
-  if BottomPanel.active_mode == 'dbout' and not explicit_count and BottomPanel.last_dbout_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_dbout_buf) then
-    BottomPanel.open_dbout()
+  -- 4. If in editor and dbout or qf mode is active
+  if BottomPanel.active_mode == 'dbout' and BottomPanel.dbout_open and BottomPanel.last_dbout_buf and vim.api.nvim_buf_is_valid(BottomPanel.last_dbout_buf) then
+    BottomPanel.open_dbout(true)
+    return
+  end
+  if BottomPanel.active_mode == 'qf' and BottomPanel.qf_open then
+    BottomPanel.open_qf(true)
     return
   end
 
@@ -821,6 +1113,7 @@ end
 
 BottomPanel.hide_terminal = hide_terminal_if_visible
 BottomPanel.close_dbout = close_dbout_win
+BottomPanel.close_qf = close_qf_win
 BottomPanel.ensure_precedence = ensure_right_sidebar_precedence
 BottomPanel.equalize_splits = equalize_splits
 BottomPanel.reset_layout = reset_window_layout
@@ -845,7 +1138,7 @@ local function smart_navigate_right()
   end
 
   -- 2. Check if there is a window to the right
-  local target_winnr = vim.fn.winnr('l')
+  local target_winnr = vim.fn.winnr 'l'
   local cur_winnr = vim.fn.winnr()
 
   if target_winnr ~= cur_winnr then
@@ -887,7 +1180,7 @@ local function smart_navigate_left()
   end
 
   -- 2. Check if there is a window to the left
-  local target_winnr = vim.fn.winnr('h')
+  local target_winnr = vim.fn.winnr 'h'
   local cur_winnr = vim.fn.winnr()
 
   if target_winnr ~= cur_winnr then
@@ -905,29 +1198,27 @@ local function smart_navigate_left()
     end
   end
 
-  -- 3. If in bottom terminal and at leftmost boundary: cycle to next terminal instance!
+  -- 3. If in bottom panel and at leftmost boundary: cycle to next bottom panel item!
   if info.is_terminal then
     local tracker_ok, tracker = pcall(require, 'utils.terminal-tracker')
     if tracker_ok and tracker.get_terminals then
       local terms = tracker.get_terminals()
       if #terms > 1 then
-        local cur_id = (vim.b[info.buf].snacks_terminal and vim.b[info.buf].snacks_terminal.id) or BottomPanel.active_terminal_count or 1
-        local next_id = terms[1].id
+        local next_slot = 1
         for i, t in ipairs(terms) do
-          if t.id == cur_id then
-            local next_idx = (i % #terms) + 1
-            next_id = terms[next_idx].id
+          if t.buf == info.buf then
+            next_slot = (i % #terms) + 1
             break
           end
         end
-        BottomPanel.open_terminal(next_id)
+        BottomPanel.open_slot(next_slot)
         return
       end
     end
     return
   end
 
-  try_wincmd('h')
+  try_wincmd 'h'
 end
 
 local function smart_navigate_up()
@@ -943,7 +1234,7 @@ local function smart_navigate_up()
     return
   end
 
-  try_wincmd('k')
+  try_wincmd 'k'
 end
 
 local function smart_navigate_down()
@@ -957,7 +1248,7 @@ local function smart_navigate_down()
     return
   end
 
-  local bot_win = find_win_type('is_terminal')
+  local bot_win = find_win_type 'is_terminal'
   if bot_win and vim.api.nvim_win_is_valid(bot_win) then
     if count then
       BottomPanel.open_terminal(count)
@@ -976,7 +1267,9 @@ end
 
 local function smart_resize_width(delta)
   local cur_win = vim.api.nvim_get_current_win()
-  if not vim.api.nvim_win_is_valid(cur_win) then return end
+  if not vim.api.nvim_win_is_valid(cur_win) then
+    return
+  end
 
   local info = get_win_info(cur_win)
 
@@ -1034,7 +1327,9 @@ end
 
 local function smart_resize_height(delta)
   local cur_win = vim.api.nvim_get_current_win()
-  if not vim.api.nvim_win_is_valid(cur_win) then return end
+  if not vim.api.nvim_win_is_valid(cur_win) then
+    return
+  end
 
   local cur_h = vim.api.nvim_win_get_height(cur_win)
   local new_h = math.max(4, cur_h + delta)
@@ -1058,7 +1353,7 @@ local function editor_split(direction)
     vim.api.nvim_set_current_win(ed)
   end
   if direction == 'horizontal' then
-    vim.cmd('split')
+    vim.cmd 'split'
   else
     RightPanel.has_custom_editor_widths = false
     for _, w in ipairs(vim.api.nvim_list_wins()) do
@@ -1066,14 +1361,16 @@ local function editor_split(direction)
         vim.w[w].custom_split_ratio = nil
       end
     end
-    vim.cmd('vsplit')
+    vim.cmd 'vsplit'
   end
   ensure_right_sidebar_precedence()
 end
 
 local function smart_close_window(fallback_close_fn)
   local cur_win = vim.api.nvim_get_current_win()
-  if not vim.api.nvim_win_is_valid(cur_win) then return end
+  if not vim.api.nvim_win_is_valid(cur_win) then
+    return
+  end
   local info = get_win_info(cur_win)
 
   if info.is_explorer or info.is_dbui or info.is_opencode then
@@ -1124,13 +1421,31 @@ end
 -------------------------------------------------------------------------------
 
 local function is_database_or_transient_buf(buf)
-  if not vim.api.nvim_buf_is_valid(buf) then return false end
+  if not vim.api.nvim_buf_is_valid(buf) then
+    return false
+  end
   local ft = vim.bo[buf].filetype
-  if ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'sqmeow-output' or ft == 'dbui' or ft == 'dbout' or ft == 'snacks_dashboard' or ft == 'snacks_terminal' then return true end
+  if
+    ft == 'sqmeow-drawer'
+    or ft == 'sqmeow-result'
+    or ft == 'sqmeow-output'
+    or ft == 'dbui'
+    or ft == 'dbout'
+    or ft == 'snacks_dashboard'
+    or ft == 'snacks_terminal'
+  then
+    return true
+  end
   local bname = vim.api.nvim_buf_get_name(buf)
-  if (bname:match('^%[Preview:') or vim.b[buf].is_preview_buffer) and vim.bo[buf].buftype == 'nofile' then return true end
-  if bname:find('/db_ui/') ~= nil then return true end
-  if bname:match('%.sqlite%d?$') or bname:match('%.db$') then return true end
+  if (bname:match '^%[Preview:' or vim.b[buf].is_preview_buffer) and vim.bo[buf].buftype == 'nofile' then
+    return true
+  end
+  if bname:find '/db_ui/' ~= nil then
+    return true
+  end
+  if bname:match '%.sqlite%d?$' or bname:match '%.db$' then
+    return true
+  end
   return false
 end
 
@@ -1183,7 +1498,9 @@ local function setup_autocmds()
     pattern = '*',
     callback = function(args)
       local buf = args.buf
-      if not vim.api.nvim_buf_is_valid(buf) then return end
+      if not vim.api.nvim_buf_is_valid(buf) then
+        return
+      end
 
       local ft = vim.bo[buf].filetype
       if ft == 'snacks_picker_preview' or ft == 'snacks_picker_input' then
@@ -1192,10 +1509,14 @@ local function setup_autocmds()
       end
 
       local win = vim.fn.bufwinid(buf)
-      if not (win and win ~= -1 and vim.api.nvim_win_is_valid(win)) then return end
+      if not (win and win ~= -1 and vim.api.nvim_win_is_valid(win)) then
+        return
+      end
 
       local cfg = vim.api.nvim_win_get_config(win)
-      if cfg.relative and cfg.relative ~= '' then return end
+      if cfg.relative and cfg.relative ~= '' then
+        return
+      end
 
       local info = get_win_info(win)
 
@@ -1218,9 +1539,13 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('WinClosed', {
     group = layout_lock_group,
     callback = function()
-      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then return end
+      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+        return
+      end
       vim.schedule(function()
-        if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then return end
+        if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+          return
+        end
 
         local editor_win = get_editor_win()
         if not editor_win then
@@ -1239,8 +1564,8 @@ local function setup_autocmds()
           end
 
           if non_editor_exists then
-            vim.cmd('topleft split')
-            vim.cmd('enew')
+            vim.cmd 'topleft split'
+            vim.cmd 'enew'
             ensure_right_sidebar_precedence()
           end
         else
@@ -1273,7 +1598,9 @@ local function setup_autocmds()
       cleanup_panels_before_save()
       local real_bufs = get_real_editor_bufs()
       if #real_bufs == 0 then
-        pcall(function() require('persistence').stop() end)
+        pcall(function()
+          require('persistence').stop()
+        end)
       end
     end,
   })
@@ -1323,19 +1650,35 @@ local function setup_autocmds()
     pattern = '*',
     callback = function(args)
       local buf = args.buf
-      if not vim.api.nvim_buf_is_valid(buf) then return end
+      if not vim.api.nvim_buf_is_valid(buf) then
+        return
+      end
       local ft = vim.bo[buf].filetype
       local name = vim.api.nvim_buf_get_name(buf)
-      if (ft == 'dbout' or ft == 'sqmeow-result' or name:find('sqmeow://result') ~= nil)
-        and ft ~= 'sqmeow-drawer' and not name:find('drawer')
-      then
+      if (ft == 'dbout' or ft == 'sqmeow-result' or name:find 'sqmeow://result' ~= nil) and ft ~= 'sqmeow-drawer' and not name:find 'drawer' then
         vim.b[buf].panel_zone = 'bottom'
         vim.b[buf].panel_type = 'dbout'
         BottomPanel.last_dbout_buf = buf
+        BottomPanel.dbout_open = true
         BottomPanel.active_mode = 'dbout'
         hide_terminal_if_visible()
+        close_qf_win(false)
         local win = vim.fn.bufwinid(buf)
         if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          vim.schedule(ensure_right_sidebar_precedence)
+        end
+      elseif ft == 'qf' or vim.bo[buf].buftype == 'quickfix' then
+        vim.b[buf].panel_zone = 'bottom'
+        vim.b[buf].panel_type = 'qf'
+        BottomPanel.last_qf_buf = buf
+        BottomPanel.qf_open = true
+        BottomPanel.active_mode = 'qf'
+        hide_terminal_if_visible()
+        close_dbout_win(false)
+        local win = vim.fn.bufwinid(buf)
+        if win and win ~= -1 and vim.api.nvim_win_is_valid(win) then
+          vim.wo[win].winfixheight = true
+          vim.wo[win].winfixbuf = true
           vim.schedule(ensure_right_sidebar_precedence)
         end
       end
@@ -1346,7 +1689,7 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd({ 'BufEnter', 'TermOpen' }, {
     callback = function(args)
       local st = vim.b[args.buf].snacks_terminal
-      local is_opencode = tostring(st and st.cmd or ''):find('opencode') or vim.b[args.buf].panel_type == 'opencode'
+      local is_opencode = tostring(st and st.cmd or ''):find 'opencode' or vim.b[args.buf].panel_type == 'opencode'
       if is_opencode then
         vim.b[args.buf].panel_zone = 'right'
         vim.b[args.buf].panel_type = 'opencode'

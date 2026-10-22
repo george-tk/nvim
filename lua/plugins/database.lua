@@ -155,19 +155,9 @@ return {
           vim.b[args.buf].panel_zone = 'bottom'
           vim.b[args.buf].panel_type = 'dbout'
           vim.bo[args.buf].buflisted = false
-          for _, w in ipairs(vim.fn.win_findbuf(args.buf)) do
-            if vim.api.nvim_win_is_valid(w) then
-              vim.wo[w].winfixheight = true
-              vim.wo[w].winfixbuf = true
-              local wb = vim.wo[w].winbar
-              if wb and wb ~= '' then
-                local stripped = wb:gsub('^%%#SqmeowWinbar#.-%%%*%s*', '')
-                vim.wo[w].winbar = stripped ~= '' and (' ' .. stripped) or ''
-              end
-            end
-          end
           if _G.BottomPanel then
             _G.BottomPanel.last_dbout_buf = args.buf
+            _G.BottomPanel.dbout_open = true
             _G.BottomPanel.active_mode = 'dbout'
           end
 
@@ -180,9 +170,17 @@ return {
           end, { buffer = args.buf, silent = true, desc = 'Last Column' })
 
           vim.keymap.set('n', 'q', function()
-            pcall(function()
-              require('sqmeow.api.view').close()
-            end)
+            if _G.smart_close then
+              _G.smart_close()
+              return
+            end
+            if _G.BottomPanel and _G.BottomPanel.close_dbout then
+              _G.BottomPanel.close_dbout(true)
+            else
+              pcall(function()
+                require('sqmeow.api.view').close()
+              end)
+            end
             if _G.BottomPanel and _G.BottomPanel.ensure_precedence then
               _G.BottomPanel.ensure_precedence()
             end
@@ -200,6 +198,7 @@ return {
     end,
     opts = {
       ui = {
+        winbar = false,
         drawer = {
           position = 'right',
           width = 35,

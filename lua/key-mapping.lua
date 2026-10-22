@@ -41,7 +41,7 @@ vim.keymap.set('n', '<Tab>', function()
     if ok and node then
       while node do
         if node:type() == 'pipe_table' or node:type() == 'table' then
-          vim.cmd('MkdnTableNextCell')
+          vim.cmd 'MkdnTableNextCell'
           return
         end
         node = node:parent()
@@ -61,7 +61,7 @@ vim.keymap.set('n', '<S-Tab>', function()
     if ok and node then
       while node do
         if node:type() == 'pipe_table' or node:type() == 'table' then
-          vim.cmd('MkdnTablePrevCell')
+          vim.cmd 'MkdnTablePrevCell'
           return
         end
         node = node:parent()
@@ -84,7 +84,7 @@ end, { desc = 'Zen Mode' })
 -- 3-Zone IDE Layout Engine Bridge
 -------------------------------------------------------------------------------
 
-local layout = require('utils.layout')
+local layout = require 'utils.layout'
 
 -------------------------------------------------------------------------------
 -- Smart Buffer Management & Layout Preservation
@@ -92,10 +92,12 @@ local layout = require('utils.layout')
 
 local function smart_close()
   if vim.api.nvim_get_mode().mode == 't' then
-    vim.cmd('stopinsert')
+    vim.cmd 'stopinsert'
   end
   local cur_win = vim.api.nvim_get_current_win()
-  if not vim.api.nvim_win_is_valid(cur_win) then return end
+  if not vim.api.nvim_win_is_valid(cur_win) then
+    return
+  end
 
   local cur_buf = vim.api.nvim_win_get_buf(cur_win)
   local info = layout.get_win_info(cur_win)
@@ -117,22 +119,37 @@ local function smart_close()
     return
   end
 
-  -- 2. If inside Bottom Panel (Terminal, SQL Results): terminate terminal or close panel
+  -- 2. If inside Bottom Panel (Terminal, SQL Results, Quickfix): terminate terminal or close panel
   if info.is_terminal then
-    local is_real_term = (vim.bo[cur_buf].buftype == 'terminal' or vim.bo[cur_buf].filetype == 'snacks_terminal' or vim.bo[cur_buf].filetype == 'terminal' or vim.api.nvim_buf_get_name(cur_buf):match('^term://') ~= nil)
+    local ft = vim.bo[cur_buf].filetype
+    local bt = vim.bo[cur_buf].buftype
+    local bname = vim.api.nvim_buf_get_name(cur_buf)
+    local is_dbout = (ft == 'dbout' or ft == 'sqmeow-result' or bname:find 'sqmeow://result' ~= nil) and ft ~= 'sqmeow-drawer' and not bname:find 'drawer'
+    local is_qf = (ft == 'qf' or bt == 'quickfix')
+    local is_real_term = not is_dbout and not is_qf and (bt == 'terminal' or ft == 'snacks_terminal' or ft == 'terminal' or bname:match '^term://' ~= nil)
 
-    local cur_term_id = (vim.b[cur_buf].snacks_terminal and vim.b[cur_buf].snacks_terminal.id) or layout.BottomPanel.active_terminal_count or 1
-
-    if is_real_term then
+    if is_dbout then
+      if layout.BottomPanel and layout.BottomPanel.close_dbout then
+        layout.BottomPanel.close_dbout(true)
+      end
+    elseif is_qf then
+      if layout.BottomPanel and layout.BottomPanel.close_qf then
+        layout.BottomPanel.close_qf(true)
+      end
+    elseif is_real_term then
       local job_id = vim.api.nvim_buf_is_valid(cur_buf) and vim.b[cur_buf].terminal_job_id or nil
-      local ok_list, list = pcall(function() return Snacks.terminal.list() end)
+      local ok_list, list = pcall(function()
+        return Snacks.terminal.list()
+      end)
       if ok_list and type(list) == 'table' then
         for _, t in ipairs(list) do
           if t and t.buf == cur_buf then
             if t.augroup then
               pcall(vim.api.nvim_del_augroup_by_id, t.augroup)
             end
-            pcall(function() t:destroy() end)
+            pcall(function()
+              t:destroy()
+            end)
           end
         end
       end
@@ -143,11 +160,11 @@ local function smart_close()
       if vim.api.nvim_buf_is_valid(cur_buf) then
         pcall(vim.api.nvim_buf_delete, cur_buf, { force = true })
       end
-      pcall(function()
-        local tracker = require('utils.terminal-tracker')
-        tracker.invalidate()
-      end)
     end
+
+    pcall(function()
+      require('utils.terminal-tracker').invalidate()
+    end)
 
     local bot_wins = {}
     for _, w in ipairs(vim.api.nvim_list_wins()) do
@@ -162,7 +179,6 @@ local function smart_close()
       end
       if vim.api.nvim_win_is_valid(bot_wins[1]) then
         vim.api.nvim_set_current_win(bot_wins[1])
-        vim.cmd('startinsert')
       end
       layout.equalize_splits()
     else
@@ -174,22 +190,13 @@ local function smart_close()
       end
 
       if #remaining > 0 then
-        local next_id = remaining[1].id
-        for _, t in ipairs(remaining) do
-          if t.id > cur_term_id then
-            next_id = t.id
-            break
-          end
-        end
-
-        layout.BottomPanel.active_terminal_count = next_id
         if vim.api.nvim_win_is_valid(cur_win) then
           pcall(vim.api.nvim_win_close, cur_win, true)
         end
-        layout.BottomPanel.open_terminal(next_id)
+        layout.BottomPanel.open_slot(1)
         return
       else
-        layout.BottomPanel.close_all()
+        layout.BottomPanel.close_all(true)
         layout.BottomPanel.active_terminal_count = 1
         local ed = layout.get_editor_win()
         if ed and vim.api.nvim_win_is_valid(ed) then
@@ -198,7 +205,9 @@ local function smart_close()
       end
     end
 
-    pcall(function() require('lualine').refresh() end)
+    pcall(function()
+      require('lualine').refresh()
+    end)
     return
   end
 
@@ -227,7 +236,7 @@ local function smart_close()
     pcall(vim.api.nvim_win_set_buf, cur_win, next_target)
     local ok, snacks = pcall(require, 'snacks')
     if ok and snacks.bufdelete then
-      snacks.bufdelete({ buf = cur_buf })
+      snacks.bufdelete { buf = cur_buf }
     else
       pcall(vim.cmd, 'bdelete ' .. cur_buf)
     end
@@ -244,7 +253,9 @@ local function smart_close()
     if ring_ok and ring and ring.clean_slots then
       ring.clean_slots()
     end
-    pcall(function() require('lualine').refresh() end)
+    pcall(function()
+      require('lualine').refresh()
+    end)
 
     local ok_p, persistence = pcall(require, 'persistence')
     if ok_p and persistence.current then
@@ -252,7 +263,7 @@ local function smart_close()
       if sfile and vim.fn.filereadable(sfile) == 1 then
         pcall(vim.fn.delete, sfile)
       end
-      local fallback = persistence.current({ branch = false })
+      local fallback = persistence.current { branch = false }
       if fallback and vim.fn.filereadable(fallback) == 1 then
         pcall(vim.fn.delete, fallback)
       end
@@ -272,7 +283,7 @@ local function smart_bnext()
   if ok and ring.next_buffer then
     ring.next_buffer()
   else
-    vim.cmd('bnext')
+    vim.cmd 'bnext'
   end
 end
 
@@ -288,7 +299,7 @@ local function smart_bprev()
   if ok and ring.prev_buffer then
     ring.prev_buffer()
   else
-    vim.cmd('bprevious')
+    vim.cmd 'bprevious'
   end
 end
 
@@ -301,22 +312,20 @@ local function smart_goto_slot(n)
   local cur_win = vim.api.nvim_get_current_win()
   local info = layout.get_win_info(cur_win)
 
-  -- 1. In Terminal: switch to terminal instance n directly in terminal mode
+  -- 1. In Bottom Panel (Terminal / SQL Results / Quickfix): switch to visual slot n (or spawn terminal)
   if info.is_terminal then
-    layout.BottomPanel.open_terminal(n)
+    layout.BottomPanel.open_slot(n)
     return
   end
 
   if vim.api.nvim_get_mode().mode == 't' then
-    vim.cmd('stopinsert')
+    vim.cmd 'stopinsert'
   end
 
-  -- 2. In Right Panel (Explorer, DBUI, AI): return to editor first
+  -- 2. In Right Panel (Explorer, DBUI, AI): switch to right panel slot 1..3
   if info.is_explorer or info.is_dbui or info.is_opencode then
-    local ed = layout.get_editor_win()
-    if ed and vim.api.nvim_win_is_valid(ed) then
-      vim.api.nvim_set_current_win(ed)
-    end
+    layout.RightPanel.open_slot(n)
+    return
   end
 
   -- 3. In Editor: jump to buffer slot n, or trigger filetype creation picker (<leader>n)
@@ -330,7 +339,7 @@ local function smart_goto_slot(n)
       if ring.create_filetype_buffer then
         ring.create_filetype_buffer(n)
       else
-        vim.cmd('enew')
+        vim.cmd 'enew'
       end
     end
   else
@@ -362,7 +371,7 @@ vim.keymap.set('n', '<leader>n', function()
   if ok and ring.create_filetype_buffer then
     ring.create_filetype_buffer()
   else
-    vim.cmd('enew')
+    vim.cmd 'enew'
   end
 end, { desc = 'New Buffer (with Filetype)' })
 
@@ -386,15 +395,21 @@ vim.keymap.set('n', '<leader>r', '<C-6>', { desc = 'Alternate Buffer' })
 -- Window Split Management (<leader>w)
 -------------------------------------------------------------------------------
 
-vim.keymap.set('n', '<leader>ws', function() layout.editor_split('horizontal') end, { desc = 'Split Horizontally' })
-vim.keymap.set('n', '<leader>wv', function() layout.editor_split('vertical') end, { desc = 'Split Vertically' })
+vim.keymap.set('n', '<leader>ws', function()
+  layout.editor_split 'horizontal'
+end, { desc = 'Split Horizontally' })
+vim.keymap.set('n', '<leader>wv', function()
+  layout.editor_split 'vertical'
+end, { desc = 'Split Vertically' })
 vim.keymap.set('n', '<leader>we', layout.reset_window_layout, { desc = 'Balance Window Splits' })
-vim.keymap.set('n', '<leader>wq', function() layout.smart_close_window(smart_close) end, { desc = 'Close Window Split' })
+vim.keymap.set('n', '<leader>wq', function()
+  layout.smart_close_window(smart_close)
+end, { desc = 'Close Window Split' })
 vim.keymap.set('n', '<leader>wo', function()
   local ed = layout.get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
     vim.api.nvim_set_current_win(ed)
-    vim.cmd('only')
+    vim.cmd 'only'
   end
 end, { desc = 'Close Other Splits' })
 
@@ -416,7 +431,9 @@ vim.keymap.set('n', '<leader>d', function()
   layout.cleanup_panels_before_save()
   local real_bufs = layout.get_real_editor_bufs()
   if #real_bufs > 0 then
-    pcall(function() require('persistence').save() end)
+    pcall(function()
+      require('persistence').save()
+    end)
   end
 
   local ok_snacks, snacks = pcall(require, 'snacks')
@@ -424,8 +441,8 @@ vim.keymap.set('n', '<leader>d', function()
     snacks.bufdelete.all()
   end
 
-  vim.cmd('only')
-  Snacks.dashboard.open({ win = vim.api.nvim_get_current_win() })
+  vim.cmd 'only'
+  Snacks.dashboard.open { win = vim.api.nvim_get_current_win() }
 end, { desc = 'Dashboard' })
 
 -------------------------------------------------------------------------------
@@ -456,7 +473,15 @@ end, { desc = 'Terminal' })
 
 vim.keymap.set('n', '<C-w>=', layout.reset_window_layout, { desc = 'Reset Default Window Layout' })
 
-vim.keymap.set({ 'n', 'i', 't' }, '<M-h>', function() layout.resize_width(-3) end, { desc = 'Resize Width / Expand Explorer' })
-vim.keymap.set({ 'n', 'i', 't' }, '<M-l>', function() layout.resize_width(3) end, { desc = 'Resize Width / Shrink Explorer' })
-vim.keymap.set({ 'n', 'i', 't' }, '<M-k>', function() layout.resize_height(2) end, { desc = 'Expand Bottom Height +2' })
-vim.keymap.set({ 'n', 'i', 't' }, '<M-j>', function() layout.resize_height(-2) end, { desc = 'Shrink Bottom Height -2' })
+vim.keymap.set({ 'n', 'i', 't' }, '<M-h>', function()
+  layout.resize_width(-3)
+end, { desc = 'Resize Width / Expand Explorer' })
+vim.keymap.set({ 'n', 'i', 't' }, '<M-l>', function()
+  layout.resize_width(3)
+end, { desc = 'Resize Width / Shrink Explorer' })
+vim.keymap.set({ 'n', 'i', 't' }, '<M-k>', function()
+  layout.resize_height(2)
+end, { desc = 'Expand Bottom Height +2' })
+vim.keymap.set({ 'n', 'i', 't' }, '<M-j>', function()
+  layout.resize_height(-2)
+end, { desc = 'Shrink Bottom Height -2' })
