@@ -409,13 +409,25 @@ function M.get_terminals()
       end
     end
     if dbout_buf and vim.api.nvim_buf_is_valid(dbout_buf) then
+      local db_running = false
+      local db_modified = false
+      local ok_st, st = pcall(require, 'sqmeow.core.state')
+      if ok_st and st and st.call and st.call.state == 'executing' then
+        db_running = true
+      end
+      local ok_ed, edit = pcall(require, 'sqmeow.ui.edit')
+      if ok_ed and edit and edit.count and edit.count() > 0 then
+        db_modified = true
+      end
+
       table.insert(terms, {
         kind = 'dbout',
         id = 'dbout',
         buf = dbout_buf,
         icon = '󰆼 ',
         cmd = resolve_dbout_label(dbout_buf),
-        is_running = false,
+        is_running = db_running,
+        is_modified = db_modified,
         order = ensure_order(dbout_buf),
       })
     else
@@ -529,7 +541,14 @@ function M.lualine_component()
     local raw_cmd = t.cmd or 'zsh'
     local truncated = truncate(raw_cmd, budget)
     local prefix = t.icon or ''
-    local label = prefix .. (t.is_running and (truncated .. ' ') or truncated)
+    local label
+    if t.kind == 'dbout' then
+      local run_prefix = t.is_running and (prefix .. ' ') or prefix
+      local mod_suffix = t.is_modified and ' ●' or ''
+      label = run_prefix .. truncated .. mod_suffix
+    else
+      label = prefix .. (t.is_running and (truncated .. ' ') or truncated)
+    end
 
     local hl
     if is_active then

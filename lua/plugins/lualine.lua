@@ -242,8 +242,83 @@ return {
           },
         },
 
-        -- Right-side sections: Active macro / database / filetype
-        lualine_x = {},
+        -- Right-side sections: Active column (in SQL result grid) / Active macro / database + telemetry / filetype
+        lualine_x = {
+          {
+            function()
+              local fb = vim.api.nvim_get_current_buf()
+              if not fb or not vim.api.nvim_buf_is_valid(fb) then
+                return ''
+              end
+              local ft = vim.bo[fb].filetype
+              local name = vim.api.nvim_buf_get_name(fb)
+              if ft ~= 'sqmeow-result' and ft ~= 'dbout' and not name:find 'sqmeow://result' then
+                return ''
+              end
+
+              local ok_st, st = pcall(require, 'sqmeow.core.state')
+              local call = ok_st and st and st.call
+              if not (call and call.columns and #call.columns > 0) then
+                return ''
+              end
+
+              local ok_res, res = pcall(require, 'sqmeow.ui.result')
+              local col_idx = nil
+              if ok_res and res and res.current_cell then
+                local cell = res.current_cell()
+                if cell and cell.column ~= nil then
+                  col_idx = cell.column + 1
+                end
+              end
+
+              -- Fallback for header/rule lines or windows opened via BottomPanel
+              if not col_idx then
+                local rule_line = vim.api.nvim_buf_get_lines(fb, 1, 2, false)[1] or ''
+                if rule_line:find '─' then
+                  local cur = vim.api.nvim_win_get_cursor(0)
+                  local cur_line = vim.api.nvim_buf_get_lines(fb, cur[1] - 1, cur[1], false)[1] or ''
+                  local disp_col = vim.fn.strdisplaywidth(cur_line:sub(1, cur[2]))
+                  local vis_idx = 1
+                  local acc = 0
+                  local parts = vim.split(rule_line, '┼', { plain = true })
+                  for i, part in ipairs(parts) do
+                    acc = acc + vim.fn.strdisplaywidth(part)
+                    if disp_col <= acc then
+                      vis_idx = i
+                      break
+                    end
+                    acc = acc + 1
+                    vis_idx = i + 1
+                  end
+                  local vis = (ok_res and res and res.visible_columns) and res.visible_columns() or nil
+                  col_idx = vis and ((vis[vis_idx] or 0) + 1) or vis_idx
+                end
+              end
+
+              local col = col_idx and call.columns[col_idx]
+              if not (col and col.name and col.name ~= '') then
+                return ''
+              end
+              if col.type_name and col.type_name ~= '' then
+                return string.format('󰠵 %s (%s)', col.name, col.type_name:lower())
+              end
+              return '󰠵 ' .. col.name
+            end,
+            cond = function()
+              if vim.fn.reg_recording() ~= '' then
+                return false
+              end
+              local fb = vim.api.nvim_get_current_buf()
+              if not fb or not vim.api.nvim_buf_is_valid(fb) then
+                return false
+              end
+              local ft = vim.bo[fb].filetype
+              local name = vim.api.nvim_buf_get_name(fb)
+              return ft == 'sqmeow-result' or ft == 'dbout' or name:find 'sqmeow://result' ~= nil
+            end,
+            color = { fg = C.subtext1 or '#bac2de' },
+          },
+        },
         lualine_y = {
           -- Active macro recording indicator (takes priority over database & filetype)
           {
@@ -257,10 +332,16 @@ return {
           },
           {
             function()
+              local fb = vim.api.nvim_get_current_buf()
+              local fb_ft = (fb and vim.api.nvim_buf_is_valid(fb)) and vim.bo[fb].filetype or ''
+              local fb_name = (fb and vim.api.nvim_buf_is_valid(fb)) and vim.api.nvim_buf_get_name(fb) or ''
+              local in_grid = fb_ft == 'sqmeow-result' or fb_ft == 'dbout' or fb_name:find 'sqmeow://result' ~= nil
+
               local cur_buf = get_active_editor_buf()
               local ft = vim.bo[cur_buf].filetype
               local bname = vim.api.nvim_buf_get_name(cur_buf)
-              local is_db = ft == 'sql'
+              local is_db = in_grid
+                or ft == 'sql'
                 or ft == 'mysql'
                 or ft == 'plsql'
                 or ft == 'surql'
@@ -286,20 +367,34 @@ return {
 
                 local db_name = nil
                 local is_ro = false
+                local ok_st, st = pcall(require, 'sqmeow.core.state')
 
-                -- 1. Query sqmeow authoritative execution target for this buffer
+                -- 0. When focused directly inside the result grid, prefer the result's connection
+                if in_grid and ok_st and st and st.call then
+                  if st.call.conn_id and st.connections and st.connections[st.call.conn_id] then
+                    local c = st.connections[st.call.conn_id]
+                    db_name = c.name
+                    is_ro = c.read_only == true
+                  elseif st.call.connection and st.call.connection ~= '' then
+                    db_name = st.call.connection
+                  end
+                end
+
+                -- 1. Buffer-local connection bindings first (strictly per-buffer)
+                if not db_name or db_name == '' then
+                  db_name = vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
+                end
+
+                -- 2. Query sqmeow authoritative execution target for this buffer
                 local ok_conn, conn_api = pcall(require, 'sqmeow.api.connection')
                 if ok_conn and conn_api and conn_api.target then
                   local target = conn_api.target(cur_buf)
                   if target and target.name then
-                    db_name = target.name
-                    is_ro = target.read_only == true
+                    db_name = db_name or target.name
+                    if target.name == db_name then
+                      is_ro = target.read_only == true
+                    end
                   end
-                end
-
-                -- 2. Buffer-local connection bindings
-                if not db_name or db_name == '' then
-                  db_name = vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
                 end
 
                 -- 3. DatabaseUtils active db / current db
@@ -316,29 +411,93 @@ return {
                 end
 
                 -- 4. Result buffer fallback
-                if not db_name or db_name == '' then
-                  local ok_st, st = pcall(require, 'sqmeow.core.state')
-                  if ok_st and st then
-                    if st.call and st.call.conn_id and st.connections and st.connections[st.call.conn_id] then
-                      local c = st.connections[st.call.conn_id]
-                      db_name = c.name
-                      is_ro = c.read_only == true
-                    elseif st.current and st.connections and st.connections[st.current] then
-                      local c = st.connections[st.current]
-                      db_name = c.name
-                      is_ro = c.read_only == true
+                if (not db_name or db_name == '') and ok_st and st then
+                  if st.call and st.call.conn_id and st.connections and st.connections[st.call.conn_id] then
+                    local c = st.connections[st.call.conn_id]
+                    db_name = c.name
+                    is_ro = c.read_only == true
+                  elseif st.current and st.connections and st.connections[st.current] then
+                    local c = st.connections[st.current]
+                    db_name = c.name
+                    is_ro = c.read_only == true
+                  end
+                end
+
+                -- Format query telemetry if a query ran on this connection (or we're in the grid)
+                local telemetry = ''
+                local call = ok_st and st and st.call
+                if call then
+                  local call_conn = call.conn_id and st.connections and st.connections[call.conn_id]
+                  local call_db = (call_conn and call_conn.name) or call.connection
+                  if in_grid or not db_name or db_name == '' or not call_db or call_db == db_name then
+                    if call.state == 'executing' then
+                      telemetry = ' ·  running…'
+                    elseif call.state == 'error' then
+                      telemetry = ' ·  error'
+                    elseif call.state == 'cancelled' then
+                      telemetry = ' · cancelled'
+                    elseif call.state == 'done' then
+                      local parts = {}
+                      local plus = call.truncated and '+' or ''
+                      if call.view_rows ~= nil then
+                        table.insert(parts, string.format('%d/%d%s rows', call.view_rows, call.rows or 0, plus))
+                      elseif call.rows ~= nil and (call.rows > 0 or (call.columns and #call.columns > 0)) then
+                        local plural = (call.rows == 1 and not call.truncated) and '' or 's'
+                        table.insert(parts, string.format('%d%s row%s', call.rows, plus, plural))
+                      elseif call.affected ~= nil then
+                        table.insert(parts, string.format('%d affected', call.affected))
+                      else
+                        table.insert(parts, '0 rows')
+                      end
+
+                      if call.elapsed_ms ~= nil then
+                        local ok_res, res = pcall(require, 'sqmeow.ui.result')
+                        local dur = (ok_res and res and res.format_duration) and res.format_duration(call.elapsed_ms) or (call.elapsed_ms .. 'ms')
+                        table.insert(parts, dur)
+                      end
+
+                      local ok_res, res = pcall(require, 'sqmeow.ui.result')
+                      if ok_res and res then
+                        if res.pages and call.columns and #call.columns > 0 then
+                          local cur_p, total_p = res.pages(call)
+                          if total_p and total_p > 1 then
+                            table.insert(parts, string.format('p%d/%d', cur_p, total_p))
+                          end
+                        end
+                        if res.spec then
+                          local spec = res.spec()
+                          local has_filter = call.aggregated == true
+                            or (
+                              spec
+                              and (
+                                (spec.where or '') ~= ''
+                                or (spec.order_by or '') ~= ''
+                                or (spec.group_by or '') ~= ''
+                                or (spec.aggregates or '') ~= ''
+                                or (spec.having or '') ~= ''
+                                or (spec.filters and #spec.filters > 0)
+                                or (spec.sort and #spec.sort > 0)
+                                or (spec.hidden and not vim.tbl_isempty(spec.hidden))
+                              )
+                            )
+                          if has_filter then
+                            table.insert(parts, '󰈲')
+                          end
+                        end
+                      end
+
+                      if #parts > 0 then
+                        telemetry = ' · ' .. table.concat(parts, ' · ')
+                      end
                     end
                   end
                 end
 
                 if db_name and db_name ~= '' then
-                  if not is_ro then
-                    local ok_st, st = pcall(require, 'sqmeow.core.state')
-                    if ok_st and st and st.connection_by_name then
-                      local c = st.connection_by_name(db_name)
-                      if c and c.read_only then
-                        is_ro = true
-                      end
+                  if not is_ro and ok_st and st and st.connection_by_name then
+                    local c = st.connection_by_name(db_name)
+                    if c and c.read_only then
+                      is_ro = true
                     end
                   end
 
@@ -346,19 +505,19 @@ return {
                   if is_ro then
                     display = display .. ' 󰌾'
                   end
-                  return display
+                  return display .. telemetry
                 end
 
                 if vim.b[cur_buf].is_preview_buffer or bname:match '%[Preview: ' then
-                  return '󰆼 preview'
+                  return '󰆼 preview' .. telemetry
                 end
                 if bname:match '%[Alter: ' then
-                  return '󰆼 alter'
+                  return '󰆼 alter' .. telemetry
                 end
                 if bname:match '%[Routine: ' then
-                  return '󰆼 routine'
+                  return '󰆼 routine' .. telemetry
                 end
-                return '󰆼 sql'
+                return '󰆼 sql' .. telemetry
               end
 
               if not ft or ft == '' then

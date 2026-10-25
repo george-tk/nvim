@@ -661,6 +661,43 @@ In DBeaver (`F4`) and DataGrip (`Ctrl+B`), users can navigate from a foreign key
 2. Acquire access token via active Azure CLI session (`az account get-access-token --resource https://database.windows.net`), device-code flow, or custom token command.
 3. Pass token to `tiberius` via `AuthMethod::AADToken(token.into())` using the TDS protocol's native `FEDAUTH` extension.
 
+---
+
+### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false`
+
+**Title**: `bug(result): non-row statements (UPDATE/DELETE/INSERT/DDL) render an empty buffer when ui.winbar = false`
+
+**Problem**:
+In `lua/sqmeow/ui/result.lua` (`draw()`, lines 602–607):
+```lua
+if not (call and call.columns and #call.columns > 0) then
+  has_grid = false
+  vim.api.nvim_buf_set_lines(handle, 0, -1, false, {})
+  vim.bo[handle].modifiable = false
+  return
+end
+```
+When a statement that returns no result columns (`UPDATE`, `DELETE`, `INSERT`, `ALTER TABLE`, `CREATE TABLE`, `DROP TABLE`, etc.) finishes, `draw()` clears the result buffer to `{}` and relies exclusively on `M.update_winbar(call)` to display `2 rows affected  󱎫 5ms`.
+If the user configures `ui = { winbar = false }`, running any DML or DDL statement opens a completely blank result window with zero feedback (whereas failed queries `call.state == 'error'` *do* render their message into the result buffer body).
+
+**Proposed Fix**:
+When `not (call and call.columns and #call.columns > 0)` and `call` is present (`executing`, `done`, or `cancelled`), write `M.describe(call, false)` (e.g. `2 rows affected  󱎫 5ms`) into `handle` with `SqmeowSignAdded` / `Comment` highlighting whenever `not require('sqmeow.config').get().ui.winbar` (or always, as a clean summary line in the buffer body).
+
+---
+
+### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming
+
+**Title**: `feat(completion): support dialect-quoted identifiers in completion and warm table metadata on connect`
+
+**Problem**:
+1. `sqmeow.core.sql.quote(dialect, name)` properly quotes identifiers per dialect (`"table"` for Postgres/SQLite/DuckDB, `` `table` `` for MySQL, `[table]` for MSSQL), and `select_from` / `alter_table` always emit quoted identifiers. However, `sqmeow.completion.blink` and `sqmeow.completion` emit raw `label = item.label` with no `insertText`, causing unquoted mixed-case or reserved-word table/column names to fail on execution.
+2. `sqmeow.completion.ensure(conn_id)` only calls `nodes(conn_id, {})` (top-level schemas), requiring the user to either open the drawer or trigger completion 3 separate times (`{}` $\rightarrow$ `{schema}` $\rightarrow$ `{schema, 'tables'}`) before table names appear in autocomplete.
+
+**Proposed Implementation**:
+1. Add `ui.completion.quote_identifiers = true` (or auto-quote relations/mixed-case identifiers using `sqmeow.core.sql.quote(conn.dialect, item.label)` via `insertText` / `filterText`, handling leading typed quote characters cleanly).
+2. In `completion.ensure(conn_id)`, recursively warm `{schema}` and `{schema, 'tables' | 'views'}` in the background when `schema:nodes` events arrive.
+
+
 
 
 

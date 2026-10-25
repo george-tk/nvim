@@ -265,6 +265,53 @@ return {
             module = 'sqmeow.completion.blink',
             min_keyword_length = 0,
             score_offset = 200,
+            transform_items = function(ctx, items)
+              local dialect = nil
+              local ok_conn, conn_api = pcall(require, 'sqmeow.api.connection')
+              if ok_conn and conn_api and conn_api.target then
+                local conn = conn_api.target(ctx and ctx.bufnr or 0)
+                dialect = conn and conn.dialect or nil
+              end
+              local ok_sql, sql = pcall(require, 'sqmeow.core.sql')
+
+              local function quote_ident(name)
+                if ok_sql and sql and sql.quote then
+                  return sql.quote(dialect, name)
+                end
+                return '"' .. name:gsub('"', '""') .. '"'
+              end
+
+              local line = ctx and ctx.line or ''
+              local start_col = ctx and ctx.bounds and ctx.bounds.start_col or nil
+              local length = ctx and ctx.bounds and ctx.bounds.length or 0
+              local row0 = (ctx and ctx.cursor and ctx.cursor[1] or 1) - 1
+
+              for _, item in ipairs(items) do
+                local is_rel = item.kind == 7 or item.kind == 8 or item.detail == 'table' or item.detail == 'view'
+                local needs_quote = is_rel or not (item.label and item.label:match '^[a-z_][a-z0-9_]*$')
+                if needs_quote and item.label and item.label ~= '' then
+                  local quoted = quote_ident(item.label)
+                  local open_q = quoted:sub(1, 1)
+                  local close_q = quoted:sub(-1)
+                  item.filterText = item.label
+                  item.insertText = quoted
+
+                  -- If the user already typed the opening quote (e.g. `"ord`), replace from the opening quote
+                  if start_col and start_col > 1 and line:sub(start_col - 1, start_col - 1) == open_q then
+                    local end_idx = start_col + length - 1
+                    local has_close = line:sub(end_idx + 1, end_idx + 1) == close_q
+                    item.textEdit = {
+                      newText = quoted,
+                      range = {
+                        start = { line = row0, character = start_col - 2 },
+                        ['end'] = { line = row0, character = end_idx + (has_close and 1 or 0) },
+                      },
+                    }
+                  end
+                end
+              end
+              return items
+            end,
           },
 
           -- Standalone SQL keywords, clauses, and boilerplate phrases

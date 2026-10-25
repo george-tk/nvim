@@ -41,9 +41,8 @@ return {
         end,
       })
 
-      -- Automatically bind active database and enable AI completion for any opened .sql file
-      vim.api.nvim_create_autocmd({ 'FileType', 'BufEnter' }, {
-        pattern = { 'sql', 'mysql', 'plsql', 'surql', 'cql' },
+      -- Automatically bind per-buffer database, attach <CR> execution keymaps, and enable AI completion for SQL buffers
+      vim.api.nvim_create_autocmd({ 'FileType', 'BufEnter', 'BufWinEnter' }, {
         callback = function(args)
           if vim.g.SessionLoad == 1 then
             return
@@ -53,7 +52,38 @@ return {
             return
           end
 
+          local ft = vim.bo[buf].filetype
+          local is_sql = ft == 'sql'
+            or ft == 'mysql'
+            or ft == 'plsql'
+            or ft == 'surql'
+            or ft == 'cql'
+            or vim.b[buf].sqmeow_editor == true
+            or vim.b[buf].is_preview_buffer == true
+          if not is_sql then
+            return
+          end
+
           vim.opt_local.spell = false
+
+          -- Bind <CR> (normal & visual), <leader>E (whole buffer), and <C-c> (cancel) on every SQL buffer
+          if not vim.b[buf].sql_exec_keymaps_bound then
+            vim.b[buf].sql_exec_keymaps_bound = true
+            vim.keymap.set('n', '<CR>', function()
+              db.run_query(false)
+            end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Run the statement under the cursor' })
+            vim.keymap.set('x', '<CR>', function()
+              db.run_query(false)
+            end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Run the selection' })
+            vim.keymap.set('n', '<leader>E', function()
+              db.run_query(true)
+            end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Run the whole buffer' })
+            vim.keymap.set('n', '<C-c>', function()
+              pcall(function()
+                require('sqmeow.api.query').cancel()
+              end)
+            end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Stop the running query' })
+          end
 
           local db_url, db_name = db.get_active_db(buf)
           if not db_name and db.current_db_name then
@@ -64,6 +94,17 @@ return {
           if db_name then
             vim.b[buf].db_name = db_name
             vim.b[buf].sqmeow_connection = db_name
+            -- If this buffer is the focused buffer, sync active database & ensure sqmeow connection is open
+            if buf == vim.api.nvim_get_current_buf() then
+              db.current_db_name = db_name
+              db.current_db = db_url or db.get_connection_url(db_name)
+              vim.schedule(function()
+                if vim.api.nvim_buf_is_valid(buf) then
+                  db.setup_drawer_helpers()
+                  db.ensure_sqmeow_connection(db_name, true)
+                end
+              end)
+            end
           end
 
           if not vim.b[buf].sqmeow_table then

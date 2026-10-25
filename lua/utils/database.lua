@@ -230,7 +230,7 @@ function M.get_connection_url(name)
 end
 
 -- Ensure connection is active in sqmeow using upstream connect_named or active child connection
-function M.ensure_sqmeow_connection(db_name)
+function M.ensure_sqmeow_connection(db_name, non_blocking)
   if not db_name or db_name == '' then
     return nil
   end
@@ -259,6 +259,52 @@ function M.ensure_sqmeow_connection(db_name)
         pcall(function()
           api.connect_named(parent_name)
         end)
+        parent_conn = state and state.connection_by_name(parent_name)
+      end
+
+      local function activate_child(pconn)
+        local child = state.child_connection and state.child_connection(pconn.id, child_db)
+        if child and child.id then
+          api.use(child.id)
+          return child.id
+        end
+        local child_id = api.connect(pconn.url, {
+          name = db_name,
+          parent = pconn.id,
+          database = child_db,
+          read_only = pconn.read_only,
+          ssh = pconn.ssh,
+        })
+        if child_id then
+          api.use(child_id)
+          return child_id
+        end
+        return nil
+      end
+
+      if parent_conn and parent_conn.state == 'connected' then
+        return activate_child(parent_conn)
+      end
+
+      if non_blocking then
+        local rpc = sqmeow 'rpc.client'
+        if rpc and rpc.on and parent_conn then
+          local unsub
+          unsub = rpc.on('conn:state', function(payload)
+            if payload.id == parent_conn.id and payload.state == 'connected' then
+              if unsub then
+                unsub()
+              end
+              vim.schedule(function()
+                local pnow = state.connections[parent_conn.id]
+                if pnow then
+                  activate_child(pnow)
+                end
+              end)
+            end
+          end)
+        end
+        return parent_conn and parent_conn.id or nil
       end
 
       local waited = 0
@@ -274,23 +320,7 @@ function M.ensure_sqmeow_connection(db_name)
       end
 
       if state and parent_conn and parent_conn.state == 'connected' then
-        local child = state.child_connection and state.child_connection(parent_conn.id, child_db)
-        if child and child.id then
-          api.use(child.id)
-          return child.id
-        else
-          local child_id = api.connect(parent_conn.url, {
-            name = db_name,
-            parent = parent_conn.id,
-            database = child_db,
-            read_only = parent_conn.read_only,
-            ssh = parent_conn.ssh,
-          })
-          if child_id then
-            api.use(child_id)
-            return child_id
-          end
-        end
+        return activate_child(parent_conn)
       end
     end
   end
@@ -299,23 +329,50 @@ function M.ensure_sqmeow_connection(db_name)
   pcall(function()
     id = api.connect_named(db_name)
   end)
+  if id then
+    pcall(function()
+      api.use(id)
+    end)
+    if not non_blocking then
+      local waited = 0
+      while waited < 2000 do
+        local c = state.connections[id]
+        if c and c.state == 'connected' then
+          break
+        end
+        vim.wait(50, function()
+          local cur = state.connections[id]
+          return (cur and cur.state == 'connected') or state.failures[db_name] ~= nil
+        end)
+        waited = waited + 50
+      end
+    end
+  end
   return id
 end
 
--- Set active connection across global state, disk persistence, and all open SQL buffers
-function M.set_active_connection(name, url)
+-- Set active connection on the target buffer (per-buffer) and update default persistence
+function M.set_active_connection(name, url, target_buf)
   M.current_db = url
   M.current_db_name = name
   M.save_active_connection(name, url)
 
-  -- Update all active SQL buffers for blink.cmp and sqmeow
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(buf) then
-      local ft = vim.bo[buf].filetype
-      if ft == 'sql' or ft == 'mysql' or ft == 'plsql' then
-        vim.b[buf].db_name = name
-        vim.b[buf].sqmeow_connection = name
-      end
+  -- Bind only the target editor buffer (never overwrite other open SQL buffers)
+  local buf = target_buf
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
+    if ed_win and vim.api.nvim_win_is_valid(ed_win) then
+      buf = vim.api.nvim_win_get_buf(ed_win)
+    else
+      buf = vim.api.nvim_get_current_buf()
+    end
+  end
+
+  if buf and vim.api.nvim_buf_is_valid(buf) then
+    local ft = vim.bo[buf].filetype
+    if ft ~= 'sqmeow-drawer' and ft ~= 'sqmeow-result' and ft ~= 'dbui' and ft ~= 'dbout' then
+      vim.b[buf].db_name = name
+      vim.b[buf].sqmeow_connection = name
     end
   end
 
@@ -429,24 +486,14 @@ function M.get_active_table(buf)
   return nil
 end
 
--- Resolve the active database for any buffer
+-- Resolve the active database for any buffer (strictly per-buffer first, global fallback last)
 function M.get_active_db(buf)
   buf = buf or vim.api.nvim_get_current_buf()
   if not buf or not vim.api.nvim_buf_is_valid(buf) then
     return nil, nil
   end
 
-  -- 1. Check authoritative sqmeow target connection for this buffer
-  local ok_target, conn_api = pcall(require, 'sqmeow.api.connection')
-  if ok_target and conn_api and conn_api.target then
-    local target = conn_api.target(buf)
-    if target and target.name then
-      local url = M.get_connection_url(target.name) or target.url
-      return url, target.name
-    end
-  end
-
-  -- 2. Check buffer-local connection bindings
+  -- 1. Check explicit buffer-local connection bindings first (`b:sqmeow_connection` / `b:db_name`)
   local ok_sq, sq_conn = pcall(function()
     return vim.b[buf].sqmeow_connection
   end)
@@ -460,9 +507,21 @@ function M.get_active_db(buf)
         return c.url, c.name
       end
     end
+    return nil, sq_conn
   end
 
-  -- 3. Buffer path belongs to a specific database folder
+  local ok_db, db_val = pcall(function()
+    return vim.b[buf].db
+  end)
+  local ok_name, db_name_val = pcall(function()
+    return vim.b[buf].db_name
+  end)
+  if ok_name and db_name_val and db_name_val ~= '' then
+    local url = (ok_db and db_val and db_val ~= '' and db_val) or M.get_connection_url(db_name_val)
+    return url, db_name_val
+  end
+
+  -- 2. Buffer path belongs to a specific database folder (e.g. scratch/<db_name>/*.sql)
   local buf_path = vim.fs.normalize(vim.api.nvim_buf_get_name(buf))
   if buf_path ~= '' then
     local candidates = {}
@@ -509,20 +568,19 @@ function M.get_active_db(buf)
     end
   end
 
-  local ok_db, db_val = pcall(function()
-    return vim.b[buf].db
-  end)
-  local ok_name, db_name_val = pcall(function()
-    return vim.b[buf].db_name
-  end)
   if ok_db and db_val and db_val ~= '' then
-    local name = (ok_name and db_name_val) or M.current_db_name or 'Database'
+    local name = M.current_db_name or 'Database'
     return db_val, name
   end
 
-  if ok_name and db_name_val and db_name_val ~= '' then
-    local url = M.get_connection_url(db_name_val)
-    return url, db_name_val
+  -- 3. Check sqmeow target / active connection fallback for new unbound buffers
+  local ok_target, conn_api = pcall(require, 'sqmeow.api.connection')
+  if ok_target and conn_api and conn_api.target then
+    local target = conn_api.target(buf)
+    if target and target.name then
+      local url = M.get_connection_url(target.name) or target.url
+      return url, target.name
+    end
   end
 
   -- 4. Active sqmeow state connection
@@ -733,6 +791,123 @@ function M.setup_drawer_helpers()
       return res
     end
   end
+
+  -- 3. Route sqmeow editor actions (<CR>, visual <CR>, <leader>E) through M.run_query
+  -- so buffer-local connections are auto-opened and BottomPanel is coordinated
+  local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
+  if ok_ed and editor and editor.actions and not M._editor_actions_hooked then
+    M._editor_actions_hooked = true
+    editor.actions.execute_statement = function()
+      M.run_query(false)
+    end
+    editor.actions.execute_selection = function()
+      M.run_query(false)
+    end
+    editor.actions.execute_buffer = function()
+      M.run_query(true)
+    end
+  end
+
+  -- 4. Render non-grid result messages (e.g. "2 rows affected", "no rows", "running…")
+  -- directly inside the result buffer body when `ui.winbar = false`
+  local ok_res, result = pcall(require, 'sqmeow.ui.result')
+  if ok_res and result and not M._result_non_grid_hooked then
+    M._result_non_grid_hooked = true
+    local ns = vim.api.nvim_create_namespace 'sqmeow_non_grid_status'
+
+    local function render_non_grid_summary(summary)
+      local state = sqmeow 'core.state'
+      local call = summary or (state and state.call)
+      if not call or call.state == 'error' then
+        return
+      end
+      if call.columns and #call.columns > 0 then
+        return
+      end
+      local handle = result.buffer and result.buffer()
+      if not handle or not vim.api.nvim_buf_is_valid(handle) then
+        return
+      end
+      local desc = result.describe and result.describe(call, false) or ''
+      if desc == '' then
+        return
+      end
+      local line = '  ' .. desc
+      vim.bo[handle].modifiable = true
+      vim.api.nvim_buf_set_lines(handle, 0, -1, false, { line })
+      vim.api.nvim_buf_clear_namespace(handle, ns, 0, -1)
+      local hl = call.state == 'executing' and 'Comment' or 'SqmeowSignAdded'
+      pcall(vim.api.nvim_buf_set_extmark, handle, ns, 0, 0, {
+        end_col = #line,
+        hl_group = hl,
+      })
+      vim.bo[handle].modifiable = false
+    end
+
+    local function refresh_statusline()
+      local ok_tt, tt = pcall(require, 'utils.terminal-tracker')
+      if ok_tt and tt and tt.invalidate then
+        tt.invalidate()
+      end
+      local ok_lualine, lualine = pcall(require, 'lualine')
+      if ok_lualine and lualine and lualine.refresh then
+        lualine.refresh { place = { 'statusline' } }
+      end
+    end
+
+    local orig_render = result.render
+    result.render = function(summary)
+      local r = orig_render(summary)
+      render_non_grid_summary(summary)
+      refresh_statusline()
+      return r
+    end
+
+    local orig_update_winbar = result.update_winbar
+    result.update_winbar = function(summary)
+      local r = orig_update_winbar(summary)
+      render_non_grid_summary(summary)
+      refresh_statusline()
+      return r
+    end
+  end
+
+  -- 5. Pre-warm schema & table completion cache on connection / schema load
+  local ok_comp, completion = pcall(require, 'sqmeow.completion')
+  if ok_comp and completion and not M._completion_warm_hooked then
+    M._completion_warm_hooked = true
+    local orig_ensure = completion.ensure
+    completion.ensure = function(conn_id)
+      if orig_ensure then
+        orig_ensure(conn_id)
+      end
+      if not conn_id then
+        return
+      end
+      local dr = sqmeow 'ui.drawer'
+      if not dr or not dr.cached_nodes or not dr.load then
+        return
+      end
+      local schemas = dr.cached_nodes(conn_id, {})
+      for _, schema in ipairs(schemas or {}) do
+        if schema.kind == 'schema' then
+          local groups = dr.cached_nodes(conn_id, { schema.name })
+          if groups == nil then
+            dr.load(conn_id, { schema.name }, true)
+          else
+            for _, group in ipairs(groups) do
+              if group.kind == 'tables' or group.kind == 'views' or group.kind == 'keys' then
+                local path = { schema.name, group.key }
+                if dr.cached_nodes(conn_id, path) == nil then
+                  dr.load(conn_id, path, true)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 -------------------------------------------------------------------------------
@@ -837,17 +1012,12 @@ function M.fetch_connection_databases(conn_name, conn_url, callback)
 end
 
 function M.activate_connection(name, url, callback)
-  M.set_active_connection(name, url)
-  local cur_buf = vim.api.nvim_get_current_buf()
-  vim.b[cur_buf].db_name = name
-  vim.b[cur_buf].sqmeow_connection = name
+  local ed_win = _G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win()
+  local target_buf = (ed_win and vim.api.nvim_win_is_valid(ed_win)) and vim.api.nvim_win_get_buf(ed_win) or vim.api.nvim_get_current_buf()
+  M.set_active_connection(name, url, target_buf)
+
   pcall(function()
     require('sqmeow.ui.editor').update_winbar()
-  end)
-
-  -- Sync connection in sqmeow natively (supports clusters and single-db via PR #57)
-  pcall(function()
-    vim.cmd('Sqmeow use ' .. vim.fn.fnameescape(name))
   end)
 
   vim.notify('Active database: ' .. name, vim.log.levels.INFO, { title = 'Database' })
@@ -1121,7 +1291,7 @@ function M.open_query_scratchpad()
   end
 end
 
-function M.run_query()
+function M.run_query(full_buffer)
   local query_api = sqmeow 'api.query'
   if not query_api then
     vim.notify('sqmeow is not available', vim.log.levels.ERROR, { title = 'Database' })
@@ -1154,7 +1324,7 @@ function M.run_query()
     else
       M.select_connection(function(selected_url, selected_name)
         if selected_name then
-          M.run_query()
+          M.run_query(full_buffer)
         end
       end)
       return
@@ -1188,7 +1358,9 @@ function M.run_query()
   local mode = vim.api.nvim_get_mode().mode
   local is_visual = mode:match '[vV\x16]' ~= nil
 
-  if is_visual then
+  if full_buffer then
+    query_api.execute_buffer()
+  elseif is_visual then
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
     query_api.execute_selection()
   else
