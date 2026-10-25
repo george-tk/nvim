@@ -80,13 +80,11 @@ api.nvim_create_autocmd({ 'InsertLeave', 'CursorHold' }, {
   pattern = { '*.md', '*.markdown' },
   callback = function()
     if vim.bo.modified then
-      vim.cmd('noautocmd silent! write')
+      vim.cmd 'noautocmd silent! write'
     end
   end,
   desc = 'Autosave markdown files on CursorHold/InsertLeave',
 })
-
-
 
 -- Markdown specific foldexpr function
 function M.markdown_foldexpr()
@@ -142,10 +140,10 @@ api.nvim_create_autocmd('FileType', {
     opt_local.fillchars:append { eob = ' ' }
 
     -- Local options for Markdown note taking
-    opt_local.wrap = true          -- Wrap long lines of text
-    opt_local.linebreak = true     -- Break lines at word boundaries instead of mid-character
-    opt_local.conceallevel = 2     -- Conceal raw formatting syntax (for render-markdown.nvim)
-    opt_local.spell = true         -- Guarantee spellchecking is enabled for notes
+    opt_local.wrap = true -- Wrap long lines of text
+    opt_local.linebreak = true -- Break lines at word boundaries instead of mid-character
+    opt_local.conceallevel = 2 -- Conceal raw formatting syntax (for render-markdown.nvim)
+    opt_local.spell = true -- Guarantee spellchecking is enabled for notes
 
     -- Visual line navigation limited strictly to markdown files
     vim.keymap.set({ 'n', 'x' }, 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true, buffer = args.buf })
@@ -153,22 +151,9 @@ api.nvim_create_autocmd('FileType', {
 
     cmd 'normal! zM'
     cmd 'normal! zr'
+    pcall(cmd, 'normal! zv')
   end,
   desc = 'Setup Markdown folding and local options',
-})
-
-api.nvim_create_autocmd('BufReadPost', {
-  pattern = { '*.md', '*.markdown' },
-  group = augroups.user_markdown_folding,
-  callback = function(args)
-    vim.bo[args.buf].filetype = 'markdown'
-    vim.wo.foldmethod = 'expr'
-    vim.wo.foldexpr = "v:lua.require('auto-commands').markdown_foldexpr()"
-    opt_local.fillchars:append { eob = ' ' }
-    cmd 'normal! zM'
-    cmd 'normal! zr'
-  end,
-  desc = 'Force markdown folding for markdown extensions',
 })
 
 -- Function to choose fold level (can be called via :lua require('auto-commands').choose_fold_level(1))

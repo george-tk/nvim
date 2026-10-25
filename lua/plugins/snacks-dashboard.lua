@@ -2,7 +2,7 @@ local function has_real_buffers()
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(b) and vim.bo[b].buflisted and vim.bo[b].buftype == '' then
       local name = vim.api.nvim_buf_get_name(b)
-      if name ~= '' and not name:match('^%[') and not name:find('/sqmeow/') and not name:find('/db_ui/') then
+      if name ~= '' and not name:match '^%[' and not name:find '/sqmeow/' and not name:find '/db_ui/' then
         return true
       end
     end
@@ -21,11 +21,15 @@ local function open_project_clean(dir, target_file)
   if not dir and target_file then
     dir = Snacks.git.get_root(target_file) or vim.fs.dirname(target_file)
   end
-  if not dir then return end
+  if not dir then
+    return
+  end
 
   local ok_p, persistence = pcall(require, 'persistence')
   if ok_p and has_real_buffers() then
-    pcall(function() persistence.save() end)
+    pcall(function()
+      persistence.save()
+    end)
   end
 
   if Snacks and Snacks.bufdelete then
@@ -51,9 +55,9 @@ local function open_project_clean(dir, target_file)
       persistence.load()
       session_loaded = true
     else
-      local fallback_file = persistence.current({ branch = false })
+      local fallback_file = persistence.current { branch = false }
       if fallback_file and vim.fn.filereadable(fallback_file) == 1 then
-        persistence.load({ branch = false })
+        persistence.load { branch = false }
         session_loaded = true
       end
     end
@@ -62,7 +66,7 @@ local function open_project_clean(dir, target_file)
   if target_file then
     vim.cmd.edit(vim.fn.fnameescape(target_file))
   elseif not session_loaded then
-    Snacks.picker.files({ cwd = dir })
+    Snacks.picker.files { cwd = dir }
   end
 end
 
@@ -75,7 +79,9 @@ local function restore_last_clean()
   end
 
   local ok, p = pcall(require, 'persistence')
-  if not ok then return end
+  if not ok then
+    return
+  end
   local last = p.last()
   if not last or vim.fn.filereadable(last) == 0 then
     vim.notify('No previous session found to restore', vim.log.levels.WARN, { title = 'Session' })
@@ -92,7 +98,7 @@ local function restore_last_clean()
     end
   end
 
-  p.load({ last = true })
+  p.load { last = true }
 
   pcall(function()
     require('snacks.explorer.git').update(vim.fn.getcwd(), { untracked = true })
@@ -175,7 +181,7 @@ return {
             limit = 5,
             action = open_project_clean,
             filter = function(dir)
-              return dir and not dir:find('/sqmeow/') and not dir:find('/db_ui/') and not dir:find('nvim/assets')
+              return dir and not dir:find '/sqmeow/' and not dir:find '/db_ui/' and not dir:find 'nvim/assets'
             end,
           },
           {
@@ -184,16 +190,18 @@ return {
             indent = 2,
             padding = 2,
             function()
-              local gen = Snacks.dashboard.sections.recent_files({
+              local gen = Snacks.dashboard.sections.recent_files {
                 limit = 5,
                 filter = function(file)
-                  if not file then return false end
-                  if file:find('/sqmeow/') or file:find('/db_ui/') or file:match('%.sqlite%d?$') or file:match('%.db$') then
+                  if not file then
+                    return false
+                  end
+                  if file:find '/sqmeow/' or file:find '/db_ui/' or file:match '%.sqlite%d?$' or file:match '%.db$' then
                     return false
                   end
                   return true
                 end,
-              })
+              }
               local items = gen()
               for _, item in ipairs(items or {}) do
                 local target = item.file

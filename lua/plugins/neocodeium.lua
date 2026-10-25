@@ -39,8 +39,7 @@ return {
         local path = data.absolute_uri:gsub('^file://', '')
         local root = require('neocodeium.state').project_root or vim.fn.getcwd()
         if path == '' or path == '/' then
-          local ext = (data.editor_language and data.editor_language ~= '' and data.editor_language ~= 'unspecified')
-              and ('.' .. data.editor_language)
+          local ext = (data.editor_language and data.editor_language ~= '' and data.editor_language ~= 'unspecified') and ('.' .. data.editor_language)
             or '.sql'
           data.absolute_uri = 'file://' .. root .. '/__virtual_scratchpad' .. ext
           data.workspace_uri = 'file://' .. root

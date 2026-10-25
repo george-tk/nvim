@@ -310,11 +310,12 @@ function M.ensure_sqmeow_connection(db_name, non_blocking)
       local waited = 0
       while waited < 2000 do
         parent_conn = state and state.connection_by_name(parent_name)
-        if parent_conn and parent_conn.state == 'connected' then
+        if (parent_conn and parent_conn.state == 'connected') or (state and state.failures and state.failures[parent_name] ~= nil) then
           break
         end
         vim.wait(50, function()
-          return false
+          local cur = state and state.connection_by_name(parent_name)
+          return (cur and cur.state == 'connected') or (state and state.failures and state.failures[parent_name] ~= nil)
         end)
         waited = waited + 50
       end
@@ -376,8 +377,8 @@ function M.set_active_connection(name, url, target_buf)
     end
   end
 
-  -- Connect & use connection in sqmeow without duplicating
-  M.ensure_sqmeow_connection(name)
+  -- Connect & use connection in sqmeow without duplicating (non-blocking to keep UI responsive)
+  M.ensure_sqmeow_connection(name, true)
 
   local ok_lualine, lualine = pcall(require, 'lualine')
   if ok_lualine and lualine.refresh then
@@ -1537,7 +1538,7 @@ function M.select_saved_query()
       vim.b[buf].sqmeow_connection = target_db
       M.current_db_name = target_db
       M.current_db = M.get_connection_url(target_db)
-      M.ensure_sqmeow_connection(target_db)
+      M.ensure_sqmeow_connection(target_db, true)
     end
     if not vim.b[buf].sqmeow_table then
       local tbl = M.get_active_table(buf)

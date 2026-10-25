@@ -68,7 +68,7 @@ return {
         if name == '' then
           return true
         end
-        local ok, stat = pcall(vim.loop.fs_stat, name)
+        local ok, stat = pcall(vim.uv.fs_stat, name)
         return not ok or not stat or stat.size < 1024 * 1024
       end
 
@@ -89,7 +89,9 @@ return {
         group = vim.api.nvim_create_augroup('UserLspAttachAutocmd', { clear = true }),
         callback = function(event)
           local client = vim.lsp.get_client_by_id(event.data.client_id)
-          if not client then return end
+          if not client then
+            return
+          end
           local bufnr = event.buf
 
           -- Inlay hints: always automatically enabled
@@ -103,11 +105,19 @@ return {
             vim.keymap.set(mode, keys, func, { buffer = bufnr, desc = 'LSP: ' .. desc })
           end
 
-          map('gd', function() Snacks.picker.lsp_definitions() end, 'Goto Definition')
+          map('gd', function()
+            Snacks.picker.lsp_definitions()
+          end, 'Goto Definition')
           map('gD', vim.lsp.buf.declaration, 'Goto Declaration')
-          map('gr', function() Snacks.picker.lsp_references() end, 'Goto References')
-          map('gi', function() Snacks.picker.lsp_implementations() end, 'Goto Implementation')
-          map('gy', function() Snacks.picker.lsp_type_definitions() end, 'Type Definition')
+          map('gr', function()
+            Snacks.picker.lsp_references()
+          end, 'Goto References')
+          map('gi', function()
+            Snacks.picker.lsp_implementations()
+          end, 'Goto Implementation')
+          map('gy', function()
+            Snacks.picker.lsp_type_definitions()
+          end, 'Type Definition')
           map('K', vim.lsp.buf.hover, 'Hover Documentation')
           map('<C-k>', vim.lsp.buf.signature_help, 'Signature Help', 'i')
 
@@ -116,19 +126,31 @@ return {
           map('<leader>ca', vim.lsp.buf.code_action, 'Code Action', { 'n', 'v' })
           map('<M-.>', vim.lsp.buf.code_action, 'Code Action', { 'n', 'v' })
           map('<leader>cd', vim.diagnostic.open_float, 'Line Diagnostics')
-          map('<leader>cD', function() Snacks.picker.diagnostics() end, 'Workspace Diagnostics')
-          map('<leader>cR', function() Snacks.picker.lsp_references() end, 'References')
-          map('<leader>cs', function() Snacks.picker.lsp_symbols() end, 'Document Symbols')
-          map('<leader>ci', function() Snacks.picker.lsp_implementations() end, 'Implementations')
+          map('<leader>cD', function()
+            Snacks.picker.diagnostics()
+          end, 'Workspace Diagnostics')
+          map('<leader>cR', function()
+            Snacks.picker.lsp_references()
+          end, 'References')
+          map('<leader>cs', function()
+            Snacks.picker.lsp_symbols()
+          end, 'Document Symbols')
+          map('<leader>ci', function()
+            Snacks.picker.lsp_implementations()
+          end, 'Implementations')
           map('gl', vim.diagnostic.open_float, 'Line Diagnostics')
-          map('[d', vim.diagnostic.goto_prev, 'Previous Diagnostic')
-          map(']d', vim.diagnostic.goto_next, 'Next Diagnostic')
+          map('[d', function()
+            vim.diagnostic.jump { count = -1, float = true }
+          end, 'Previous Diagnostic')
+          map(']d', function()
+            vim.diagnostic.jump { count = 1, float = true }
+          end, 'Next Diagnostic')
           map('<leader>cf', function()
             local ok_c, conform = pcall(require, 'conform')
             if ok_c then
-              conform.format({ async = true, lsp_format = 'fallback' })
+              conform.format { async = true, lsp_format = 'fallback' }
             else
-              vim.lsp.buf.format({ async = true })
+              vim.lsp.buf.format { async = true }
             end
           end, 'Format Buffer')
 
@@ -162,11 +184,11 @@ return {
       -----------------------------------------------------------------------
       local servers = {
         marksman = {
-          root_dir = root_with({ '.marksman.toml', '.git' }, vim.loop.cwd()),
+          root_dir = root_with({ '.marksman.toml', '.git' }, vim.uv.cwd()),
         },
 
         lua_ls = {
-          root_dir = root_with({ '.luarc.json', '.luarc.jsonc', '.git' }, vim.loop.cwd()),
+          root_dir = root_with({ '.luarc.json', '.luarc.jsonc', '.git' }, vim.uv.cwd()),
           settings = {
             Lua = {
               completion = { callSnippet = 'Replace' },
@@ -184,7 +206,7 @@ return {
 
         -- Uncomment to enable TypeScript/JavaScript (tsserver via ts_ls)
         -- ts_ls = {
-        --   root_dir = root_with({ 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' }, vim.loop.cwd()),
+        --   root_dir = root_with({ 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' }, vim.uv.cwd()),
         --   single_file_support = false,
         --   settings = {
         --     completions = { completeFunctionCalls = true }, -- call-site param snippets
@@ -202,8 +224,8 @@ return {
       -----------------------------------------------------------------------
       local ensure = vim.tbl_keys(servers)
       vim.list_extend(ensure, {
-        'stylua',        -- Lua Formatter
-        'prettier',      -- Markdown, JSON, HTML, CSS Formatter
+        'stylua', -- Lua Formatter
+        'prettier', -- Markdown, JSON, HTML, CSS Formatter
         'sql-formatter', -- SQL Formatter
       })
 

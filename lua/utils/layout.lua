@@ -23,6 +23,8 @@ local BottomPanel = {
   qf_open = false,
 }
 
+local last_editor_win = nil
+
 -------------------------------------------------------------------------------
 -- Window Classification & Detection Helpers
 -------------------------------------------------------------------------------
@@ -119,15 +121,24 @@ local function get_editor_win()
   local cur = vim.api.nvim_get_current_win()
   local cfg = vim.api.nvim_win_get_config(cur)
   if (not cfg.relative or cfg.relative == '') and get_win_info(cur).is_editor then
+    last_editor_win = cur
     return cur
   end
 
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
+  if last_editor_win and vim.api.nvim_win_is_valid(last_editor_win) and vim.api.nvim_win_get_tabpage(last_editor_win) == vim.api.nvim_get_current_tabpage() then
+    local lcfg = vim.api.nvim_win_get_config(last_editor_win)
+    if (not lcfg.relative or lcfg.relative == '') and get_win_info(last_editor_win).is_editor then
+      return last_editor_win
+    end
+  end
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) then
       local wcfg = vim.api.nvim_win_get_config(win)
       if not wcfg.relative or wcfg.relative == '' then
         local info = get_win_info(win)
         if info.is_editor then
+          last_editor_win = win
           return win
         end
       end
@@ -1437,7 +1448,9 @@ local function is_database_or_transient_buf(buf)
     return true
   end
   local bname = vim.api.nvim_buf_get_name(buf)
-  if (bname:match '^%[Preview:' or vim.b[buf].is_preview_buffer) and vim.bo[buf].buftype == 'nofile' then
+  if
+    (bname:match '^%[Preview:' or bname:match '^%[Alter:' or bname:match '^%[Routine:' or vim.b[buf].is_preview_buffer) and vim.bo[buf].buftype == 'nofile'
+  then
     return true
   end
   if bname:find '/db_ui/' ~= nil then
@@ -1492,6 +1505,21 @@ end
 
 local function setup_autocmds()
   local layout_lock_group = vim.api.nvim_create_augroup('UserLayoutLock', { clear = true })
+
+  vim.api.nvim_create_autocmd({ 'WinEnter', 'BufWinEnter' }, {
+    group = layout_lock_group,
+    callback = function()
+      local win = vim.api.nvim_get_current_win()
+      if not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      local cfg = vim.api.nvim_win_get_config(win)
+      if (not cfg.relative or cfg.relative == '') and get_win_info(win).is_editor then
+        last_editor_win = win
+      end
+    end,
+    desc = 'Track last focused non-floating editor window for multi-split navigation',
+  })
 
   vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
     group = layout_lock_group,

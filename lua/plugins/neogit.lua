@@ -44,9 +44,9 @@ return {
       function()
         local ok, dv = pcall(require, 'diffview.lib')
         if ok and next(dv.views) ~= nil then
-          vim.cmd('DiffviewClose')
+          vim.cmd 'DiffviewClose'
         else
-          vim.cmd('DiffviewOpen')
+          vim.cmd 'DiffviewOpen'
         end
       end,
       desc = 'Diff (Toggle)',

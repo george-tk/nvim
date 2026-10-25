@@ -599,9 +599,9 @@ Mirroring `actions.yank_select`, updated `actions.preview()` in `lua/sqmeow/ui/d
 
 ---
 
-### Issue 13: Granular winbar toggles (editor vs result) & native statusline helper [OPEN - Issue #85]
+### Issue 13: Granular winbar toggles (editor vs result) & native statusline helper [OPEN - Issue #85 / PR #101]
 
-> **Status**: **OPEN** ([Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85)).
+> **Status**: **PR OPEN** ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85)).
 
 **Title**: `feat(ui): granular winbar toggles (editor vs result) & native statusline helper`
 
@@ -631,9 +631,9 @@ Mirroring `actions.yank_select`, updated `actions.preview()` in `lua/sqmeow/ui/d
 
 ---
 
-### Issue 14: Relational row drilldown / follow foreign keys in results (`gd` / `gr`) [OPEN - Issue #86]
+### Issue 14: Relational row drilldown / follow foreign keys in results (`gd` / `gr`) [OPEN - Issue #86 / PR #100]
 
-> **Status**: **OPEN** ([Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86)).
+> **Status**: **PR OPEN** ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86)).
 
 **Title**: `feat(result): navigate foreign key records and drill down into referenced rows (gd / gr)`
 
@@ -663,7 +663,9 @@ In DBeaver (`F4`) and DataGrip (`Ctrl+B`), users can navigate from a foreign key
 
 ---
 
-### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false`
+### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false` [OPEN - Issue #98]
+
+> **Status**: **OPEN** ([Issue #98](https://github.com/2giosangmitom/sqmeow.nvim/issues/98)).
 
 **Title**: `bug(result): non-row statements (UPDATE/DELETE/INSERT/DDL) render an empty buffer when ui.winbar = false`
 
@@ -685,7 +687,9 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 
 ---
 
-### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming
+### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [OPEN - Issue #99]
+
+> **Status**: **OPEN** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99)).
 
 **Title**: `feat(completion): support dialect-quoted identifiers in completion and warm table metadata on connect`
 

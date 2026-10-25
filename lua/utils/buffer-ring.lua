@@ -56,6 +56,9 @@ function M.is_qualifying(buf)
     notify = true,
     toggleterm = true,
     sqmeow = true,
+    ['sqmeow-drawer'] = true,
+    ['sqmeow-result'] = true,
+    ['sqmeow-output'] = true,
     dbout = true,
     dbui = true,
     gitcommit = true,
@@ -66,7 +69,7 @@ function M.is_qualifying(buf)
   end
 
   -- Pattern checks for Git and external tools
-  if filetype:match '^Neogit' or filetype:match '^Diffview' or filetype:match '^fugitive' then
+  if filetype:match '^Neogit' or filetype:match '^Diffview' or filetype:match '^fugitive' or filetype:match '^sqmeow' then
     return false
   end
 

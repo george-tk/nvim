@@ -6,22 +6,39 @@ return {
     -- Hook snacks.picker.actions.jump so opening files never fails on windows with 'winfixbuf'
     local function setup_picker_jump_protection()
       local ok_actions, actions = pcall(require, 'snacks.picker.actions')
-      if not ok_actions or not actions.jump or actions._winfixbuf_hooked then return end
+      if not ok_actions or not actions.jump or actions._winfixbuf_hooked then
+        return
+      end
       actions._winfixbuf_hooked = true
 
       local orig_jump = actions.jump
       actions.jump = function(picker, item, action)
         local function is_editor_win(w)
-          if not w or not vim.api.nvim_win_is_valid(w) then return false end
-          if vim.api.nvim_win_get_tabpage(w) ~= vim.api.nvim_get_current_tabpage() then return false end
-          if vim.api.nvim_win_get_config(w).relative ~= '' then return false end
+          if not w or not vim.api.nvim_win_is_valid(w) then
+            return false
+          end
+          if vim.api.nvim_win_get_tabpage(w) ~= vim.api.nvim_get_current_tabpage() then
+            return false
+          end
+          if vim.api.nvim_win_get_config(w).relative ~= '' then
+            return false
+          end
           local b = vim.api.nvim_win_get_buf(w)
           local ft = vim.bo[b].filetype
           local bname = vim.api.nvim_buf_get_name(b):lower()
-          if ft:match('^sqmeow%-') or ft == 'sqmeow' or ft == 'dbui' or ft == 'dbout'
-             or ft:match('opencode') or bname:find('opencode')
-             or ft:match('terminal') or bname:find('term://')
-             or ft:match('^snacks_') or ft == 'neo-tree' or ft == 'qf' then
+          if
+            ft:match '^sqmeow%-'
+            or ft == 'sqmeow'
+            or ft == 'dbui'
+            or ft == 'dbout'
+            or ft:match 'opencode'
+            or bname:find 'opencode'
+            or ft:match 'terminal'
+            or bname:find 'term://'
+            or ft:match '^snacks_'
+            or ft == 'neo-tree'
+            or ft == 'qf'
+          then
             return false
           end
           return true
@@ -32,7 +49,7 @@ return {
 
         if not main_win or not vim.api.nvim_win_is_valid(main_win) then
           needs_redirect = true
-        elseif not is_editor_win(main_win) or (vim.fn.exists('&winfixbuf') == 1 and vim.wo[main_win].winfixbuf) then
+        elseif not is_editor_win(main_win) or (vim.fn.exists '&winfixbuf' == 1 and vim.wo[main_win].winfixbuf) then
           needs_redirect = true
         end
 
@@ -47,7 +64,7 @@ return {
           if not target_win then
             for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
               if vim.api.nvim_win_get_config(w).relative == '' then
-                if vim.fn.exists('&winfixbuf') == 0 or not vim.wo[w].winfixbuf then
+                if vim.fn.exists '&winfixbuf' == 0 or not vim.wo[w].winfixbuf then
                   target_win = w
                   break
                 end
@@ -55,18 +72,18 @@ return {
             end
           end
           if not target_win then
-            vim.cmd('botright vnew')
+            vim.cmd 'botright vnew'
             target_win = vim.api.nvim_get_current_win()
           end
 
           if target_win and vim.api.nvim_win_is_valid(target_win) then
-            if vim.fn.exists('&winfixbuf') == 1 then
+            if vim.fn.exists '&winfixbuf' == 1 then
               vim.wo[target_win].winfixbuf = false
             end
             picker.main = target_win
           end
         else
-          if vim.fn.exists('&winfixbuf') == 1 and vim.wo[main_win].winfixbuf then
+          if vim.fn.exists '&winfixbuf' == 1 and vim.wo[main_win].winfixbuf then
             vim.wo[main_win].winfixbuf = false
           end
         end
@@ -85,18 +102,55 @@ return {
           keys = {
             ['<Tab>'] = { 'list_down', mode = { 'i', 'n' } },
             ['<S-Tab>'] = { 'list_up', mode = { 'i', 'n' } },
-            ['<C-j>'] = { function() vim.cmd('stopinsert'); _G.BottomPanel.toggle_active() end, mode = { 'i', 'n' }, desc = 'Bottom Output' },
-            ['<M-h>'] = { function() _G.smart_resize_width(-3) end, mode = { 'i', 'n' }, desc = 'Expand Explorer' },
-            ['<M-l>'] = { function() _G.smart_resize_width(3) end, mode = { 'i', 'n' }, desc = 'Shrink Explorer' },
+            ['<C-j>'] = {
+              function()
+                vim.cmd 'stopinsert'
+                _G.BottomPanel.toggle_active()
+              end,
+              mode = { 'i', 'n' },
+              desc = 'Bottom Output',
+            },
+            ['<M-h>'] = {
+              function()
+                _G.smart_resize_width(-3)
+              end,
+              mode = { 'i', 'n' },
+              desc = 'Expand Explorer',
+            },
+            ['<M-l>'] = {
+              function()
+                _G.smart_resize_width(3)
+              end,
+              mode = { 'i', 'n' },
+              desc = 'Shrink Explorer',
+            },
           },
         },
         list = {
           keys = {
             ['<Tab>'] = { 'list_down', mode = { 'n', 'x' } },
             ['<S-Tab>'] = { 'list_up', mode = { 'n', 'x' } },
-            ['<C-j>'] = { function() _G.BottomPanel.toggle_active() end, mode = { 'n' }, desc = 'Bottom Output' },
-            ['<M-h>'] = { function() _G.smart_resize_width(-3) end, mode = { 'n' }, desc = 'Expand Explorer' },
-            ['<M-l>'] = { function() _G.smart_resize_width(3) end, mode = { 'n' }, desc = 'Shrink Explorer' },
+            ['<C-j>'] = {
+              function()
+                _G.BottomPanel.toggle_active()
+              end,
+              mode = { 'n' },
+              desc = 'Bottom Output',
+            },
+            ['<M-h>'] = {
+              function()
+                _G.smart_resize_width(-3)
+              end,
+              mode = { 'n' },
+              desc = 'Expand Explorer',
+            },
+            ['<M-l>'] = {
+              function()
+                _G.smart_resize_width(3)
+              end,
+              mode = { 'n' },
+              desc = 'Shrink Explorer',
+            },
           },
         },
       },

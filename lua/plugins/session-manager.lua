@@ -6,7 +6,7 @@ return {
     branch = true,
   },
   config = function(_, opts)
-    local persistence = require('persistence')
+    local persistence = require 'persistence'
     persistence.setup(opts)
 
     local function is_real_file_buf(b)
@@ -14,7 +14,7 @@ return {
         return false
       end
       local name = vim.api.nvim_buf_get_name(b)
-      if name == '' or name:match('^%[') or name:find('/db_ui/') or name:match('%.sqlite%d?$') or name:match('%.db$') then
+      if name == '' or name:match '^%[' or name:find '/db_ui/' or name:match '%.sqlite%d?$' or name:match '%.db$' then
         return false
       end
       return true
@@ -34,9 +34,14 @@ return {
         if vim.api.nvim_buf_is_valid(b) then
           local ft = vim.bo[b].filetype
           local name = vim.api.nvim_buf_get_name(b)
-          if ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'dbui' or ft == 'dbout'
+          if
+            ft == 'sqmeow-drawer'
+            or ft == 'sqmeow-result'
+            or ft == 'sqmeow-output'
+            or ft == 'dbui'
+            or ft == 'dbout'
             or (vim.b[b].is_preview_buffer and vim.bo[b].buftype == 'nofile')
-            or (name:match('^%[Preview:') and vim.bo[b].buftype == 'nofile')
+            or ((name:match '^%[Preview:' or name:match '^%[Alter:' or name:match '^%[Routine:') and vim.bo[b].buftype == 'nofile')
           then
             pcall(vim.api.nvim_buf_delete, b, { force = true })
           end
@@ -46,17 +51,25 @@ return {
 
     local function safe_save()
       if has_real_bufs() then
-        pcall(function() persistence.save() end)
+        pcall(function()
+          persistence.save()
+        end)
       end
     end
 
     local save_timer = vim.uv.new_timer()
     local function debounced_save(delay_ms)
-      if not save_timer then return end
+      if not save_timer then
+        return
+      end
       save_timer:stop()
-      save_timer:start(delay_ms or 1000, 0, vim.schedule_wrap(function()
-        safe_save()
-      end))
+      save_timer:start(
+        delay_ms or 1000,
+        0,
+        vim.schedule_wrap(function()
+          safe_save()
+        end)
+      )
     end
 
     local group = vim.api.nvim_create_augroup('UserPersistenceAutoSave', { clear = true })
@@ -114,7 +127,8 @@ return {
       pattern = 'PersistenceLoadPost',
       callback = function()
         for _, b in ipairs(vim.api.nvim_list_bufs()) do
-          if vim.api.nvim_buf_is_valid(b)
+          if
+            vim.api.nvim_buf_is_valid(b)
             and vim.bo[b].buflisted
             and vim.api.nvim_buf_get_name(b) == ''
             and not vim.bo[b].modified
@@ -134,7 +148,9 @@ return {
               ring.on_buf_enter(b)
             end
           end
-          pcall(function() require('lualine').refresh() end)
+          pcall(function()
+            require('lualine').refresh()
+          end)
         end
       end,
       desc = 'Clean placeholder buffers and seed buffer ring after session load',

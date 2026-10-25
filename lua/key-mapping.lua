@@ -102,9 +102,23 @@ local function smart_close()
   local cur_buf = vim.api.nvim_win_get_buf(cur_win)
   local info = layout.get_win_info(cur_win)
 
-  -- 0. If inside any floating window: close cleanly
+  -- 0. If inside any floating window: close cleanly (and unmount sqmeow popup state if floating SQL results)
   local cfg = vim.api.nvim_win_get_config(cur_win)
   if cfg.relative and cfg.relative ~= '' then
+    local ft = vim.bo[cur_buf].filetype
+    local bname = vim.api.nvim_buf_get_name(cur_buf)
+    if (ft == 'dbout' or ft == 'sqmeow-result' or bname:find 'sqmeow://result' ~= nil) and ft ~= 'sqmeow-drawer' then
+      if layout.BottomPanel and layout.BottomPanel.close_dbout then
+        layout.BottomPanel.close_dbout(true)
+      else
+        pcall(vim.api.nvim_win_close, cur_win, true)
+      end
+      local ed = layout.get_editor_win and layout.get_editor_win()
+      if ed and vim.api.nvim_win_is_valid(ed) then
+        vim.api.nvim_set_current_win(ed)
+      end
+      return
+    end
     pcall(vim.api.nvim_win_close, cur_win, true)
     return
   end

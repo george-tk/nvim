@@ -31,7 +31,7 @@ function M.search_and_insert_image()
   local win = vim.api.nvim_get_current_win()
   local cursor_pos = vim.api.nvim_win_get_cursor(win)
 
-  Snacks.picker({
+  Snacks.picker {
     title = 'Search & Insert Image',
     finder = function()
       return get_image_files()
@@ -56,7 +56,7 @@ function M.search_and_insert_image()
 
       if not rel_path then
         rel_path = item.file
-      elseif not rel_path:find('^%.') and not rel_path:find('^/') then
+      elseif not rel_path:find '^%.' and not rel_path:find '^/' then
         rel_path = './' .. rel_path
       end
 
@@ -66,7 +66,7 @@ function M.search_and_insert_image()
       -- Insert markdown link at cursor position
       local cur_line = vim.api.nvim_buf_get_lines(target_buf, cursor_pos[1] - 1, cursor_pos[1], false)[1] or ''
       local new_line
-      if cur_line:match('^%s*$') then
+      if cur_line:match '^%s*$' then
         new_line = md_link
       else
         local col = cursor_pos[2]
@@ -76,7 +76,7 @@ function M.search_and_insert_image()
       vim.api.nvim_buf_set_lines(target_buf, cursor_pos[1] - 1, cursor_pos[1], false, { new_line })
       vim.notify('Inserted image link: ' .. rel_path, vim.log.levels.INFO, { title = 'Snacks Image' })
     end,
-  })
+  }
 end
 
 _G.SnacksImageUtils = M

@@ -7,9 +7,9 @@ return {
   },
   config = function()
     -- Automatically locate opencode executable in PATH or ~/.opencode/bin
-    local binary = vim.fn.exepath('opencode')
+    local binary = vim.fn.exepath 'opencode'
     if binary == '' then
-      local opencode_path = vim.fn.expand('~/.opencode/bin/opencode')
+      local opencode_path = vim.fn.expand '~/.opencode/bin/opencode'
       if (vim.uv or vim.loop).fs_stat(opencode_path) then
         binary = opencode_path
       else
@@ -53,7 +53,7 @@ return {
     end, { desc = 'AI Explorer' })
 
     vim.keymap.set({ 'n', 'x' }, '<leader>ai', function()
-      require('opencode').ask('@this: ')
+      require('opencode').ask '@this: '
     end, { desc = 'Ask AI' })
 
     vim.keymap.set({ 'n', 'x' }, '<leader>as', function()
@@ -61,31 +61,31 @@ return {
     end, { desc = 'AI Prompts' })
 
     vim.keymap.set({ 'n' }, '<leader>an', function()
-      require('opencode').command('session.new')
+      require('opencode').command 'session.new'
     end, { desc = 'New AI Session' })
 
     vim.keymap.set({ 'n' }, '<leader>ac', function()
-      require('opencode').command('session.compact')
+      require('opencode').command 'session.compact'
     end, { desc = 'Compact AI Session' })
 
     vim.keymap.set({ 'n' }, '<leader>ax', function()
-      require('opencode').command('session.interrupt')
+      require('opencode').command 'session.interrupt'
     end, { desc = 'Stop AI Generation' })
 
     vim.keymap.set({ 'n', 'x' }, 'go', function()
-      return require('opencode').operator('@this ')
+      return require('opencode').operator '@this '
     end, { desc = 'Append Range to AI', expr = true })
 
     vim.keymap.set({ 'n' }, 'goo', function()
-      return require('opencode').operator('@this ') .. '_'
+      return require('opencode').operator '@this ' .. '_'
     end, { desc = 'Append Line to AI', expr = true })
 
     vim.keymap.set({ 'n' }, '<S-C-u>', function()
-      require('opencode').command('session.half.page.up')
+      require('opencode').command 'session.half.page.up'
     end, { desc = 'Scroll AI Up' })
 
     vim.keymap.set({ 'n' }, '<S-C-d>', function()
-      require('opencode').command('session.half.page.down')
+      require('opencode').command 'session.half.page.down'
     end, { desc = 'Scroll AI Down' })
 
     -- Toggle OpenCode terminal via Snacks.terminal (<C-.>)
