@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `7a6d1fd` (`fix(ui): prevent replacing drawer and result buffers (#97)`, Wed Oct 21 2026, `v3.1.0`)
+- **Baseline Commit Pinned**: `1386ce1` (`build(deps): bump rstest from 0.27.0 to 0.28.0 (#102)`, Tue Oct 27 2026, includes PR #100 `b32057e` & PR #101 `f997b4b`)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 7a6d1fd..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 1386ce1..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 7a6d1fd..origin/master -- lua/sqmeow/api.lua lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 1386ce1..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -54,6 +54,8 @@ flowchart TD
         X["v3.1: Full Multiline Values in Row Details Popup (K) (PR #82 / e12c15d)"]
         Y["v3.1: Edit Table Schemas & Routine Definitions (e / K) (PR #84 / c6592fc)"]
         Z["v3.1: History Query Preview & Reopen (p / P) (PR #80 / b657e5f)"]
+        AA["v3.2: Granular Winbar Options & Statusline API (PR #101 / Issue #85 / f997b4b)"]
+        AB["v3.2: Foreign Key Row Drilldown (gd / gr) (PR #100 / Issue #86 / b32057e)"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -97,6 +99,8 @@ flowchart TD
 | **23. Native Window Buffer Locking (`winfixbuf`) on Drawer & Result** | Upstream native `sqmeow.ui.layout.fixbuf` & `set_buffer` | Jumping or running `:edit` from the drawer or result grid replaced the plugin's buffer in place. | **RESOLVED & MERGED UPSTREAM ([PR #97](https://github.com/2giosangmitom/sqmeow.nvim/pull/97), Commit `7a6d1fd`)**. Upstream natively locks drawer and result windows with `winfixbuf = true` and lifts/restores the lock around internal buffer swaps. Redundant manual `winfixbuf` / `winfixheight` loop removed from `lua/plugins/database.lua`. |
 | **24. Sticky Header Alignment & Window Leak Fix** | Upstream native `sqmeow.ui.result` | Sticky header previously copied lines/extmarks into a separate buffer and could misalign with gutter columns or leak windows if Neovim refused float creation. | **RESOLVED & MERGED UPSTREAM ([PR #94](https://github.com/2giosangmitom/sqmeow.nvim/pull/94) & [PR #96](https://github.com/2giosangmitom/sqmeow.nvim/pull/96), Commits `67c8544`, `3d8cf20`)**. Sticky header now views line 1 of the result buffer directly with matching gutter/sign options. |
 | **25. Named Scratch Buffer Reuse & Winbar Suppression** | Upstream `sqmeow.ui.buffer.scratch` & `opts.ui.winbar = false` | Restoring sessions or reopening named `sqmeow://` buffers could collide; result/editor winbars duplicated global lualine context. | **RESOLVED UPSTREAM ([Issue #88](https://github.com/2giosangmitom/sqmeow.nvim/issues/88), Commit `14a864f`) & CONFIGURED LOCALLY**. Set `opts.ui.winbar = false` in `lua/plugins/database.lua`, retiring all custom `editor.update_winbar` and `result.update_winbar` hooks from `lua/utils/database.lua`. |
+| **26. Granular Winbar Toggles & Statusline API (`api.view.status` / `api.view.column`)** | Upstream `sqmeow.api.view.status()` & `sqmeow.api.view.column()` (`lua/plugins/lualine.lua`) | `ui.winbar` was previously boolean-only, and statusline integrations had to inspect `sqmeow.core.state` and `sqmeow.ui.result` internals manually. | **RESOLVED & MERGED UPSTREAM ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85), Commit `f997b4b`)**. `lua/plugins/lualine.lua` now consumes `require('sqmeow.api.view').column()` and `require('sqmeow.api.view').status(target_buf)` directly; manual rule-line column parsing and state telemetry inspection retired. |
+| **27. Foreign Key Row Drilldown (`gd` / `gr` in Result Grid & Row Details)** | Upstream native `result.actions.goto_definition` (`gd`) & `goto_references` (`gr`) | Navigating from a foreign-key cell to its referenced parent row or child rows previously required writing manual `SELECT ... WHERE` queries. | **RESOLVED & MERGED UPSTREAM ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86), Commit `b32057e`)**. Upstream natively binds `gd` and `gr` in both the result grid and the `K` row-details popup, backed by engine-level predicate construction (`call:follow`). |
 
 
 
@@ -599,9 +603,9 @@ Mirroring `actions.yank_select`, updated `actions.preview()` in `lua/sqmeow/ui/d
 
 ---
 
-### Issue 13: Granular winbar toggles (editor vs result) & native statusline helper [OPEN - Issue #85 / PR #101]
+### Issue 13: Granular winbar toggles (editor vs result) & native statusline helper [RESOLVED UPSTREAM - Issue #85 / PR #101]
 
-> **Status**: **PR OPEN** ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85)).
+> **Status**: **RESOLVED & MERGED UPSTREAM** ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85), Commit `f997b4b`).
 
 **Title**: `feat(ui): granular winbar toggles (editor vs result) & native statusline helper`
 
@@ -631,9 +635,9 @@ Mirroring `actions.yank_select`, updated `actions.preview()` in `lua/sqmeow/ui/d
 
 ---
 
-### Issue 14: Relational row drilldown / follow foreign keys in results (`gd` / `gr`) [OPEN - Issue #86 / PR #100]
+### Issue 14: Relational row drilldown / follow foreign keys in results (`gd` / `gr`) [RESOLVED UPSTREAM - Issue #86 / PR #100]
 
-> **Status**: **PR OPEN** ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86)).
+> **Status**: **RESOLVED & MERGED UPSTREAM** ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86), Commit `b32057e`).
 
 **Title**: `feat(result): navigate foreign key records and drill down into referenced rows (gd / gr)`
 
@@ -665,7 +669,7 @@ In DBeaver (`F4`) and DataGrip (`Ctrl+B`), users can navigate from a foreign key
 
 ### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false` [OPEN - Issue #98]
 
-> **Status**: **OPEN** ([Issue #98](https://github.com/2giosangmitom/sqmeow.nvim/issues/98)).
+> **Status**: **OPEN (PR Requested by Maintainer)** ([Issue #98](https://github.com/2giosangmitom/sqmeow.nvim/issues/98)).
 
 **Title**: `bug(result): non-row statements (UPDATE/DELETE/INSERT/DDL) render an empty buffer when ui.winbar = false`
 
@@ -689,7 +693,7 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 
 ### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [OPEN - Issue #99]
 
-> **Status**: **OPEN** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99)).
+> **Status**: **OPEN (PR Requested by Maintainer)** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99)).
 
 **Title**: `feat(completion): support dialect-quoted identifiers in completion and warm table metadata on connect`
 
