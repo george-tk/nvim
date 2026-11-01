@@ -86,10 +86,6 @@ return {
           end
 
           local db_url, db_name = db.get_active_db(buf)
-          if not db_name and db.current_db_name then
-            db_name = db.current_db_name
-            db_url = db.current_db
-          end
 
           if db_name then
             vim.b[buf].db_name = db_name

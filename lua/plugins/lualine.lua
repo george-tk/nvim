@@ -1,3 +1,7 @@
+-- Toggle to show or hide the left-most mode pill (NORMAL / INSERT / VISUAL / etc.).
+-- Set to `true` to bring the mode pill back; mode colors are always shown on the active tab pill either way.
+local SHOW_MODE_SEGMENT = false
+
 return {
   'nvim-lualine/lualine.nvim',
   event = 'BufWinEnter', -- or 'VeryLazy' if you prefer even later
@@ -12,15 +16,40 @@ return {
       local ok, ctp = pcall(require, 'catppuccin.palettes')
       local C = ok and ctp.get_palette 'mocha' or {}
       local blue = C.blue or '#89b4fa'
+      local green = C.green or '#a6e3a1'
+      local peach = C.peach or '#fab387'
+      local mauve = C.mauve or '#cba6f7'
+      local red = C.red or '#f38ba9'
       local base = C.base or '#1e1e2e'
       local text = C.text or '#cdd6f4'
+      local pill_bg = C.surface0 or '#313244'
+      local sep_fg = C.surface2 or '#585b70'
 
-      vim.api.nvim_set_hl(0, 'BufferRingActive', { bg = blue, fg = base, bold = true, default = true })
-      vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = 'NONE', fg = text, default = true })
-      vim.api.nvim_set_hl(0, 'TerminalTrackerActive', { bg = blue, fg = base, bold = true, default = true })
-      vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = 'NONE', fg = text, default = true })
-      local green = C.green or '#a6e3a1'
-      vim.api.nvim_set_hl(0, 'TerminalTrackerRunning', { bg = 'NONE', fg = green, bold = true, default = true })
+      vim.api.nvim_set_hl(0, 'StatusLine', { bg = 'NONE' })
+      vim.api.nvim_set_hl(0, 'StatusLineNC', { bg = 'NONE' })
+      vim.api.nvim_set_hl(0, 'BufferRingActive', { bg = blue, fg = base, bold = true })
+      vim.api.nvim_set_hl(0, 'BufferRingInactive', { bg = pill_bg, fg = text })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerActive', { bg = blue, fg = base, bold = true })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerInactive', { bg = pill_bg, fg = text })
+      vim.api.nvim_set_hl(0, 'TerminalTrackerRunning', { bg = pill_bg, fg = green, bold = true })
+      vim.api.nvim_set_hl(0, 'LualinePillCap', { bg = 'NONE', fg = pill_bg })
+      vim.api.nvim_set_hl(0, 'LualinePillSep', { bg = pill_bg, fg = sep_fg })
+
+      local mode_colors = {
+        normal = blue,
+        insert = green,
+        terminal = green,
+        command = peach,
+        visual = mauve,
+        replace = red,
+      }
+      for mode, accent in pairs(mode_colors) do
+        vim.api.nvim_set_hl(0, 'LualinePillCapActive_' .. mode, { bg = 'NONE', fg = accent })
+      end
+      vim.api.nvim_set_hl(0, 'LualinePillBody', { bg = pill_bg, fg = text })
+      vim.api.nvim_set_hl(0, 'LualinePillSubtext', { bg = pill_bg, fg = C.subtext1 or '#bac2de' })
+      vim.api.nvim_set_hl(0, 'LualinePillRunning', { bg = pill_bg, fg = green, bold = true })
+      vim.api.nvim_set_hl(0, 'LualinePillMacro', { bg = pill_bg, fg = red, bold = true })
     end
 
     setup_dock_highlights()
@@ -155,8 +184,9 @@ return {
     local ok_ctp, ctp = pcall(require, 'catppuccin.palettes')
     local C = ok_ctp and ctp.get_palette 'mocha' or {}
     local red = C.red or '#f38ba9'
+    local pill_bg = C.surface0 or '#313244'
 
-    -- Transparent statusline theme: mode-colored active blocks with black text, normal text color elsewhere
+    -- Pill statusline theme: mode-colored active pill with dark text, surface0 pill background for segments, transparent canvas
     local function get_theme()
       if not ok_ctp then
         return 'auto'
@@ -164,10 +194,10 @@ return {
       local function make_mode(accent)
         return {
           a = { bg = accent, fg = C.base, gui = 'bold' },
-          b = { bg = 'NONE', fg = C.text },
+          b = { bg = pill_bg, fg = C.text },
           c = { bg = 'NONE', fg = C.text },
           x = { bg = 'NONE', fg = C.text },
-          y = { bg = 'NONE', fg = C.text },
+          y = { bg = pill_bg, fg = C.text },
           z = { bg = 'NONE', fg = C.text },
         }
       end
@@ -179,14 +209,22 @@ return {
         visual = make_mode(C.mauve),
         replace = make_mode(C.red),
         inactive = {
-          a = { bg = 'NONE', fg = C.surface1, gui = 'bold' },
-          b = { bg = 'NONE', fg = C.surface1 },
+          a = { bg = pill_bg, fg = C.surface1, gui = 'bold' },
+          b = { bg = pill_bg, fg = C.surface1 },
           c = { bg = 'NONE', fg = C.surface1 },
           x = { bg = 'NONE', fg = C.surface1 },
           y = { bg = 'NONE', fg = C.surface1 },
           z = { bg = 'NONE', fg = C.surface1 },
         },
       }
+    end
+
+    local pill_sep = { left = '', right = '' }
+    local function make_pill(text, body_hl)
+      if not text or text == '' then
+        return ''
+      end
+      return string.format('%%#LualinePillCap#%%*%%#%s# %s %%*%%#LualinePillCap#%%*', body_hl or 'LualinePillBody', text)
     end
 
     return {
@@ -212,45 +250,60 @@ return {
           {
             'mode',
             fmt = center_mode,
+            separator = pill_sep,
             padding = { left = 0, right = 0 },
+            cond = function()
+              return SHOW_MODE_SEGMENT
+            end,
           },
         },
-        lualine_b = {
+        lualine_b = {},
+        lualine_c = {
           {
-            get_workspace_branch,
-            icon = '󰊢',
+            function()
+              local branch = get_workspace_branch()
+              if branch == '' then
+                return ''
+              end
+              local pill = make_pill('󰊢 ' .. branch, 'LualinePillBody')
+              return SHOW_MODE_SEGMENT and (' ' .. pill) or pill
+            end,
+            padding = { left = 0, right = 0 },
             cond = function()
               return get_workspace_branch() ~= ''
             end,
           },
-        },
-        lualine_c = {
           {
             function()
               local zone = get_focused_zone()
+              local pill = ''
               if zone == 'bottom' then
-                return require('utils.terminal-tracker').lualine_component()
+                pill = require('utils.terminal-tracker').lualine_component()
               elseif zone == 'right' then
                 local ok_layout, layout = pcall(require, 'utils.layout')
                 if ok_layout and layout.RightPanel and layout.RightPanel.lualine_component then
-                  return layout.RightPanel.lualine_component()
+                  pill = layout.RightPanel.lualine_component()
                 end
+              else
+                pill = require('utils.buffer-ring').lualine_component()
               end
-              return require('utils.buffer-ring').lualine_component()
+              if pill == '' then
+                return ''
+              end
+              local has_prev = SHOW_MODE_SEGMENT or get_workspace_branch() ~= ''
+              return has_prev and (' ' .. pill) or pill
             end,
             padding = { left = 0, right = 0 },
           },
         },
 
-        -- Right-side sections: Active column (in SQL result grid) / Active macro / database + telemetry / filetype
+        -- Right-side sections: Active column (in SQL result grid) / Running background icons / Active macro / database + telemetry / filetype
         lualine_x = {
           {
             function()
               local ok_view, view = pcall(require, 'sqmeow.api.view')
-              if ok_view and view and view.column then
-                return view.column()
-              end
-              return ''
+              local col = (ok_view and view and view.column) and view.column() or ''
+              return make_pill(col, 'LualinePillSubtext')
             end,
             cond = function()
               if vim.fn.reg_recording() ~= '' then
@@ -264,19 +317,29 @@ return {
               local name = vim.api.nvim_buf_get_name(fb)
               return ft == 'sqmeow-result' or ft == 'dbout' or name:find 'sqmeow://result' ~= nil
             end,
-            color = { fg = C.subtext1 or '#bac2de' },
+            padding = { left = 0, right = 1 },
           },
-        },
-        lualine_y = {
+          {
+            function()
+              return make_pill(require('utils.terminal-tracker').running_icons(), 'LualinePillRunning')
+            end,
+            cond = function()
+              if vim.fn.reg_recording() ~= '' then
+                return false
+              end
+              return require('utils.terminal-tracker').running_icons() ~= ''
+            end,
+            padding = { left = 0, right = 1 },
+          },
           -- Active macro recording indicator (takes priority over database & filetype)
           {
             function()
-              return '● @' .. vim.fn.reg_recording()
+              return make_pill('● @' .. vim.fn.reg_recording(), 'LualinePillMacro')
             end,
             cond = function()
               return vim.fn.reg_recording() ~= ''
             end,
-            color = { fg = red, gui = 'bold' },
+            padding = { left = 0, right = 0 },
           },
           {
             function()
@@ -319,7 +382,7 @@ return {
                   end
                 end
 
-                local db_name = (info and info.connection) or vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
+                local db_name = in_grid and (info and info.connection) or vim.b[cur_buf].sqmeow_connection or vim.b[cur_buf].db_name
                 local is_ro = (info and info.read_only) or false
 
                 if not db_name or db_name == '' then
@@ -328,7 +391,7 @@ return {
                     db_name = dname
                   end
                 end
-                if not db_name or db_name == '' then
+                if in_grid and (not db_name or db_name == '') then
                   if db_utils and db_utils.current_db_name then
                     db_name = db_utils.current_db_name
                   end
@@ -395,11 +458,11 @@ return {
                 if is_ro then
                   display = display .. ' 󰌾'
                 end
-                return display .. telemetry
+                return make_pill(display .. telemetry, 'LualinePillBody')
               end
 
               if not ft or ft == '' then
-                return '󰈔 none'
+                return make_pill('󰈔 none', 'LualinePillBody')
               end
               local ok_devicons, devicons = pcall(require, 'nvim-web-devicons')
               local icon = '󰈔'
@@ -409,13 +472,15 @@ return {
                   icon = i
                 end
               end
-              return icon .. ' ' .. ft
+              return make_pill(icon .. ' ' .. ft, 'LualinePillBody')
             end,
             cond = function()
               return vim.fn.reg_recording() == ''
             end,
+            padding = { left = 0, right = 0 },
           },
         },
+        lualine_y = {},
         lualine_z = {},
       },
 

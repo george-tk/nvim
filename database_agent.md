@@ -667,9 +667,9 @@ In DBeaver (`F4`) and DataGrip (`Ctrl+B`), users can navigate from a foreign key
 
 ---
 
-### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false` [OPEN - Issue #98]
+### Issue 16: Non-grid statements (`UPDATE`, `DELETE`, `INSERT`, `DDL`) leave the result buffer completely blank when `ui.winbar = false` [PR SUBMITTED - Issue #98 / PR #105]
 
-> **Status**: **OPEN (PR Requested by Maintainer)** ([Issue #98](https://github.com/2giosangmitom/sqmeow.nvim/issues/98)).
+> **Status**: **PR SUBMITTED** ([Issue #98](https://github.com/2giosangmitom/sqmeow.nvim/issues/98), [PR #105](https://github.com/2giosangmitom/sqmeow.nvim/pull/105)).
 
 **Title**: `bug(result): non-row statements (UPDATE/DELETE/INSERT/DDL) render an empty buffer when ui.winbar = false`
 
@@ -691,9 +691,9 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 
 ---
 
-### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [OPEN - Issue #99]
+### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [PR SUBMITTED - Issue #99 / PR #106]
 
-> **Status**: **OPEN (PR Requested by Maintainer)** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99)).
+> **Status**: **PR SUBMITTED** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99), [PR #106](https://github.com/2giosangmitom/sqmeow.nvim/pull/106)).
 
 **Title**: `feat(completion): support dialect-quoted identifiers in completion and warm table metadata on connect`
 

@@ -314,7 +314,7 @@ function M.get_terminals()
       if t and t:buf_valid() and vim.api.nvim_buf_is_valid(t.buf) then
         local bname = vim.api.nvim_buf_get_name(t.buf):lower()
         local cmd_str = tostring(t.cmd or ''):lower()
-        local is_opencode = cmd_str:find 'opencode' ~= nil or bname:find 'opencode' ~= nil
+        local is_opencode = vim.b[t.buf].panel_type == 'opencode' or cmd_str:find 'opencode' ~= nil or bname:find ':%S*opencode' ~= nil
         local is_dbout = bname:find '/sqmeow/' or bname:find '/db_ui/'
         if not is_opencode and not is_dbout then
           local st = vim.b[t.buf].snacks_terminal
@@ -345,7 +345,10 @@ function M.get_terminals()
       local bname = vim.api.nvim_buf_get_name(buf):lower()
       local is_term = (bt == 'terminal' or ft == 'snacks_terminal' or ft == 'terminal' or bname:find '^term://' ~= nil)
       local st = vim.b[buf].snacks_terminal
-      local is_opencode = ft:match 'opencode' ~= nil or bname:find 'opencode' ~= nil or (st and tostring(st.cmd):find 'opencode' ~= nil)
+      local is_opencode = vim.b[buf].panel_type == 'opencode'
+        or ft:match 'opencode' ~= nil
+        or bname:find ':%S*opencode' ~= nil
+        or (st and tostring(st.cmd):find 'opencode' ~= nil)
       local is_dbout = ft == 'dbout' or ft == 'sqmeow-result' or bname:find '/sqmeow/' or bname:find '/db_ui/'
 
       if is_term and not is_opencode and not is_dbout then
@@ -491,7 +494,18 @@ local function get_active_hl()
   return 'TerminalTrackerActive'
 end
 
--- Resolve inactive highlight (transparent background with mode font color)
+local function get_active_cap_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local cap = 'LualinePillCapActive' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(cap) == 1 then
+      return cap
+    end
+  end
+  return 'LualinePillCapActive_normal'
+end
+
+-- Resolve inactive highlight (pill surface background with text color)
 local function get_inactive_hl()
   local ok, hl = pcall(require, 'lualine.highlight')
   if ok and hl.get_mode_suffix then
@@ -503,7 +517,7 @@ local function get_inactive_hl()
   return 'TerminalTrackerInactive'
 end
 
--- Resolve running highlight (transparent background with vibrant green accent)
+-- Resolve running highlight (pill surface background with vibrant green accent)
 local function get_running_hl()
   if vim.fn.hlexists 'TerminalTrackerRunning' == 1 then
     return 'TerminalTrackerRunning'
@@ -511,7 +525,7 @@ local function get_running_hl()
   return get_inactive_hl()
 end
 
--- Lualine component formatter
+-- Lualine component formatter (dynamic pill)
 function M.lualine_component()
   local terms = M.get_terminals()
   if #terms == 0 then
@@ -534,7 +548,7 @@ function M.lualine_component()
     budget = 8
   end
 
-  local parts = {}
+  local entries = {}
 
   for _, t in ipairs(terms) do
     local is_active = (t.buf == cur_buf or t.buf == win_buf)
@@ -559,10 +573,72 @@ function M.lualine_component()
       hl = inactive_hl
     end
 
-    table.insert(parts, string.format('%%#%s# %s %%*', hl, label))
+    table.insert(entries, {
+      is_active = is_active,
+      text = string.format('%%#%s# %s %%*', hl, label),
+    })
   end
 
-  return table.concat(parts, '|')
+  local active_cap = get_active_cap_hl()
+  local left_cap_hl = entries[1].is_active and active_cap or 'LualinePillCap'
+  local right_cap_hl = entries[#entries].is_active and active_cap or 'LualinePillCap'
+
+  local parts = {}
+  for idx, entry in ipairs(entries) do
+    table.insert(parts, entry.text)
+    if idx < #entries then
+      local next_entry = entries[idx + 1]
+      if not entry.is_active and not next_entry.is_active then
+        table.insert(parts, '%#LualinePillSep#|%*')
+      end
+    end
+  end
+
+  return string.format('%%#%s#%%*%s%%#%s#%%*', left_cap_hl, table.concat(parts, ''), right_cap_hl)
+end
+
+-- Compact green icons indicator for background running terminals / SQL queries / AI prompts
+function M.running_icons()
+  local terms = M.get_terminals()
+  local has_running_term = false
+  local has_running_db = false
+
+  for _, t in ipairs(terms) do
+    if t.is_running then
+      if t.kind == 'terminal' then
+        has_running_term = true
+      elseif t.kind == 'dbout' then
+        has_running_db = true
+      end
+    end
+  end
+
+  if not has_running_db then
+    local ok_st, st = pcall(require, 'sqmeow.core.state')
+    if ok_st and st and st.call and st.call.state == 'executing' then
+      has_running_db = true
+    end
+  end
+
+  local has_running_ai = _G.OpencodePromptRunning == true
+  if not has_running_ai then
+    local ok_oc, oc_status = pcall(require, 'opencode.events.status')
+    if ok_oc and oc_status and oc_status.icon and oc_status.icon() == '󱜙' then
+      has_running_ai = true
+    end
+  end
+
+  local icons = {}
+  if has_running_term then
+    table.insert(icons, ' ')
+  end
+  if has_running_db then
+    table.insert(icons, '󰆼 ')
+  end
+  if has_running_ai then
+    table.insert(icons, '󰚩 ')
+  end
+  return table.concat(icons, ' ')
 end
 
 -- Setup autocommands to invalidate cache and refresh lualine on terminal lifecycle events
@@ -571,7 +647,8 @@ function M.setup()
     local ok, ctp = pcall(require, 'catppuccin.palettes')
     local C = ok and ctp.get_palette 'mocha' or {}
     local green = C.green or '#a6e3a1'
-    vim.api.nvim_set_hl(0, 'TerminalTrackerRunning', { bg = 'NONE', fg = green, bold = true, default = true })
+    local pill_bg = C.surface0 or '#313244'
+    vim.api.nvim_set_hl(0, 'TerminalTrackerRunning', { bg = pill_bg, fg = green, bold = true })
   end
 
   setup_tracker_highlights()

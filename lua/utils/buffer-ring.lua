@@ -502,7 +502,18 @@ local function get_active_hl()
   return 'BufferRingActive'
 end
 
--- Resolve inactive highlight (transparent background with mode font color)
+local function get_active_cap_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local cap = 'LualinePillCapActive' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(cap) == 1 then
+      return cap
+    end
+  end
+  return 'LualinePillCapActive_normal'
+end
+
+-- Resolve inactive highlight (pill surface background with text color)
 local function get_inactive_hl()
   local ok, hl = pcall(require, 'lualine.highlight')
   if ok and hl.get_mode_suffix then
@@ -514,14 +525,14 @@ local function get_inactive_hl()
   return 'BufferRingInactive'
 end
 
---- Format the 4-slot ring for Lualine
+--- Format the 4-slot ring for Lualine as a dynamic pill
 ---@return string
 function M.lualine_component()
   M.clean_slots()
   local cur_buf = vim.api.nvim_get_current_buf()
   local active_hl = get_active_hl()
   local inactive_hl = get_inactive_hl()
-  local items = {}
+  local entries = {}
 
   for i = 1, M.max_slots do
     local b = M.slots[i]
@@ -576,31 +587,45 @@ function M.lualine_component()
         local ok_dev, devicons = pcall(require, 'nvim-web-devicons')
         if ok_dev then
           local ext = vim.fn.fnamemodify(raw, ':e')
-          local i = (devicons.get_icon and devicons.get_icon(name, ext, { default = false }))
+          local i_icon = (devicons.get_icon and devicons.get_icon(name, ext, { default = false }))
             or (ft ~= '' and devicons.get_icon_by_filetype and devicons.get_icon_by_filetype(ft, { default = true }))
-          if i and i ~= '' then
-            icon = i
+          if i_icon and i_icon ~= '' then
+            icon = i_icon
           end
         end
       end
 
       local modified = vim.bo[b].modified and ' ●' or ''
       local pin = M.pinned[b] and '󰐃 ' or ''
+      local hl = is_active and active_hl or inactive_hl
 
-      -- Style active vs inactive slots (per-buffer filetype icon, no generic prefix icon)
-      if is_active then
-        table.insert(items, string.format('%%#%s# %s%s %s%s %%*', active_hl, pin, icon, name, modified))
-      else
-        table.insert(items, string.format('%%#%s# %s%s %s%s %%*', inactive_hl, pin, icon, name, modified))
+      table.insert(entries, {
+        is_active = is_active,
+        text = string.format('%%#%s# %s%s %s%s %%*', hl, pin, icon, name, modified),
+      })
+    end
+  end
+
+  if #entries == 0 then
+    return ''
+  end
+
+  local active_cap = get_active_cap_hl()
+  local left_cap_hl = entries[1].is_active and active_cap or 'LualinePillCap'
+  local right_cap_hl = entries[#entries].is_active and active_cap or 'LualinePillCap'
+
+  local parts = {}
+  for idx, entry in ipairs(entries) do
+    table.insert(parts, entry.text)
+    if idx < #entries then
+      local next_entry = entries[idx + 1]
+      if not entry.is_active and not next_entry.is_active then
+        table.insert(parts, '%#LualinePillSep#|%*')
       end
     end
   end
 
-  if #items == 0 then
-    return ''
-  end
-
-  return table.concat(items, '|')
+  return string.format('%%#%s#%%*%s%%#%s#%%*', left_cap_hl, table.concat(parts, ''), right_cap_hl)
 end
 
 --- Setup autocommands for automatic slot management

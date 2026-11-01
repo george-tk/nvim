@@ -25,14 +25,16 @@ return {
           end
           local b = vim.api.nvim_win_get_buf(w)
           local ft = vim.bo[b].filetype
+          local bt = vim.bo[b].buftype
           local bname = vim.api.nvim_buf_get_name(b):lower()
           if
-            ft:match '^sqmeow%-'
+            bt ~= ''
+            or vim.b[b].panel_zone ~= nil
+            or ft:match '^sqmeow%-'
             or ft == 'sqmeow'
             or ft == 'dbui'
             or ft == 'dbout'
             or ft:match 'opencode'
-            or bname:find 'opencode'
             or ft:match 'terminal'
             or bname:find 'term://'
             or ft:match '^snacks_'

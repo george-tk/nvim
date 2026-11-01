@@ -43,13 +43,17 @@ local function get_win_info(win)
   local zone = vim.b[buf].panel_zone
   local ptype = vim.b[buf].panel_type
 
+  local bt = vim.bo[buf].buftype
   local is_explorer = (ptype == 'explorer') or (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil)
   local is_dbui = (ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil)
   local is_opencode = (ptype == 'opencode')
     or (
-      ft:match 'opencode' ~= nil
-      or bname:find 'opencode' ~= nil
-      or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
+      bt ~= ''
+      and (
+        (ft:match 'opencode' ~= nil and ft ~= 'opencode_ask')
+        or (bt == 'terminal' and bname:find ':%S*opencode' ~= nil)
+        or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
+      )
     )
 
   -- Right panel zone takes absolute precedence over bottom terminal
@@ -451,11 +455,14 @@ function RightPanel.open_dbui(no_toggle)
   end)
 end
 
-function RightPanel.open_opencode(no_toggle)
+function RightPanel.open_opencode(no_toggle, opts)
+  local focus = not (opts and opts.focus == false)
   local info = get_win_info()
   if info.is_opencode then
     if no_toggle then
-      vim.cmd 'startinsert'
+      if focus then
+        vim.cmd 'startinsert'
+      end
       return
     end
     RightPanel.close_all()
@@ -469,8 +476,10 @@ function RightPanel.open_opencode(no_toggle)
   local existing_oc = find_win_type 'is_opencode'
   if existing_oc and vim.api.nvim_win_is_valid(existing_oc) then
     RightPanel.active_mode = 'opencode'
-    vim.api.nvim_set_current_win(existing_oc)
-    vim.cmd 'startinsert'
+    if focus then
+      vim.api.nvim_set_current_win(existing_oc)
+      vim.cmd 'startinsert'
+    end
     pcall(function()
       require('lualine').refresh()
     end)
@@ -490,10 +499,13 @@ function RightPanel.open_opencode(no_toggle)
 
   local term = Snacks.terminal.get(cmd, {
     create = true,
+    start_insert = false,
+    auto_insert = true,
     win = {
       position = 'right',
       width = width_opt,
       relative = 'editor',
+      enter = false,
       wo = { winbar = '', winfixwidth = true, winfixbuf = true },
       on_buf = function(t)
         vim.b[t.buf].panel_zone = 'right'
@@ -508,13 +520,21 @@ function RightPanel.open_opencode(no_toggle)
       vim.b[term.buf].panel_zone = 'right'
       vim.b[term.buf].panel_type = 'opencode'
     end
-    if term.win and vim.api.nvim_win_is_valid(term.win) then
+    if focus and term.win and vim.api.nvim_win_is_valid(term.win) then
       vim.api.nvim_set_current_win(term.win)
       vim.cmd 'startinsert'
+    elseif ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
     end
   end
   vim.schedule(function()
     ensure_right_sidebar_precedence()
+    local cur_win = vim.api.nvim_get_current_win()
+    local cur_cfg = vim.api.nvim_win_is_valid(cur_win) and vim.api.nvim_win_get_config(cur_win) or {}
+    local in_float = cur_cfg.relative and cur_cfg.relative ~= ''
+    if not focus and not in_float and ed and vim.api.nvim_win_is_valid(ed) and cur_win ~= ed then
+      pcall(vim.api.nvim_set_current_win, ed)
+    end
     pcall(function()
       require('lualine').refresh()
     end)
@@ -539,14 +559,20 @@ function RightPanel.lualine_component()
   local ok_hl, hl = pcall(require, 'lualine.highlight')
   local active_hl = 'BufferRingActive'
   local inactive_hl = 'BufferRingInactive'
+  local active_cap = 'LualinePillCapActive_normal'
   if ok_hl and hl.get_mode_suffix then
-    local a_name = 'lualine_a' .. hl.get_mode_suffix()
+    local suffix = hl.get_mode_suffix()
+    local a_name = 'lualine_a' .. suffix
     if vim.fn.hlexists(a_name) == 1 then
       active_hl = a_name
     end
-    local b_name = 'lualine_b' .. hl.get_mode_suffix()
+    local b_name = 'lualine_b' .. suffix
     if vim.fn.hlexists(b_name) == 1 then
       inactive_hl = b_name
+    end
+    local cap_name = 'LualinePillCapActive' .. suffix
+    if vim.fn.hlexists(cap_name) == 1 then
+      active_cap = cap_name
     end
   end
 
@@ -566,16 +592,34 @@ function RightPanel.lualine_component()
   local slots = {
     { mode = 'explorer', label = '󰙅' },
     { mode = 'dbui', label = '󰆼' },
-    { mode = 'opencode', label = '󰚩' },
+    { mode = 'opencode', label = '󰚩', is_running = _G.OpencodePromptRunning == true },
   }
 
-  local parts = {}
+  local entries = {}
   for _, s in ipairs(slots) do
-    local group = (s.mode == cur_mode) and active_hl or inactive_hl
-    table.insert(parts, string.format('%%#%s# %s %%*', group, s.label))
+    local is_active = (s.mode == cur_mode)
+    local group = is_active and active_hl or (s.is_running and 'TerminalTrackerRunning' or inactive_hl)
+    table.insert(entries, {
+      is_active = is_active,
+      text = string.format('%%#%s# %s %%*', group, s.label),
+    })
   end
 
-  return table.concat(parts, '|')
+  local left_cap_hl = entries[1].is_active and active_cap or 'LualinePillCap'
+  local right_cap_hl = entries[#entries].is_active and active_cap or 'LualinePillCap'
+
+  local parts = {}
+  for idx, entry in ipairs(entries) do
+    table.insert(parts, entry.text)
+    if idx < #entries then
+      local next_entry = entries[idx + 1]
+      if not entry.is_active and not next_entry.is_active then
+        table.insert(parts, '%#LualinePillSep#|%*')
+      end
+    end
+  end
+
+  return string.format('%%#%s#%%*%s%%#%s#%%*', left_cap_hl, table.concat(parts, ''), right_cap_hl)
 end
 
 function RightPanel.toggle_active()
@@ -611,6 +655,7 @@ function RightPanel.toggle_active()
 end
 
 RightPanel.get_editor_win = get_editor_win
+RightPanel.get_opencode_cmd = get_opencode_cmd
 RightPanel.ensure_precedence = ensure_right_sidebar_precedence
 RightPanel.equalize_splits = equalize_splits
 

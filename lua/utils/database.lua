@@ -246,6 +246,20 @@ function M.ensure_sqmeow_connection(db_name, non_blocking)
     local conn = state.connection_by_name(db_name)
     if conn and conn.state ~= 'closed' then
       api.use(conn.id)
+      if not non_blocking and conn.state ~= 'connected' then
+        local waited = 0
+        while waited < 2000 do
+          local cur = state.connections[conn.id]
+          if (cur and cur.state == 'connected') or (state.failures and state.failures[db_name] ~= nil) then
+            break
+          end
+          vim.wait(50, function()
+            local c = state.connections[conn.id]
+            return (c and c.state == 'connected') or (state.failures and state.failures[db_name] ~= nil)
+          end)
+          waited = waited + 50
+        end
+      end
       return conn.id
     end
   end
@@ -266,6 +280,20 @@ function M.ensure_sqmeow_connection(db_name, non_blocking)
         local child = state.child_connection and state.child_connection(pconn.id, child_db)
         if child and child.id then
           api.use(child.id)
+          if not non_blocking and child.state ~= 'connected' then
+            local waited = 0
+            while waited < 2000 do
+              local cur = state.connections[child.id]
+              if (cur and cur.state == 'connected') or (state.failures and state.failures[db_name] ~= nil) then
+                break
+              end
+              vim.wait(50, function()
+                local c = state.connections[child.id]
+                return (c and c.state == 'connected') or (state.failures and state.failures[db_name] ~= nil)
+              end)
+              waited = waited + 50
+            end
+          end
           return child.id
         end
         local child_id = api.connect(pconn.url, {
@@ -277,6 +305,20 @@ function M.ensure_sqmeow_connection(db_name, non_blocking)
         })
         if child_id then
           api.use(child_id)
+          if not non_blocking then
+            local waited = 0
+            while waited < 2000 do
+              local cur = state.connections[child_id]
+              if (cur and cur.state == 'connected') or (state.failures and state.failures[db_name] ~= nil) then
+                break
+              end
+              vim.wait(50, function()
+                local c = state.connections[child_id]
+                return (c and c.state == 'connected') or (state.failures and state.failures[db_name] ~= nil)
+              end)
+              waited = waited + 50
+            end
+          end
           return child_id
         end
         return nil
@@ -574,31 +616,6 @@ function M.get_active_db(buf)
     return db_val, name
   end
 
-  -- 3. Check sqmeow target / active connection fallback for new unbound buffers
-  local ok_target, conn_api = pcall(require, 'sqmeow.api.connection')
-  if ok_target and conn_api and conn_api.target then
-    local target = conn_api.target(buf)
-    if target and target.name then
-      local url = M.get_connection_url(target.name) or target.url
-      return url, target.name
-    end
-  end
-
-  -- 4. Active sqmeow state connection
-  local ok_state, state = pcall(require, 'sqmeow.core.state')
-  if ok_state and state and state.current_connection then
-    local curr = state.current_connection()
-    if curr and curr.name then
-      local url = M.get_connection_url(curr.name) or curr.url
-      return url, curr.name
-    end
-  end
-
-  -- 5. Fallback to active connection
-  if M.current_db_name and M.current_db_name ~= '' then
-    return M.current_db, M.current_db_name
-  end
-
   return nil, nil
 end
 
@@ -818,15 +835,19 @@ function M.setup_drawer_helpers()
 
     local function render_non_grid_summary(summary)
       local state = sqmeow 'core.state'
-      local call = summary or (state and state.call)
+      local call = (state and state.call) or summary
       if not call or call.state == 'error' then
-        return
-      end
-      if call.columns and #call.columns > 0 then
         return
       end
       local handle = result.buffer and result.buffer()
       if not handle or not vim.api.nvim_buf_is_valid(handle) then
+        return
+      end
+      if call.columns and #call.columns > 0 then
+        vim.api.nvim_buf_clear_namespace(handle, ns, 0, -1)
+        return
+      end
+      if call.state == 'executing' then
         return
       end
       local desc = result.describe and result.describe(call, false) or ''
@@ -854,6 +875,15 @@ function M.setup_drawer_helpers()
       if ok_lualine and lualine and lualine.refresh then
         lualine.refresh { place = { 'statusline' } }
       end
+      vim.schedule(function()
+        if ok_tt and tt and tt.invalidate then
+          tt.invalidate()
+        end
+        if ok_lualine and lualine and lualine.refresh then
+          lualine.refresh { place = { 'statusline' } }
+        end
+        vim.cmd.redrawstatus { bang = true }
+      end)
     end
 
     local orig_render = result.render
@@ -1319,17 +1349,14 @@ function M.run_query(full_buffer)
   local db_url, db_name = M.get_active_db(cur_buf)
 
   if not db_name or db_name == '' then
-    if M.current_db_name then
-      db_name = M.current_db_name
-      db_url = M.current_db
-    else
-      M.select_connection(function(selected_url, selected_name)
-        if selected_name then
-          M.run_query(full_buffer)
-        end
-      end)
-      return
-    end
+    M.select_connection(function(selected_url, selected_name)
+      if selected_name and vim.api.nvim_buf_is_valid(cur_buf) then
+        vim.b[cur_buf].db_name = selected_name
+        vim.b[cur_buf].sqmeow_connection = selected_name
+        M.run_query(full_buffer)
+      end
+    end)
+    return
   end
 
   -- Synchronize buffer-local connection bindings and active state
@@ -1346,8 +1373,8 @@ function M.run_query(full_buffer)
     end
   end
 
-  -- Ensure active in sqmeow without duplicating connection
-  M.ensure_sqmeow_connection(db_name)
+  -- Ensure active in sqmeow without duplicating connection (blocking wait so newly picked connections finish handshake before execute)
+  M.ensure_sqmeow_connection(db_name, false)
   M.setup_drawer_helpers()
   if _G.BottomPanel and _G.BottomPanel.hide_terminal then
     _G.BottomPanel.hide_terminal()
