@@ -82,6 +82,6 @@ return {
     end, { desc = 'NeoCodeium: Clear Suggestion' })
 
     -- Normal mode management keybindings under <leader>a
-    vim.keymap.set('n', '<leader>au', '<cmd>NeoCodeium auth<CR>', { desc = 'AI Auth / Status' })
+    vim.keymap.set('n', '<leader>aU', '<cmd>NeoCodeium auth<CR>', { desc = 'AI Auth / Status' })
   end,
 }

@@ -117,6 +117,74 @@ return {
       end
     end
 
+    -- Advertise '@' and '/' as trigger characters on `opencode_ask_cmp`
+    -- and serve recursive workspace file completions when typing `./`
+    local file_cache = { cwd = nil, ts = 0, items = {} }
+    local function get_workspace_file_items()
+      local cwd = vim.fn.getcwd()
+      local now = (vim.uv or vim.loop).now()
+      if file_cache.cwd == cwd and (now - file_cache.ts) < 10000 and #file_cache.items > 0 then
+        return file_cache.items
+      end
+      local files
+      if vim.fn.executable 'rg' == 1 then
+        files = vim.fn.systemlist { 'rg', '--files', '--color=never', '--hidden', '-g', '!.git' }
+      else
+        files = vim.fn.systemlist { 'git', 'ls-files', '--cached', '--others', '--exclude-standard' }
+      end
+      local items = {}
+      if vim.v.shell_error == 0 and type(files) == 'table' then
+        local file_kind = vim.lsp.protocol.CompletionItemKind.File
+        local plain_fmt = vim.lsp.protocol.InsertTextFormat.PlainText
+        for _, f in ipairs(files) do
+          local clean = f:gsub('^%./', '')
+          if clean ~= '' then
+            table.insert(items, {
+              label = clean,
+              filterText = clean,
+              insertText = clean,
+              insertTextFormat = plain_fmt,
+              kind = file_kind,
+            })
+          end
+        end
+      end
+      file_cache = { cwd = cwd, ts = now, items = items }
+      return items
+    end
+
+    local ok_cmp, oc_cmp = pcall(require, 'opencode.ui.ask.cmp')
+    if ok_cmp and oc_cmp and oc_cmp.cmd and not oc_cmp._trigger_wrapped then
+      local orig_cmd = oc_cmp.cmd
+      oc_cmp._trigger_wrapped = true
+      oc_cmp.cmd = function(dispatchers, config)
+        local srv = orig_cmd(dispatchers, config)
+        local orig_req = srv.request
+        srv.request = function(method, params, callback)
+          if method == vim.lsp.protocol.Methods.initialize then
+            return orig_req(method, params, function(err, result)
+              if result and result.capabilities and result.capabilities.completionProvider then
+                result.capabilities.completionProvider.triggerCharacters = { '@', '/' }
+              end
+              callback(err, result)
+            end)
+          elseif method == vim.lsp.protocol.Methods.textDocument_completion then
+            local line = vim.api.nvim_get_current_line()
+            local col = vim.api.nvim_win_get_cursor(0)[2]
+            local before = line:sub(1, col)
+            if before:find '^%./[%w_%-%.%/]*$' or before:find '%s%./[%w_%-%.%/]*$' then
+              callback(nil, get_workspace_file_items())
+              return
+            end
+          end
+          return orig_req(method, params, callback)
+        end
+        return srv
+      end
+    end
+
+    local active_session_id = nil
+
     local function set_prompt_running(running)
       if _G.OpencodePromptRunning ~= running then
         _G.OpencodePromptRunning = running
@@ -127,16 +195,170 @@ return {
       end
     end
 
-    -- Keymaps for OpenCode AI under <leader>a (matching upstream recommended workflow)
-    vim.keymap.set({ 'n' }, '<leader>aa', function()
-      if _G.RightPanel then
-        _G.RightPanel.open_opencode()
-      else
-        require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
-      end
-    end, { desc = 'AI Explorer' })
+    -- Open a Snacks picker of user prompts in the active OpenCode session to revert back N turns
+    local function pick_undo_prompt()
+      require('opencode.server.discovery')
+        .get()
+        :next(function(server)
+          return server:get_sessions():next(function(sessions)
+            if not sessions or #sessions == 0 then
+              vim.notify('No active OpenCode session found', vim.log.levels.INFO, { title = 'OpenCode' })
+              return
+            end
 
-    vim.keymap.set({ 'n', 'x' }, '<leader>ai', function()
+            -- Prefer root (non-subagent) sessions sorted by most recently updated
+            local root_sessions = vim.tbl_filter(function(s)
+              return not s.parentID
+            end, sessions)
+            local pool = #root_sessions > 0 and root_sessions or sessions
+            table.sort(pool, function(a, b)
+              return (a.time and a.time.updated or 0) > (b.time and b.time.updated or 0)
+            end)
+
+            local session = pool[1]
+            if active_session_id then
+              for _, s in ipairs(pool) do
+                if s.id == active_session_id then
+                  session = s
+                  break
+                end
+              end
+            end
+
+            server:curl('/session/' .. session.id .. '/message', 'GET', nil, function(messages)
+              if type(messages) ~= 'table' or #messages == 0 then
+                vim.notify('No prompts to undo in current session', vim.log.levels.INFO, { title = 'OpenCode' })
+                return
+              end
+
+              local revert_msg_id = session.revert and session.revert.messageID or nil
+              local user_msgs = {}
+              for _, msg in ipairs(messages) do
+                local info = msg.info
+                if info and revert_msg_id and info.id >= revert_msg_id then
+                  break
+                end
+                if info and info.role == 'user' then
+                  local text_parts = {}
+                  for _, part in ipairs(msg.parts or {}) do
+                    if part.type == 'text' and not part.synthetic and type(part.text) == 'string' then
+                      local t = vim.trim(part.text)
+                      if t ~= '' then
+                        table.insert(text_parts, t)
+                      end
+                    end
+                  end
+                  local full_text = table.concat(text_parts, '\n\n')
+                  if full_text == '' and info.summary and info.summary.title then
+                    full_text = info.summary.title
+                  end
+                  if full_text ~= '' then
+                    table.insert(user_msgs, {
+                      id = info.id,
+                      created = info.time and info.time.created or 0,
+                      full_text = full_text,
+                      one_line = full_text:gsub('%s+', ' '),
+                      diffs = (info.summary and info.summary.diffs) or {},
+                    })
+                  end
+                end
+              end
+
+              if #user_msgs == 0 then
+                vim.notify('No prompts to undo in current session', vim.log.levels.INFO, { title = 'OpenCode' })
+                return
+              end
+
+              local items = {}
+              local total = #user_msgs
+              for i = total, 1, -1 do
+                local m = user_msgs[i]
+                local steps_back = total - i + 1
+                local time_str = m.created > 0 and os.date('%H:%M:%S', math.floor(m.created / 1000)) or ''
+                local preview_lines = {
+                  string.format('# Prompt (-%d%s)', steps_back, steps_back == 1 and ' · latest' or ''),
+                  '',
+                  m.full_text,
+                }
+                if #m.diffs > 0 then
+                  table.insert(preview_lines, '')
+                  table.insert(preview_lines, '## Files modified in this turn')
+                  for _, d in ipairs(m.diffs) do
+                    if d.file then
+                      table.insert(preview_lines, string.format('- `%s` (+%d / -%d)', d.file, d.additions or 0, d.deletions or 0))
+                    end
+                  end
+                end
+
+                table.insert(items, {
+                  idx = steps_back,
+                  steps_back = steps_back,
+                  message_id = m.id,
+                  text = string.format('[-%d] %s', steps_back, m.one_line),
+                  prompt_line = m.one_line,
+                  time_str = time_str,
+                  preview = {
+                    text = table.concat(preview_lines, '\n'),
+                    ft = 'markdown',
+                  },
+                })
+              end
+
+              Snacks.picker.pick {
+                title = 'Undo AI Prompt (' .. (session.title or 'Current Session') .. ')',
+                items = items,
+                preview = 'preview',
+                layout = {
+                  preset = 'vscode',
+                  hidden = {},
+                },
+                format = function(item)
+                  local ret = {
+                    { string.format('-%d ', item.steps_back), 'Number' },
+                    { item.prompt_line, 'Normal' },
+                  }
+                  if item.time_str ~= '' then
+                    table.insert(ret, { '  ' .. item.time_str, 'Comment' })
+                  end
+                  return ret
+                end,
+                confirm = function(picker, item)
+                  picker:close()
+                  if not item or not item.message_id then
+                    return
+                  end
+                  server:curl('/session/' .. session.id .. '/revert', 'POST', { messageID = item.message_id }, function()
+                    set_prompt_running(false)
+                    vim.cmd 'checktime'
+                    vim.notify(
+                      string.format(
+                        'Reverted %d prompt%s back: %s',
+                        item.steps_back,
+                        item.steps_back == 1 and '' or 's',
+                        vim.fn.strcharpart(item.prompt_line, 0, 50)
+                      ),
+                      vim.log.levels.INFO,
+                      { title = 'OpenCode' }
+                    )
+                  end, function(err)
+                    vim.notify('Failed to revert prompt: ' .. tostring(err), vim.log.levels.ERROR, { title = 'OpenCode' })
+                  end)
+                end,
+              }
+            end, function(err)
+              vim.notify('Failed to fetch session messages: ' .. tostring(err), vim.log.levels.ERROR, { title = 'OpenCode' })
+            end)
+          end)
+        end)
+        :catch(function(err)
+          if err then
+            vim.notify(tostring(err), vim.log.levels.ERROR, { title = 'OpenCode' })
+          end
+        end)
+    end
+
+    -- Keymaps for OpenCode AI under <leader>a
+    vim.keymap.set({ 'n', 'x' }, '<leader>aa', function()
       local is_visual = capture_editor_context()
       if is_visual then
         require('opencode').ask '@this: '
@@ -159,12 +381,23 @@ return {
       end
     end, { desc = 'Ask AI' })
 
+    vim.keymap.set({ 'n' }, '<leader>ap', function()
+      if _G.RightPanel then
+        _G.RightPanel.open_opencode()
+      else
+        require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+      end
+    end, { desc = 'AI Panel' })
+
     vim.keymap.set({ 'n', 'x' }, '<leader>as', function()
       capture_editor_context()
       require('opencode').select()
     end, { desc = 'AI Prompts' })
 
+    vim.keymap.set({ 'n' }, '<leader>au', pick_undo_prompt, { desc = 'Undo AI Prompt' })
+
     vim.keymap.set({ 'n' }, '<leader>an', function()
+      active_session_id = nil
       set_prompt_running(false)
       require('opencode').command 'session.new'
     end, { desc = 'New AI Session' })
@@ -210,6 +443,8 @@ return {
         'OpencodeEvent:session.busy',
         'OpencodeEvent:session.idle',
         'OpencodeEvent:session.error',
+        'OpencodeEvent:session.updated',
+        'OpencodeEvent:message.updated',
         'OpencodeEvent:server.instance.disposed',
       },
       callback = function(args)
@@ -218,19 +453,34 @@ return {
           return
         end
 
+        local props = event.properties or {}
+        local sid = props.sessionID
+          or (props.info and props.info.sessionID)
+          or (props.info and props.info.id and tostring(props.info.id):match '^ses_' and props.info.id)
+        if sid then
+          active_session_id = sid
+        end
+
         if event.type == 'tui.command.execute' then
-          local cmd = event.properties and event.properties.command
+          local cmd = props.command
           if cmd == 'prompt.submit' then
             set_prompt_running(true)
-            local win = require('snacks.terminal').get(opencode_cmd, { create = false })
-            if win then
-              win:show()
+            if _G.RightPanel then
+              _G.RightPanel.open_opencode(true, { focus = false })
+            else
+              local win = require('snacks.terminal').get(opencode_cmd, { create = false })
+              if win then
+                win:show()
+              end
             end
           elseif cmd == 'session.interrupt' or cmd == 'session.new' then
+            if cmd == 'session.new' then
+              active_session_id = nil
+            end
             set_prompt_running(false)
           end
         elseif event.type == 'session.status' then
-          local st = event.properties and event.properties.status and event.properties.status.type
+          local st = props.status and props.status.type
           set_prompt_running(st == 'busy')
         elseif event.type == 'session.busy' then
           set_prompt_running(true)

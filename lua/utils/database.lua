@@ -902,43 +902,6 @@ function M.setup_drawer_helpers()
       return r
     end
   end
-
-  -- 5. Pre-warm schema & table completion cache on connection / schema load
-  local ok_comp, completion = pcall(require, 'sqmeow.completion')
-  if ok_comp and completion and not M._completion_warm_hooked then
-    M._completion_warm_hooked = true
-    local orig_ensure = completion.ensure
-    completion.ensure = function(conn_id)
-      if orig_ensure then
-        orig_ensure(conn_id)
-      end
-      if not conn_id then
-        return
-      end
-      local dr = sqmeow 'ui.drawer'
-      if not dr or not dr.cached_nodes or not dr.load then
-        return
-      end
-      local schemas = dr.cached_nodes(conn_id, {})
-      for _, schema in ipairs(schemas or {}) do
-        if schema.kind == 'schema' then
-          local groups = dr.cached_nodes(conn_id, { schema.name })
-          if groups == nil then
-            dr.load(conn_id, { schema.name }, true)
-          else
-            for _, group in ipairs(groups) do
-              if group.kind == 'tables' or group.kind == 'views' or group.kind == 'keys' then
-                local path = { schema.name, group.key }
-                if dr.cached_nodes(conn_id, path) == nil then
-                  dr.load(conn_id, path, true)
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
 end
 
 -------------------------------------------------------------------------------

@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `1386ce1` (`build(deps): bump rstest from 0.27.0 to 0.28.0 (#102)`, Tue Oct 27 2026, includes PR #100 `b32057e` & PR #101 `f997b4b`)
+- **Baseline Commit Pinned**: `d0bb4a7` (`build(deps): bump oracledb from 26.0.0-beta.4 to 26.0.0-beta.5 (#111)`, Mon Nov 2 2026, includes PR #106 `ea9f2c2` & PR #108 `9fe3b16`)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log 1386ce1..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log d0bb4a7..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff 1386ce1..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff d0bb4a7..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -56,6 +56,7 @@ flowchart TD
         Z["v3.1: History Query Preview & Reopen (p / P) (PR #80 / b657e5f)"]
         AA["v3.2: Granular Winbar Options & Statusline API (PR #101 / Issue #85 / f997b4b)"]
         AB["v3.2: Foreign Key Row Drilldown (gd / gr) (PR #100 / Issue #86 / b32057e)"]
+        AC["v3.2: Dialect-Quoted Identifiers & Relation Cache Warming (PR #106 / Issue #99 / ea9f2c2)"]
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
@@ -101,6 +102,7 @@ flowchart TD
 | **25. Named Scratch Buffer Reuse & Winbar Suppression** | Upstream `sqmeow.ui.buffer.scratch` & `opts.ui.winbar = false` | Restoring sessions or reopening named `sqmeow://` buffers could collide; result/editor winbars duplicated global lualine context. | **RESOLVED UPSTREAM ([Issue #88](https://github.com/2giosangmitom/sqmeow.nvim/issues/88), Commit `14a864f`) & CONFIGURED LOCALLY**. Set `opts.ui.winbar = false` in `lua/plugins/database.lua`, retiring all custom `editor.update_winbar` and `result.update_winbar` hooks from `lua/utils/database.lua`. |
 | **26. Granular Winbar Toggles & Statusline API (`api.view.status` / `api.view.column`)** | Upstream `sqmeow.api.view.status()` & `sqmeow.api.view.column()` (`lua/plugins/lualine.lua`) | `ui.winbar` was previously boolean-only, and statusline integrations had to inspect `sqmeow.core.state` and `sqmeow.ui.result` internals manually. | **RESOLVED & MERGED UPSTREAM ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85), Commit `f997b4b`)**. `lua/plugins/lualine.lua` now consumes `require('sqmeow.api.view').column()` and `require('sqmeow.api.view').status(target_buf)` directly; manual rule-line column parsing and state telemetry inspection retired. |
 | **27. Foreign Key Row Drilldown (`gd` / `gr` in Result Grid & Row Details)** | Upstream native `result.actions.goto_definition` (`gd`) & `goto_references` (`gr`) | Navigating from a foreign-key cell to its referenced parent row or child rows previously required writing manual `SELECT ... WHERE` queries. | **RESOLVED & MERGED UPSTREAM ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86), Commit `b32057e`)**. Upstream natively binds `gd` and `gr` in both the result grid and the `K` row-details popup, backed by engine-level predicate construction (`call:follow`). |
+| **28. Dialect-Quoted Identifier Completion & Relation Cache Warming** | Upstream native `sqmeow.completion` & `sqmeow.core.sql.needs_quote` | Mixed-case/reserved identifiers previously completed unquoted, and `completion.ensure` only warmed root schemas (`{}`). | **RESOLVED & MERGED UPSTREAM ([PR #106](https://github.com/2giosangmitom/sqmeow.nvim/pull/106) / [Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99), Commit `ea9f2c2`)**. Upstream now natively quotes non-standard/reserved identifiers per dialect, replaces already-typed opening/autopair quotes via `textEdit`, and progressively warms schema groups and relation lists in `completion.ensure`. Local `transform_items` override in `autocompletion.lua` and `completion.ensure` hook in `database.lua` retired. |
 
 
 
@@ -691,9 +693,9 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 
 ---
 
-### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [PR SUBMITTED - Issue #99 / PR #106]
+### Issue 17: Dialect-quoted identifier completion & background schema/table cache warming [RESOLVED UPSTREAM - Issue #99 / PR #106]
 
-> **Status**: **PR SUBMITTED** ([Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99), [PR #106](https://github.com/2giosangmitom/sqmeow.nvim/pull/106)).
+> **Status**: **RESOLVED & MERGED UPSTREAM** ([PR #106](https://github.com/2giosangmitom/sqmeow.nvim/pull/106) / [Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99), Commit `ea9f2c2`).
 
 **Title**: `feat(completion): support dialect-quoted identifiers in completion and warm table metadata on connect`
 
@@ -701,9 +703,10 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 1. `sqmeow.core.sql.quote(dialect, name)` properly quotes identifiers per dialect (`"table"` for Postgres/SQLite/DuckDB, `` `table` `` for MySQL, `[table]` for MSSQL), and `select_from` / `alter_table` always emit quoted identifiers. However, `sqmeow.completion.blink` and `sqmeow.completion` emit raw `label = item.label` with no `insertText`, causing unquoted mixed-case or reserved-word table/column names to fail on execution.
 2. `sqmeow.completion.ensure(conn_id)` only calls `nodes(conn_id, {})` (top-level schemas), requiring the user to either open the drawer or trigger completion 3 separate times (`{}` $\rightarrow$ `{schema}` $\rightarrow$ `{schema, 'tables'}`) before table names appear in autocomplete.
 
-**Proposed Implementation**:
-1. Add `ui.completion.quote_identifiers = true` (or auto-quote relations/mixed-case identifiers using `sqmeow.core.sql.quote(conn.dialect, item.label)` via `insertText` / `filterText`, handling leading typed quote characters cleanly).
-2. In `completion.ensure(conn_id)`, recursively warm `{schema}` and `{schema, 'tables' | 'views'}` in the background when `schema:nodes` events arrive.
+**Solution Merged Upstream**:
+1. `sqmeow.core.sql.needs_quote(dialect, name, qualified)` and `sqmeow.completion.context.open_quote(prefix)` quote identifiers per dialect and build `textEdit` ranges replacing already-typed opening/autopair quotes; `sqmeow.completion.blink` and `cmp` forward `insertText`, `filterText`, and `textEdit`.
+2. `completion.ensure(conn_id)` calls `relations(conn_id, true)` to progressively warm schema groups and relation lists in the background.
+3. Retired local `transform_items` override in [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua) and `completion.ensure` wrapper in [`lua/utils/database.lua`](file:///home/georgek/.config/nvim/lua/utils/database.lua).
 
 
 

@@ -122,13 +122,14 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>sp', desc = 'Previous Spell Error' },
 
       -- AI Group (<leader>a)
-      { '<leader>aa', desc = 'AI Explorer' },
-      { '<leader>ai', desc = 'Ask AI', mode = { 'n', 'v' } },
+      { '<leader>aa', desc = 'Ask AI', mode = { 'n', 'v' } },
+      { '<leader>ap', desc = 'AI Panel' },
       { '<leader>as', desc = 'AI Prompts', mode = { 'n', 'v' } },
+      { '<leader>au', desc = 'Undo AI Prompt' },
       { '<leader>an', desc = 'New AI Session' },
       { '<leader>ac', desc = 'Compact AI Session' },
       { '<leader>ax', desc = 'Stop AI Generation' },
-      { '<leader>au', desc = 'AI Auth / Status' },
+      { '<leader>aU', desc = 'AI Auth / Status' },
 
       -- Window Group (<leader>w)
       { '<leader>ws', desc = 'Split Horizontally' },
