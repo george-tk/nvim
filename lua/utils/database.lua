@@ -26,6 +26,9 @@ end
 -- Persistent Connection Storage & Management (sqmeow.nvim)
 -------------------------------------------------------------------------------
 
+M._connections_cache = nil
+M._connections_mtime = nil
+
 -- Save connections list to sqmeow connections.json
 function M.save_connections(connections)
   if vim.fn.isdirectory(sqmeow_dir) == 0 then
@@ -35,14 +38,23 @@ function M.save_connections(connections)
   local json_str = vim.fn.json_encode(connections)
   vim.fn.writefile({ json_str }, sqmeow_conn_file)
   vim.g.dbs = nil
+  M._connections_cache = nil
+  M._connections_mtime = nil
 end
 
--- Read all persistent connections from sqmeow connections.json
+-- Read all persistent connections from sqmeow connections.json (cached in memory by mtime)
 function M.get_all_connections()
+  local stat = (vim.uv or vim.loop).fs_stat(sqmeow_conn_file)
+  local mtime = stat and stat.mtime and stat.mtime.sec or 0
+
+  if M._connections_cache and M._connections_mtime == mtime and not vim.g.dbs then
+    return M._connections_cache
+  end
+
   local connections = {}
   local seen = {}
 
-  if vim.fn.filereadable(sqmeow_conn_file) == 1 then
+  if stat then
     local ok, lines = pcall(vim.fn.readfile, sqmeow_conn_file)
     if ok and lines and #lines > 0 then
       local ok_json, parsed = pcall(vim.fn.json_decode, table.concat(lines, ''))
@@ -69,6 +81,8 @@ function M.get_all_connections()
     end
     if updated then
       M.save_connections(connections)
+      stat = (vim.uv or vim.loop).fs_stat(sqmeow_conn_file)
+      mtime = stat and stat.mtime and stat.mtime.sec or 0
     else
       vim.g.dbs = nil
     end
@@ -76,6 +90,8 @@ function M.get_all_connections()
     vim.g.dbs = nil
   end
 
+  M._connections_cache = connections
+  M._connections_mtime = mtime
   return connections
 end
 
@@ -902,6 +918,42 @@ function M.setup_drawer_helpers()
       return r
     end
   end
+
+  -- 5. When a multi-statement query finishes, start on the first result instead of the final statement
+  local ok_ev, events = pcall(require, 'sqmeow.rpc.events')
+  if ok_ev and events and events.on_call and not M._events_on_call_hooked then
+    M._events_on_call_hooked = true
+    local orig_on_call = events.on_call
+    events.on_call = function(payload)
+      orig_on_call(payload)
+      if payload and payload.state == 'done' and payload.results and #payload.results > 1 then
+        local state = sqmeow 'core.state'
+        local res_mod = sqmeow 'ui.result'
+        local call = state and state.call
+        if call and call.results and #call.results > 1 then
+          local target_entry = call.results[1]
+          for _, entry in ipairs(call.results) do
+            if entry.columns and #entry.columns > 0 then
+              target_entry = entry
+              break
+            end
+          end
+          if target_entry and target_entry.call_id ~= call.call_id then
+            local shown = vim.tbl_extend('force', {
+              conn_id = call.conn_id,
+              statement = call.statement,
+              sql = call.sql,
+              history = false,
+            }, target_entry, { results = call.results })
+            state.call = shown
+            if res_mod and res_mod.render then
+              res_mod.render(shown)
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 -------------------------------------------------------------------------------
@@ -1349,11 +1401,10 @@ function M.run_query(full_buffer)
   local mode = vim.api.nvim_get_mode().mode
   local is_visual = mode:match '[vV\x16]' ~= nil
 
-  if full_buffer then
-    query_api.execute_buffer()
-  elseif is_visual then
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+  if is_visual then
     query_api.execute_selection()
+  elseif full_buffer ~= false then
+    query_api.execute_buffer()
   else
     query_api.execute_statement()
   end

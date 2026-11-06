@@ -130,6 +130,31 @@ api.nvim_create_user_command('EchoFoldExpr', function()
   notify('Current buffer foldexpr: ' .. expr)
 end, { desc = 'Echo current buffer foldexpr' })
 
+-- Enable spellcheck automatically on prose/commit filetypes (while keeping code/data buffers clean even when reusing the same window)
+local prose_spell_fts = {
+  markdown = true,
+  gitcommit = true,
+  text = true,
+  plaintex = true,
+  tex = true,
+  norg = true,
+}
+api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+  group = api.nvim_create_augroup('UserProseSpell', { clear = true }),
+  callback = function(args)
+    local buf = args.buf
+    if not api.nvim_buf_is_valid(buf) then
+      return
+    end
+    if vim.b[buf].spell_override ~= nil then
+      opt_local.spell = vim.b[buf].spell_override
+    else
+      opt_local.spell = prose_spell_fts[bo[buf].filetype] == true
+    end
+  end,
+  desc = 'Scope spellcheck to prose and git commit buffers per buffer',
+})
+
 -- FileType markdown setup
 api.nvim_create_autocmd('FileType', {
   pattern = { 'markdown' },

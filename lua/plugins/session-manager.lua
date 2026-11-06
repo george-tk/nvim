@@ -1,6 +1,6 @@
 return {
   'folke/persistence.nvim',
-  event = 'BufReadPre',
+  event = { 'BufReadPre', 'VeryLazy' },
   opts = {
     need = 1, -- Only save session when at least 1 real file is open
     branch = true,

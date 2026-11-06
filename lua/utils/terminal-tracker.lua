@@ -220,6 +220,13 @@ local function resolve_dbout_label(buf)
     end
   end
 
+  local ok_st, st = pcall(require, 'sqmeow.core.state')
+  if ok_st and st and st.call then
+    if st.call.source and st.call.source.name and st.call.source.name ~= '' then
+      return strip_schema(st.call.source.name)
+    end
+  end
+
   if db_utils and db_utils.get_active_table then
     local tbl = db_utils.get_active_table(buf)
     if tbl and tbl ~= '' then
@@ -235,11 +242,7 @@ local function resolve_dbout_label(buf)
     end
   end
 
-  local ok_st, st = pcall(require, 'sqmeow.core.state')
   if ok_st and st and st.call then
-    if st.call.source and st.call.source.name and st.call.source.name ~= '' then
-      return strip_schema(st.call.source.name)
-    end
     if st.call.statement and db_utils and db_utils.detect_table_from_sql then
       local tbl = db_utils.detect_table_from_sql(st.call.statement)
       if tbl and tbl ~= '' then
@@ -414,9 +417,20 @@ function M.get_terminals()
     if dbout_buf and vim.api.nvim_buf_is_valid(dbout_buf) then
       local db_running = false
       local db_modified = false
+      local result_pos = nil
       local ok_st, st = pcall(require, 'sqmeow.core.state')
-      if ok_st and st and st.call and st.call.state == 'executing' then
-        db_running = true
+      if ok_st and st and st.call then
+        if st.call.state == 'executing' then
+          db_running = true
+        end
+        if st.call.results and #st.call.results > 1 then
+          for idx, entry in ipairs(st.call.results) do
+            if entry.call_id == st.call.call_id then
+              result_pos = string.format('%d/%d', idx, #st.call.results)
+              break
+            end
+          end
+        end
       end
       local ok_ed, edit = pcall(require, 'sqmeow.ui.edit')
       if ok_ed and edit and edit.count and edit.count() > 0 then
@@ -429,6 +443,7 @@ function M.get_terminals()
         buf = dbout_buf,
         icon = '󰆼 ',
         cmd = resolve_dbout_label(dbout_buf),
+        result_pos = result_pos,
         is_running = db_running,
         is_modified = db_modified,
         order = ensure_order(dbout_buf),
@@ -558,8 +573,9 @@ function M.lualine_component()
     local label
     if t.kind == 'dbout' then
       local run_prefix = t.is_running and (prefix .. ' ') or prefix
+      local res_suffix = t.result_pos and (' ' .. t.result_pos) or ''
       local mod_suffix = t.is_modified and ' ●' or ''
-      label = run_prefix .. truncated .. mod_suffix
+      label = run_prefix .. truncated .. res_suffix .. mod_suffix
     else
       label = prefix .. (t.is_running and (truncated .. ' ') or truncated)
     end

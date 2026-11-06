@@ -66,7 +66,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>bs', desc = 'Switch / Bind Database' },
       { '<leader>bw', desc = 'Save Query' },
       { '<leader>bl', desc = 'Select Saved Query' },
-      { '<leader>br', desc = 'Run Query (Statement / Visual)', mode = { 'n', 'v' } },
+      { '<leader>br', desc = 'Run Query (Buffer / Selection)', mode = { 'n', 'v' } },
       { '<leader>bq', desc = 'Query Scratchpad' },
       { '<leader>bo', desc = 'Query Output' },
       { '<leader>ba', desc = 'Add Database' },

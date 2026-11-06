@@ -83,6 +83,16 @@ return {
                 require('sqmeow.api.query').cancel()
               end)
             end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Stop the running query' })
+            vim.keymap.set('n', ']r', function()
+              pcall(function()
+                require('sqmeow.ui.result').actions.next_result()
+              end)
+            end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the next statement's result" })
+            vim.keymap.set('n', '[r', function()
+              pcall(function()
+                require('sqmeow.ui.result').actions.prev_result()
+              end)
+            end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the previous statement's result" })
           end
 
           local db_url, db_name = db.get_active_db(buf)
@@ -289,7 +299,7 @@ return {
         function()
           db.run_query()
         end,
-        desc = 'Run Query (Statement / Visual)',
+        desc = 'Run Query (Buffer / Selection)',
         mode = { 'n', 'v' },
       },
       {

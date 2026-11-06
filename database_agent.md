@@ -103,6 +103,9 @@ flowchart TD
 | **26. Granular Winbar Toggles & Statusline API (`api.view.status` / `api.view.column`)** | Upstream `sqmeow.api.view.status()` & `sqmeow.api.view.column()` (`lua/plugins/lualine.lua`) | `ui.winbar` was previously boolean-only, and statusline integrations had to inspect `sqmeow.core.state` and `sqmeow.ui.result` internals manually. | **RESOLVED & MERGED UPSTREAM ([PR #101](https://github.com/2giosangmitom/sqmeow.nvim/pull/101) / [Issue #85](https://github.com/2giosangmitom/sqmeow.nvim/issues/85), Commit `f997b4b`)**. `lua/plugins/lualine.lua` now consumes `require('sqmeow.api.view').column()` and `require('sqmeow.api.view').status(target_buf)` directly; manual rule-line column parsing and state telemetry inspection retired. |
 | **27. Foreign Key Row Drilldown (`gd` / `gr` in Result Grid & Row Details)** | Upstream native `result.actions.goto_definition` (`gd`) & `goto_references` (`gr`) | Navigating from a foreign-key cell to its referenced parent row or child rows previously required writing manual `SELECT ... WHERE` queries. | **RESOLVED & MERGED UPSTREAM ([PR #100](https://github.com/2giosangmitom/sqmeow.nvim/pull/100) / [Issue #86](https://github.com/2giosangmitom/sqmeow.nvim/issues/86), Commit `b32057e`)**. Upstream natively binds `gd` and `gr` in both the result grid and the `K` row-details popup, backed by engine-level predicate construction (`call:follow`). |
 | **28. Dialect-Quoted Identifier Completion & Relation Cache Warming** | Upstream native `sqmeow.completion` & `sqmeow.core.sql.needs_quote` | Mixed-case/reserved identifiers previously completed unquoted, and `completion.ensure` only warmed root schemas (`{}`). | **RESOLVED & MERGED UPSTREAM ([PR #106](https://github.com/2giosangmitom/sqmeow.nvim/pull/106) / [Issue #99](https://github.com/2giosangmitom/sqmeow.nvim/issues/99), Commit `ea9f2c2`)**. Upstream now natively quotes non-standard/reserved identifiers per dialect, replaces already-typed opening/autopair quotes via `textEdit`, and progressively warms schema groups and relation lists in `completion.ensure`. Local `transform_items` override in `autocompletion.lua` and `completion.ensure` hook in `database.lua` retired. |
+| **29. Multi-Statement Result Telemetry (`result_index` / `total_results`) in `api.view.status()`** | [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua#L412) & [`lua/utils/terminal-tracker.lua`](file:///home/georgek/.config/nvim/lua/utils/terminal-tracker.lua#L420) | `sqmeow.api.view.status()` omits `result_index` and `total_results` when `#call.results > 1`, hiding multi-result position when `ui.winbar = false`. | **ISSUE FILED UPSTREAM ([Issue #114](https://github.com/2giosangmitom/sqmeow.nvim/issues/114))**. Handled locally in `lualine.lua` (`result X/Y`) and `terminal-tracker.lua` (`X/Y`) until merged upstream. |
+| **30. Multi-Statement Result Cycling (`]r` / `[r`) from Editor Buffers & Public API** | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua#L86) | `]r` and `[r` are only bound in `keymap.result`, not `keymap.editor`, and `next_result` / `prev_result` are missing from `sqmeow.api.query` and `:Sqmeow` commands. | **ISSUE FILED UPSTREAM ([Issue #115](https://github.com/2giosangmitom/sqmeow.nvim/issues/115))**. Bound `]r` / `[r` on SQL editor buffers locally in `lua/plugins/database.lua`. |
+| **31. Start Multi-Statement Runs on First Row-Returning Result (`1/N`)** | [`lua/utils/database.lua`](file:///home/georgek/.config/nvim/lua/utils/database.lua#L906) (`events.on_call` hook) | `sqmeow-core` (`calls.rs:478`) defaults to displaying the final statement (`result N/N`) instead of the first row-returning result (`result 1/N`). | **ISSUE FILED UPSTREAM ([Issue #116](https://github.com/2giosangmitom/sqmeow.nvim/issues/116))**. Hooked `events.on_call` locally to select the first row-returning result upon multi-statement completion. |
 
 
 
@@ -707,6 +710,31 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 1. `sqmeow.core.sql.needs_quote(dialect, name, qualified)` and `sqmeow.completion.context.open_quote(prefix)` quote identifiers per dialect and build `textEdit` ranges replacing already-typed opening/autopair quotes; `sqmeow.completion.blink` and `cmp` forward `insertText`, `filterText`, and `textEdit`.
 2. `completion.ensure(conn_id)` calls `relations(conn_id, true)` to progressively warm schema groups and relation lists in the background.
 3. Retired local `transform_items` override in [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua) and `completion.ensure` wrapper in [`lua/utils/database.lua`](file:///home/georgek/.config/nvim/lua/utils/database.lua).
+
+---
+
+### Issue 18: Expose `result_index` and `total_results` in `sqmeow.api.view.status()` [OPEN UPSTREAM - Issue #114]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #114](https://github.com/2giosangmitom/sqmeow.nvim/issues/114)).
+
+**Title**: `feat(api): expose result_index and total_results in sqmeow.api.view.status()`
+
+---
+
+### Issue 19: Expose `next_result` and `prev_result` in `api.query`, commands, and editor keymaps [OPEN UPSTREAM - Issue #115]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #115](https://github.com/2giosangmitom/sqmeow.nvim/issues/115)).
+
+**Title**: `feat(query): expose next_result and prev_result in api.query, commands, and editor keymaps`
+
+---
+
+### Issue 20: Start multi-statement runs on the first row-returning result instead of the final statement [OPEN UPSTREAM - Issue #116]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #116](https://github.com/2giosangmitom/sqmeow.nvim/issues/116)).
+
+**Title**: `fix(result): start multi-statement runs on the first row-returning result instead of the final statement`
+
 
 
 

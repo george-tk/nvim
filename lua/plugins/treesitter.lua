@@ -24,12 +24,38 @@ return {
         'sql',
       }
 
-      -- Enable Treesitter highlighting and indenting natively in Neovim 0.12+
+      -- Enable Treesitter highlighting and indenting natively in Neovim 0.12+ (with large-file & special-buffer guard)
       vim.api.nvim_create_autocmd('FileType', {
         group = vim.api.nvim_create_augroup('TreesitterAttach', { clear = true }),
         callback = function(args)
-          pcall(vim.treesitter.start, args.buf)
-          vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          local buf = args.buf
+          if not vim.api.nvim_buf_is_valid(buf) then
+            return
+          end
+          local ft = vim.bo[buf].filetype
+          local bt = vim.bo[buf].buftype
+          if ft == 'bigfile' or ft == 'sqmeow-result' or ft == 'sqmeow-drawer' or ft == 'dbout' or ft == 'dbui' or ft:match '^snacks' then
+            return
+          end
+          if bt ~= '' and not vim.b[buf].sqmeow_editor and not vim.b[buf].is_preview_buffer then
+            return
+          end
+          local name = vim.api.nvim_buf_get_name(buf)
+          if name ~= '' then
+            local ok, stat = pcall((vim.uv or vim.loop).fs_stat, name)
+            if ok and stat and stat.size > 1024 * 1024 then
+              vim.schedule(function()
+                for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+                  if vim.api.nvim_win_is_valid(win) then
+                    vim.wo[win].foldmethod = 'manual'
+                  end
+                end
+              end)
+              return
+            end
+          end
+          pcall(vim.treesitter.start, buf)
+          vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
         end,
       })
     end,

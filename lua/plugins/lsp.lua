@@ -17,7 +17,7 @@ return {
   ---------------------------------------------------------------------------
   {
     'neovim/nvim-lspconfig',
-    event = { 'BufReadPre', 'BufNewFile' }, -- start when actually editing files
+    event = { 'BufReadPre', 'BufNewFile', 'VeryLazy' }, -- start when editing files or after dashboard
     dependencies = {
       { 'mason-org/mason.nvim', cmd = 'Mason', opts = {} },
       'mason-org/mason-lspconfig.nvim',
@@ -57,8 +57,15 @@ return {
 
       -----------------------------------------------------------------------
       -- Blink capabilities (full completion features)
+      -- Disable recursive LSP file watcher on Linux/WSL to prevent inotify/9P stalls
       -----------------------------------------------------------------------
-      local capabilities = require('blink.cmp').get_lsp_capabilities()
+      local capabilities = require('blink.cmp').get_lsp_capabilities {
+        workspace = {
+          didChangeWatchedFiles = {
+            dynamicRegistration = false,
+          },
+        },
+      }
 
       -----------------------------------------------------------------------
       -- Large-file guard: return true if file < 1 MiB
@@ -81,6 +88,30 @@ return {
           return util.root_pattern(unpack(patterns))(fname) or util.find_git_ancestor(fname) or fallback
         end
       end
+
+      -----------------------------------------------------------------------
+      -- Global diagnostic & code fallbacks so <leader>c* never falls through
+      -- to raw Normal-mode `c` commands before an LSP client attaches
+      -----------------------------------------------------------------------
+      local function notify_no_lsp()
+        vim.notify('No active LSP client attached to this buffer', vim.log.levels.INFO, { title = 'LSP' })
+      end
+      vim.keymap.set('n', '<leader>cd', vim.diagnostic.open_float, { desc = 'Line Diagnostics' })
+      vim.keymap.set('n', '<leader>cD', function()
+        Snacks.picker.diagnostics()
+      end, { desc = 'Workspace Diagnostics' })
+      vim.keymap.set('n', 'gl', vim.diagnostic.open_float, { desc = 'Line Diagnostics' })
+      vim.keymap.set('n', '[d', function()
+        vim.diagnostic.jump { count = -1, float = true }
+      end, { desc = 'Previous Diagnostic' })
+      vim.keymap.set('n', ']d', function()
+        vim.diagnostic.jump { count = 1, float = true }
+      end, { desc = 'Next Diagnostic' })
+      vim.keymap.set('n', '<leader>cr', notify_no_lsp, { desc = 'Rename Symbol' })
+      vim.keymap.set({ 'n', 'v' }, '<leader>ca', notify_no_lsp, { desc = 'Code Action' })
+      vim.keymap.set('n', '<leader>cR', notify_no_lsp, { desc = 'References' })
+      vim.keymap.set('n', '<leader>cs', notify_no_lsp, { desc = 'Document Symbols' })
+      vim.keymap.set('n', '<leader>ci', notify_no_lsp, { desc = 'Implementations' })
 
       -----------------------------------------------------------------------
       -- LspAttach: Inlay hints, document highlight, buffer keymaps
@@ -204,6 +235,23 @@ return {
           },
         },
 
+        pyright = {
+          root_dir = root_with({ 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', 'pyrightconfig.json', '.git' }, vim.uv.cwd()),
+          settings = {
+            python = {
+              analysis = {
+                autoSearchPaths = true,
+                useLibraryCodeForTypes = true,
+                diagnosticMode = 'openFilesOnly',
+              },
+            },
+          },
+        },
+
+        ruff = {
+          root_dir = root_with({ 'pyproject.toml', 'ruff.toml', '.ruff.toml', 'setup.py', 'requirements.txt', '.git' }, vim.uv.cwd()),
+        },
+
         -- Uncomment to enable TypeScript/JavaScript (tsserver via ts_ls)
         -- ts_ls = {
         --   root_dir = root_with({ 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' }, vim.uv.cwd()),
@@ -222,34 +270,41 @@ return {
       -----------------------------------------------------------------------
       -- Ensure tools via Mason (automatically installed on startup)
       -----------------------------------------------------------------------
+      require('mason').setup()
+
       local ensure = vim.tbl_keys(servers)
       vim.list_extend(ensure, {
         'stylua', -- Lua Formatter
-        'prettier', -- Markdown, JSON, HTML, CSS Formatter
+        'prettier', -- Markdown, JSON, YAML, HTML, CSS Formatter
         'sql-formatter', -- SQL Formatter
       })
 
-      require('mason-tool-installer').setup {
+      local mti = require 'mason-tool-installer'
+      mti.setup {
         ensure_installed = ensure,
         auto_update = false,
         run_on_start = true,
       }
+      -- Trigger run_on_start explicitly in case LSP loaded on VeryLazy (after VimEnter)
+      vim.schedule(function()
+        mti.run_on_start()
+      end)
+
+      for server_name, server in pairs(servers) do
+        server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+        server.flags = vim.tbl_deep_extend('force', {
+          debounce_text_changes = 200,
+        }, server.flags or {})
+        if vim.lsp and vim.lsp.config then
+          vim.lsp.config(server_name, server)
+        else
+          require('lspconfig')[server_name].setup(server)
+        end
+      end
 
       require('mason-lspconfig').setup {
-        ensure_installed = {}, -- we install via mason-tool-installer
-        automatic_installation = false,
-        handlers = {
-          function(server_name)
-            local server = servers[server_name] or {}
-            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
-            -- Default flags to reduce churn
-            server.flags = vim.tbl_deep_extend('force', {
-              debounce_text_changes = 200,
-            }, server.flags or {})
-
-            require('lspconfig')[server_name].setup(server)
-          end,
-        },
+        ensure_installed = {}, -- installed via mason-tool-installer
+        automatic_enable = true,
       }
     end,
   },

@@ -17,11 +17,11 @@ return {
     format_on_save = false, -- Disabled autoformat on save (manual trigger only via <leader>cf)
     formatters_by_ft = {
       lua = { 'stylua' },
-      -- python = { 'isort', 'black' },
+      python = { 'ruff_organize_imports', 'ruff_format' },
       markdown = { 'prettier' },
+      json = { 'prettier' },
+      yaml = { 'prettier' },
       sql = { 'sql_formatter' },
-      -- Example: run the first available
-      -- javascript = { "prettierd", "prettier", stop_after_first = true },
     },
   },
 }

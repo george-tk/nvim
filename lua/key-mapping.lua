@@ -2,14 +2,21 @@
 vim.g.mapleader = ' '
 vim.g.maplocalleader = ' '
 
+-- Prevent <Space> from moving cursor forward 1 character in Normal/Visual mode when a <leader> chord times out or is unmapped
+vim.keymap.set({ 'n', 'v' }, '<Space>', '<Nop>', { silent = true })
+
 -- Clear highlights on search
 vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 
 -- Exit terminal mode
 vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit Terminal Mode' })
 
--- Spelling (Clean 2-key length, compact cursor box)
-vim.keymap.set('n', '<leader>st', '<cmd>set spell!<CR>', { desc = 'Spelling Toggle' })
+-- Spelling (Clean 2-key length, compact cursor box, per-buffer persistence)
+vim.keymap.set('n', '<leader>st', function()
+  local next_state = not vim.wo.spell
+  vim.wo.spell = next_state
+  vim.b.spell_override = next_state
+end, { desc = 'Spelling Toggle' })
 vim.keymap.set('n', '<leader>sn', ']s <leader>ss', { desc = 'Next Spell Error', remap = true })
 vim.keymap.set('n', '<leader>sp', '[s <leader>ss', { desc = 'Previous Spell Error', remap = true })
 
