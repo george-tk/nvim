@@ -17,8 +17,8 @@ This document serves as the single source of truth for auditing, updating, and m
 
 ## 1. Upstream Baseline Reference & Inventory
 
-The table below catalogs all **34 installed plugins** managed by `lazy.nvim` as of **November 2, 2026**.
-- **Historical Audit Scope**: Covers updates from **July 1, 2026** to **November 2, 2026**.
+The table below catalogs all **36 installed plugins** managed by `lazy.nvim` as of **November 7, 2026**.
+- **Historical Audit Scope**: Covers updates from **July 1, 2026** to **November 7, 2026**.
 - **Future Audit Rule**: Any future session running an audit must **only** inspect commits introduced **after** the pinned baseline commit hash recorded in this table.
 
 ```bash
@@ -31,14 +31,14 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 
 | Plugin Name | Repository Slug | Baseline Commit | Commit Date | Active Config File | Audit Status (Nov 2026) |
 |---|---|---|---|---|---|
-| **snacks.nvim** | `folke/snacks.nvim` | `882c996` | 2026-05-25 | [`lua/plugins/snacks-*.lua`](file:///home/georgek/.config/nvim/lua/plugins/snacks-picker.lua) | ✓ Up to date on `main` |
+| **snacks.nvim** | `folke/snacks.nvim` | `882c996` | 2026-05-25 | [`lua/plugins/snacks-*.lua`](file:///home/georgek/.config/nvim/lua/plugins/snacks-picker.lua) | ✓ Up to date on `main` (Right Panel Slot 1 `󰙅` Explorer) |
 | **blink.cmp** | `saghen/blink.cmp` | `78336bc` (`v1.10.2`) | 2026-04-04 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua) | ⚠️ Pinned to `v1.*`; 259 commits on `main` for v2 (no `v2.0.0` tag yet) |
 | **blink-cmp-dictionary** | `Kaiser-Yang/blink-cmp-dictionary` | `898a958` | 2026-06-01 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L44) | ✓ Up to date |
 | **LuaSnip** | `L3MON4D3/LuaSnip` | `0abc8f3` | 2026-05-19 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L10) | ✓ Unpinned from `v2.*` and updated to `master` (Neovim 0.12 API fixes) |
 | **friendly-snippets** | `rafamadriz/friendly-snippets` | `b2ea5c4` | 2026-10-27 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L18) | ✓ Up to date (Elixir function snippets #591) |
 | **lspkind.nvim** | `onsails/lspkind.nvim` | `c7274c4` | 2026-01-29 | [`lua/plugins/autocompletion.lua`](file:///home/georgek/.config/nvim/lua/plugins/autocompletion.lua#L47) | ✓ Up to date |
 | **lazydev.nvim** | `folke/lazydev.nvim` | `ff2cbcb` | 2026-03-14 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L6) | ✓ Up to date |
-| **nvim-lspconfig** | `neovim/nvim-lspconfig` | `d8d2fda` | 2026-10-31 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L19) | ✓ Audited; added `dbt`, `mise`, `badness`, `kmp_lsp`, `kconfig_lsp`, `roslyn_ls` |
+| **nvim-lspconfig** | `neovim/nvim-lspconfig` | `d8d2fda` | 2026-10-31 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L19) | ✓ Audited; Neovim 0.11+ `root_dir(bufnr, on_dir)` compatible |
 | **mason.nvim** | `mason-org/mason.nvim` | `2a6940a` | 2026-06-11 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L22) | ✓ Up to date |
 | **mason-lspconfig.nvim** | `mason-org/mason-lspconfig.nvim` | `3a5cd6d` | 2026-11-02 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L23) | ✓ Up to date (generated server mappings #709-#712) |
 | **mason-tool-installer.nvim** | `WhoIsSethDaniel/mason-tool-installer.nvim` | `443f1ef` | 2026-01-22 | [`lua/plugins/lsp.lua`](file:///home/georgek/.config/nvim/lua/plugins/lsp.lua#L24) | ✓ Up to date |
@@ -47,20 +47,22 @@ git -C ~/.local/share/nvim/lazy/<plugin_dir> log <BASELINE_COMMIT>..origin/HEAD 
 | **nvim-treesitter** | `nvim-treesitter/nvim-treesitter` | `0195cd6` | 2026-11-02 | [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L3) | ✓ Modernized to `main` branch; updated sql/markdown/vimdoc/jinja queries |
 | **nvim-treesitter-textobjects** | `nvim-treesitter/nvim-treesitter-textobjects` | `5c7b026` | 2026-09-03 | [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua#L19) | ✓ Dedicated exclusively to jump motions |
 | **mini.ai** | `echasnovski/mini.ai` | `a4f5648` | 2026-10-27 | [`lua/plugins/mini-ai.lua`](file:///home/georgek/.config/nvim/lua/plugins/mini-ai.lua) | ✓ Up to date (Neovim >=0.13 multicursor support) |
-| **neocodeium** | `monkoose/neocodeium` | `ab8a3da` (`v1.19.1`) | 2026-06-22 | [`lua/plugins/neocodeium.lua`](file:///home/georgek/.config/nvim/lua/plugins/neocodeium.lua) | ✓ Monkey-patch active; auth moved to `<leader>aU` |
-| **opencode.nvim** | `nickjvandyke/opencode.nvim` | `84eabfb` (`v1.0.2`) | 2026-09-14 | [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua) | ⚠️ Pinned to `version = '*'` (`v1.0.2`) matching stable CLI 1.19.x; filed upstream #342-#346 |
+| **neocodeium** | `monkoose/neocodeium` | `ab8a3da` (`v1.19.1`) | 2026-06-22 | [`lua/plugins/neocodeium.lua`](file:///home/georgek/.config/nvim/lua/plugins/neocodeium.lua) | ✓ Monkey-patch active; SQL scratchpad & unnamed buffer ghost text enabled |
+| **opencode.nvim** | `nickjvandyke/opencode.nvim` | `84eabfb` (`v1.0.2`) | 2026-09-14 | [`lua/plugins/opencode.lua`](file:///home/georgek/.config/nvim/lua/plugins/opencode.lua) | ⚠️ Pinned to `version = '*'` (`v1.0.2`); Right Panel Slot 3 `󰚩` (`38%` width) |
 | **gitsigns.nvim** | `lewis6991/gitsigns.nvim` | `1e9d0fb` | 2026-10-29 | [`lua/plugins/gitsigns.lua`](file:///home/georgek/.config/nvim/lua/plugins/gitsigns.lua) | ✓ Up to date (linked worktree pathspecs, debounce recovery, EOF show_deleted) |
-| **neogit** | `NeogitOrg/neogit` | `697ad3e` | 2026-10-27 | [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua) | ✓ Up to date (100% floating mode, direct `vim.fn.setreg` clipboard yanking) |
+| **neogit** | `NeogitOrg/neogit` | `697ad3e` | 2026-10-27 | [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua) | ✓ Docked in Right Panel Slot 4 `󰊢` (`48%` width, VS Code Source Control workflow) |
 | **diffview.nvim** | `sindrets/diffview.nvim` | `4516612` | 2024-06-13 | [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua#L5) | Stable; `<leader>gd` toggles cleanly |
+| **dockyard.nvim** | `emrearmagan/dockyard.nvim` | `422ba43` | 2026-09-18 | [`lua/plugins/dockyard.lua`](file:///home/georgek/.config/nvim/lua/plugins/dockyard.lua) | ✓ Docked in Right Panel Slot 5 `󰡨` (`48%` width, sub-views/logs/files confined) |
+| **grug-far.nvim** | `MagicDuck/grug-far.nvim` | `91b7e58` | 2026-10-21 | [`lua/plugins/grug-far.lua`](file:///home/georgek/.config/nvim/lua/plugins/grug-far.lua) | ✓ Docked in Right Panel Slot 6 `󰛔` (`45%` width, `<leader>fs` & `<leader>fW`) |
 | **which-key.nvim** | `folke/which-key.nvim` | `3aab214` (`v3.*`) | 2025-10-28 | [`lua/plugins/which-key.lua`](file:///home/georgek/.config/nvim/lua/plugins/which-key.lua) | ✓ Modern v3 spec format verified |
-| **lualine.nvim** | `nvim-lualine/lualine.nvim` | `221ce6b` | 2026-05-31 | [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua) | ✓ Unified 3-zone component in `lualine_c`, macro/DB/filetype in `lualine_x` |
+| **lualine.nvim** | `nvim-lualine/lualine.nvim` | `221ce6b` | 2026-05-31 | [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua) | ✓ Unified 3-zone component in `lualine_c` (4-slot Editor, Bottom Tracker, 6-slot Right Panel) |
 | **catppuccin** | `catppuccin/nvim` | `edefef7` | 2026-08-09 | [`lua/plugins/colorscheme.lua`](file:///home/georgek/.config/nvim/lua/plugins/colorscheme.lua) | ✓ Auto-integrations for Snacks/Blink audited |
 | **render-markdown.nvim** | `MeanderingProgrammer/render-markdown.nvim` | `8e87953` | 2026-10-10 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L3) | ✓ Up to date |
 | **mkdnflow.nvim** | `jakewvincent/mkdnflow.nvim` | `272148c` | 2026-07-03 | [`lua/plugins/markdown.lua`](file:///home/georgek/.config/nvim/lua/plugins/markdown.lua#L37) | Retained per user request |
 | **nvim-origami** | `chrisgrieser/nvim-origami` | `a137d35` | 2026-08-03 | [`lua/plugins/fold-origami.lua`](file:///home/georgek/.config/nvim/lua/plugins/fold-origami.lua) | ✓ Up to date |
 | **persistence.nvim** | `folke/persistence.nvim` | `b20b2a7` | 2025-10-28 | [`lua/plugins/session-manager.lua`](file:///home/georgek/.config/nvim/lua/plugins/session-manager.lua) | ✓ Project-linked sessions, multi-event auto-save (FocusLost, BufWritePost, DirChangedPre) |
 | **todo-picker** | `george-tk/todo-picker` | `9e48dc0` | 2026-07-22 | [`lua/plugins/todo.lua`](file:///home/georgek/.config/nvim/lua/plugins/todo.lua) | User custom plugin; added `ToDoLog` & `ToDoBoard` |
-| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `d0bb4a7` | 2026-11-02 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Updated to `d0bb4a7`: merged PR #106 (`ea9f2c2` dialect identifier quoting & relation cache warm) & PR #108 (`9fe3b16`) |
+| **sqmeow.nvim** | `2giosangmitom/sqmeow.nvim` | `d0bb4a7` | 2026-11-02 | [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) | ✓ Updated to `d0bb4a7` (Right Panel Slot 2 `󰆼` DBUI Drawer) |
 | **lazy.nvim** | `folke/lazy.nvim` | `306a055` | 2025-12-17 | [`init.lua`](file:///home/georgek/.config/nvim/init.lua) | Core plugin manager |
 | **plenary.nvim** | `nvim-lua/plenary.nvim` | `74b06c6` | 2026-04-10 | Dependency | Shared Lua library |
 | **nui.nvim** | `MunifTanjim/nui.nvim` | `10fc361` | 2026-08-21 | Dependency | UI components for sqmeow & snacks |
@@ -95,10 +97,12 @@ flowchart TD
         ORIGAMI["chrisgrieser/nvim-origami"]
     end
 
-    subgraph Git & Sessions
-        NEOGIT["NeogitOrg/neogit"]
+    subgraph Git, Docker, Search & Sessions
+        NEOGIT["NeogitOrg/neogit<br/>(Right Panel Slot 4 󰊢)"]
         DIFFVIEW["sindrets/diffview.nvim"]
         GITSIGNS["lewis6991/gitsigns.nvim"]
+        DOCKYARD["emrearmagan/dockyard.nvim<br/>(Right Panel Slot 5 󰡨)"]
+        GRUGFAR["MagicDuck/grug-far.nvim<br/>(Right Panel Slot 6 󰛔)"]
         PERSIST["folke/persistence.nvim"]
     end
 
@@ -198,11 +202,36 @@ flowchart TD
 
 ---
 
-### 3.2. Tier 2: Search, Navigation & UI
+### 3.2. Tier 2: Right Panel Tools, Search, Navigation & UI
 
-#### 8. `MagicDuck/grug-far.nvim` [RETIRED]
-- **Status**: Retired & uninstalled in October 2026 per user request.
-- **Rationale**: User preferred native and Snacks single-file navigation; multi-file search & replace keys (`<leader>sr`, `<leader>sw`) were removed to strictly dedicate `<leader>s` to Spelling (`<leader>st`, `<leader>ss`, `<leader>sn`, `<leader>sp`). Removed `lua/plugins/grug-far.lua`.
+#### 8. `MagicDuck/grug-far.nvim` (Right Panel Slot 6 `󰛔`)
+- **Baseline**: `91b7e58` (October 21, 2026).
+- **Architecture & Integration** ([`lua/plugins/grug-far.lua`](file:///home/georgek/.config/nvim/lua/plugins/grug-far.lua), [`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua#L767-L876)):
+  - Docked in **Right Panel Slot 6 (`󰛔`)** at `45%` width (minimum `56` columns) via `instanceName = 'right_panel'` and `windowCreationCommand = 'botright vsplit | setlocal nowinfixbuf'`.
+  - **Keybindings**: `<leader>fs` (Search & Replace; seeds visual selection in visual mode), `<leader>fW` (Replace Word Under Cursor), and `<C-6>` / `<C-^>` / `<M-6>` / `<leader>6`.
+  - **Explorer-Style Navigation**: In the results list, `l` unfolds a collapsed file fold or previews/opens the match in the Left Code Editor while keeping focus in GrugFar; `h` collapses the file fold; `<CR>` jumps to the file in the Left Editor while keeping GrugFar open; `q` closes the Right Panel.
+  - **Self-Healing Instance Lifecycle**: `RightPanel.open_grugfar()` verifies `inst._is_ready == true` and `line_count > 2` before reusing the `'right_panel'` instance, automatically recreating it if a previous open was interrupted mid-initialization.
+
+#### 8b. `emrearmagan/dockyard.nvim` (Right Panel Slot 5 `󰡨`)
+- **Baseline**: `422ba43` (September 18, 2026).
+- **Architecture & Integration** ([`lua/plugins/dockyard.lua`](file:///home/georgek/.config/nvim/lua/plugins/dockyard.lua), [`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua#L715-L765)):
+  - Docked in **Right Panel Slot 5 (`󰡨`)** at `48%` width (minimum `60` columns), triggered via `<leader>DD` / `<leader>Dd` or `<C-5>` / `<M-5>` / `<leader>5`.
+  - **Confined Sub-Views**: All Dockyard sub-views stay strictly inside the Right Panel:
+    - Detail Panel (`p` or `l` on leaf items), Hover Inspect (`K`), and `LogLens` (`L`) open as a bottom split inside the Right Panel column.
+    - Log entry detail cards (`l` / `<CR>` / `K` inside `LogLens`) open as a bordered card anchored over the `LogLens` split (preventing 3-way vertical stacking) and return focus to `LogLens` on `q` / `h` / `<Esc>`.
+    - Container Filesystem Browser (`f`) swaps in-place inside the Right Panel (`winfixbuf = false`), navigates directories with `l`/`h`, opens container files in the Left Code Editor (`RightPanel.get_editor_win()`), and returns to Containers on `q`.
+    - Container Shell (`T`) opens via `Snacks.terminal` in the Bottom Panel.
+  - **Async Cursor Guard**: Patched `dockyard.ui.navigation` (`first`, `last`, `down`, `up`) to target `ui_state.win_id` (instead of window `0`), verify `nvim_win_get_buf(win) == ui_state.buf_id`, and clamp line bounds.
+
+#### 8c. `NeogitOrg/neogit` (Right Panel Slot 4 `󰊢`)
+- **Baseline**: `697ad3e` (October 27, 2026).
+- **Architecture & Integration** ([`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua), [`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua#L643-L713)):
+  - Docked in **Right Panel Slot 4 (`󰊢`)** at `48%` width (minimum `60` columns) with soft wrapping (`wrap`, `linebreak`, `breakindent`).
+  - **VS Code Source Control Workflow**:
+    - Pressing `c` in `NeogitStatus` opens the `COMMIT_EDITMSG` editor directly at the **top** of the Right Panel above `NeogitStatus` (auto-prompting to stage all if nothing is staged), while `C` opens the full Commit Options popup.
+    - Popups (`P`, `p`, `b`, `L`, `Z`, `C`) reflow their action groups into at most 2 columns and open at the **bottom** of the Right Panel below `NeogitStatus`.
+    - Sub-views (`LogView`, `CommitView`, `RefsView`, `StashView`) open in-place (`kind = 'replace'`, `winfixbuf = false`) inside the Right Panel and close synchronously without `:b#` side effects.
+    - `l` expands/toggles folds in `NeogitStatus` and opens commits in `LogView`/`RefsView`; `h` collapses folds (climbing to parent file/section if needed); `<CR>` opens files/hunks in the Left Code Editor while keeping Neogit open.
 
 #### 9. `folke/which-key.nvim`
 - **Baseline**: `3aab214` (v3 spec).
@@ -268,11 +297,11 @@ Removed redundant selection mappings (`af`, `if`, `ac`, `ic`, `aa`, `ia`) from [
 ### Tweak 3: Modernized `nvim-treesitter` to `main` Branch [RESOLVED]
 Migrated `nvim-treesitter` in [`lua/plugins/treesitter.lua`](file:///home/georgek/.config/nvim/lua/plugins/treesitter.lua) to the upstream `main` branch rewrite designed for Neovim 0.12+. Resolves the Neovim 0.12 `attempt to call method 'range' (a nil value)` crash caused by legacy `master` branch query directives (`query_predicates.lua`). Uses Neovim's native Treesitter highlighter (`vim.treesitter.start()`), native indentexpr, and `tree-sitter-cli` 0.26 parser compilation.
 
-### Tweak 4: Pure Floating Neogit & Modern Popup Kind [RESOLVED]
-Configured all Neogit views to `kind = 'floating'` in [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua), completely eliminating disruptive tabpages and window split reshuffling. Updated `popup = { kind = 'popup' }` matching upstream commit `97c21a4`.
+### Tweak 4: Right-Panel Docked Neogit (VS Code Source Control Workflow) [RESOLVED]
+Docked `Neogit` in Right Panel Slot 4 (`󰊢`, `48%` width, min 60 cols) in [`lua/plugins/neogit.lua`](file:///home/georgek/.config/nvim/lua/plugins/neogit.lua) and [`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua). Configured direct commit on `c` (top split of Right Panel), 2-column reflowed popups (bottom split of Right Panel), in-place `replace` sub-views (`LogView`, `CommitView`, `RefsView`, `StashView`), Explorer-style `l`/`h` fold navigation, and Left Editor file opening on `<CR>`.
 
-### Tweak 5: Retired `grug-far.nvim` & Consolidated Keybindings [RESOLVED]
-Uninstalled `grug-far.nvim` by removing `lua/plugins/grug-far.lua`. Dedicated `<leader>s` strictly to Spelling (`<leader>st`, `<leader>ss`, `<leader>sn`, `<leader>sp`). Standardized code formatting on `<leader>cf` (removed duplicate `<leader>=`), removed `<leader>fo`, and enhanced `<leader>c` with LSP navigation (`<leader>cD`, `<leader>cR`, `<leader>cs`, `<leader>ci`, `<leader>ct`).
+### Tweak 5: Right-Panel Docked `dockyard.nvim` (Slot 5) & `grug-far.nvim` (Slot 6) [RESOLVED]
+Installed and integrated `emrearmagan/dockyard.nvim` ([`lua/plugins/dockyard.lua`](file:///home/georgek/.config/nvim/lua/plugins/dockyard.lua), Slot 5 `󰡨`, `<leader>DD`/`<leader>Dd`) and `MagicDuck/grug-far.nvim` ([`lua/plugins/grug-far.lua`](file:///home/georgek/.config/nvim/lua/plugins/grug-far.lua), Slot 6 `󰛔`, `<leader>fs`/`<leader>fW`) into the Right Panel with Explorer-style `l`/`h`/`<CR>`/`q` navigation, while keeping `<leader>s` dedicated to Spelling (`<leader>st`, `<leader>ss`, `<leader>sn`, `<leader>sp`).
 
 ### Tweak 6: Suppress Vacant Slots in Lualine [RESOLVED]
 Updated [`lua/utils/buffer-ring.lua`](file:///home/georgek/.config/nvim/lua/utils/buffer-ring.lua#L560-L565) to suppress vacant slot placeholders (`···`). Empty slots take up zero characters on narrow windows, while occupied slots retain their non-shifting fixed index numbers (`1..4`) for `<leader>1` through `<leader>4` jumps.
@@ -331,9 +360,15 @@ Hardened the layout engine in [`lua/key-mapping.lua`](file:///home/georgek/.conf
 - Unified `lualine_c` in [`lua/plugins/lualine.lua`](file:///home/georgek/.config/nvim/lua/plugins/lualine.lua) into a single focus-aware component (`get_focused_zone()`) and emptied `lualine_x`:
   - **Editor (`zone == 'editor'`)**: 4-slot Buffer Ring ([`lua/utils/buffer-ring.lua`](file:///home/georgek/.config/nvim/lua/utils/buffer-ring.lua)) with per-buffer filetype icons (`nvim-web-devicons` / `󰆼` for SQL) and schema-stripped preview/alter/routine labels (`order_items`).
   - **Bottom Panel (`zone == 'bottom'`)**: Bottom Panel Tracker ([`lua/utils/terminal-tracker.lua`](file:///home/georgek/.config/nvim/lua/utils/terminal-tracker.lua)) displaying Terminals (` `), explicitly opened SQL Results (`󰆼 <table_name>`), and Quickfix (`󰁨 <source> (<count>)`) in visual left-to-right opening order, with `/proc/<pid>/stat` foreground job detection (``, `TerminalTrackerRunning`) and `<C-1..4>` / `<M-1..4>` / `<leader>1..4` slot switching.
-  - **Right Sidebar (`zone == 'right'`)**: Persistent 3-icon Right Panel Dock ([`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua)) showing ` 󰙅 | 󰆼 | 󰚩 ` in fixed slots `1..3`.
+  - **Right Sidebar (`zone == 'right'`)**: Persistent 6-icon Right Panel Dock ([`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua)) showing ` 󰙅  |  󰆼  |  󰚩  |  󰊢  |  󰡨  |  󰛔 ` in fixed slots `1..6` (every segment is 5 visual cells wide with the icon centered at cell 3).
 - Added 0ms-latency macro recording indicator (`● @<reg>` in bold Catppuccin Red `#f38ba9`) in `lualine_y` via `RecordingEnter`/`RecordingLeave`, taking priority over database connection and filetype.
 - Enabled `sqmeow.nvim` native `opts.ui.winbar = false` and `winfixbuf` locking (`7a6d1fd`), retiring ~45 lines of custom winbar-stripping and window-locking workarounds from [`lua/plugins/database.lua`](file:///home/georgek/.config/nvim/lua/plugins/database.lua) and [`lua/utils/database.lua`](file:///home/georgek/.config/nvim/lua/utils/database.lua).
+
+### Tweak 15: 6-Slot Right Panel Architecture & Layout Stability Hardening [RESOLVED]
+- Expanded the Right Panel in [`lua/utils/layout.lua`](file:///home/georgek/.config/nvim/lua/utils/layout.lua) and [`lua/key-mapping.lua`](file:///home/georgek/.config/nvim/lua/key-mapping.lua) to 6 slots (`<C-1..6>`, `<M-1..6>`, `<leader>1..6`, plus `<C-@>` and `<C-^>` terminal fallbacks; `<C-5>`/`<C-6>` open Slots 5/6 directly from the Editor while `1..4` manage the 4-slot Buffer Ring in the Editor).
+- **Zero `E1513: 'winfixbuf' is enabled` Guarantee**: Enforced `winfixbuf = false`, `winfixwidth = false`, and `winfixheight = false` on all Editor windows (`info.is_editor`) across `WinEnter`, `BufWinEnter`, `FileType`, and `WinClosed`, and disabled `winfixbuf` on `Neogit`, `Dockyard`, and `GrugFar` windows so in-place buffer swaps (`NeogitLogView`, `dockyard-files`, `grug-far`) never fail.
+- **Stacked Right Panel Precedence**: Preserved vertical stacks inside the Right Panel (`Neogit` + `Commit Editor`/`Popup`, `Dockyard` + `LogLens`/`Detail Panel`) during `ensure_right_sidebar_precedence()`, `reset_window_layout()`, and `BottomPanel.open_qf()` (`belowright copen` relative to the Left Editor).
+- **Mode & Async Safety**: Synchronous Neogit window closing (avoiding delayed `safe_win_close` `:b#` corruption), clamped `ui_state.win_id` cursor updates in Dockyard, self-healing GrugFar instance re-creation, and automatic `stopinsert` when switching slots or navigating from Insert/Terminal mode.
 
 ---
 

@@ -4,6 +4,49 @@ return {
   config = function()
     local neocodeium = require 'neocodeium'
 
+    -- Ensure Codeium language server routes inference requests through server.codeium.com
+    -- (default inference.codeium.com / server.windsurf.com times out or is blocked on some ISP/WSL networks)
+    local function spawn_with_inference_url(orig_spawn)
+      return function(path, spawn_opts, on_exit)
+        if spawn_opts and type(spawn_opts.args) == 'table' and tostring(path):find 'language_server' then
+          local has_inference = false
+          for _, arg in ipairs(spawn_opts.args) do
+            if arg == '--inference_api_server_url' then
+              has_inference = true
+              break
+            end
+          end
+          if not has_inference then
+            local api_url = 'https://server.codeium.com'
+            for i, arg in ipairs(spawn_opts.args) do
+              if arg == '--api_server_url' and spawn_opts.args[i + 1] then
+                api_url = spawn_opts.args[i + 1]
+                break
+              end
+            end
+            table.insert(spawn_opts.args, '--inference_api_server_url')
+            table.insert(spawn_opts.args, api_url)
+          end
+        end
+        return orig_spawn(path, spawn_opts, on_exit)
+      end
+    end
+
+    -- Send an immediate Heartbeat as soon as the language server port is discovered
+    -- (by default neocodeium waits 10s for the first heartbeat tick, leaving state INACTIVE)
+    vim.api.nvim_create_autocmd('User', {
+      pattern = 'NeoCodeiumServerConnected',
+      callback = function()
+        pcall(function()
+          local server = require 'neocodeium.server'
+          local state = require 'neocodeium.state'
+          server:request('Heartbeat', state.request_data)
+        end)
+      end,
+    })
+
+    local orig_uv_spawn = vim.uv.spawn
+    vim.uv.spawn = spawn_with_inference_url(orig_uv_spawn)
     neocodeium.setup {
       enabled = true,
       manual = false,
@@ -27,6 +70,32 @@ return {
         return true
       end,
     }
+    vim.uv.spawn = orig_uv_spawn
+
+    -- Also wrap server.start for any future server:run() / server:restart() calls
+    local server = require 'neocodeium.server'
+    local orig_start = server.start
+    server.start = function(self)
+      local saved_spawn = vim.uv.spawn
+      vim.uv.spawn = spawn_with_inference_url(saved_spawn)
+      local ok, err = pcall(orig_start, self)
+      vim.uv.spawn = saved_spawn
+      if not ok then
+        error(err)
+      end
+    end
+
+    -- Ensure buffers created via nvim_create_buf (scratchpads, new buffers, previews)
+    -- always have neocodeium_allowed_encoding initialized before InsertEnter checks status
+    vim.api.nvim_create_autocmd({ 'BufEnter', 'InsertEnter' }, {
+      callback = function(ev)
+        local b = ev.buf
+        if b and vim.api.nvim_buf_is_valid(b) and vim.b[b].neocodeium_allowed_encoding == nil then
+          local enc = vim.bo[b].fileencoding
+          vim.b[b].neocodeium_allowed_encoding = (enc == '' or enc == 'utf-8' or enc == 'latin1')
+        end
+      end,
+    })
 
     -- Intercept document generation so buffers outside cwd (DBUI queries, scratchpads, unnamed buffers)
     -- are assigned a valid relative workspace_uri. Codeium server strictly rejects requests if
@@ -38,9 +107,8 @@ return {
       if data then
         local path = data.absolute_uri:gsub('^file://', '')
         local root = require('neocodeium.state').project_root or vim.fn.getcwd()
-        if path == '' or path == '/' then
-          local ext = (data.editor_language and data.editor_language ~= '' and data.editor_language ~= 'unspecified') and ('.' .. data.editor_language)
-            or '.sql'
+        local ext = (data.editor_language and data.editor_language ~= '' and data.editor_language ~= 'unspecified') and ('.' .. data.editor_language) or '.sql'
+        if path == '' or path == '/' or path:find '%[' or path:find '://' then
           data.absolute_uri = 'file://' .. root .. '/__virtual_scratchpad' .. ext
           data.workspace_uri = 'file://' .. root
         elseif not path:find(root, 1, true) then

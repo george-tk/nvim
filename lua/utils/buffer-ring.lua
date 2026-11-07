@@ -63,17 +63,24 @@ function M.is_qualifying(buf)
     dbui = true,
     gitcommit = true,
     gitrebase = true,
+    ['grug-far'] = true,
+    ['grug-far-help'] = true,
+    ['grug-far-history'] = true,
+    dockyard = true,
+    ['dockyard-logs'] = true,
+    ['dockyard-files'] = true,
+    dockyard_popup = true,
   }
   if excluded[filetype] then
     return false
   end
 
   -- Pattern checks for Git and external tools
-  if filetype:match '^Neogit' or filetype:match '^Diffview' or filetype:match '^fugitive' or filetype:match '^sqmeow' then
+  if filetype:match '^Neogit' or filetype:match '^Diffview' or filetype:match '^fugitive' or filetype:match '^sqmeow' or filetype:match '^dockyard' then
     return false
   end
 
-  if name:match '^fugitive://' or name:match '^diffview://' or name:match '^term://' or name:match '^octo://' then
+  if name:match '^fugitive://' or name:match '^diffview://' or name:match '^term://' or name:match '^octo://' or name:match '^dockyard://' then
     return false
   end
 
@@ -368,11 +375,12 @@ function M.new_buffer(filetype, target_slot)
   vim.bo[buf].buflisted = true
   vim.bo[buf].swapfile = true
   vim.b[buf].is_user_buffer = true
+  vim.b[buf].neocodeium_allowed_encoding = true
+
+  vim.api.nvim_win_set_buf(win, buf)
   if filetype and filetype ~= '' then
     vim.bo[buf].filetype = filetype
   end
-
-  vim.api.nvim_win_set_buf(win, buf)
   if target_slot and target_slot >= 1 and target_slot <= M.max_slots then
     M.clean_slots()
     M.slots[target_slot] = buf

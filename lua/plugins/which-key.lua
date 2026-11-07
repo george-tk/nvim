@@ -15,6 +15,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>a', group = 'Ai', mode = { 'n', 'v' } },
       { '<leader>T', group = 'Todo' },
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
+      { '<leader>D', group = 'Docker', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
       { '<leader>s', group = 'Spelling' },
       { '<leader>w', group = 'Window' },
@@ -54,6 +55,8 @@ return { -- Useful plugin to show you pending keybinds.
       -- Find Group (<leader>f)
       { '<leader>ff', desc = 'Find Files' },
       { '<leader>fw', desc = 'Find Word', mode = { 'n', 'v' } },
+      { '<leader>fs', desc = 'Search & Replace (GrugFar)', mode = { 'n', 'v' } },
+      { '<leader>fW', desc = 'Replace Word Under Cursor' },
       { '<leader>fu', desc = 'Undo History' },
       { '<leader>fr', desc = 'Resume Last Picker' },
       { '<leader>fp', desc = 'All Pickers' },
@@ -90,6 +93,12 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>gP', desc = 'Push' },
       { '<leader>gb', desc = 'Branch' },
       { '<leader>gd', desc = 'Diff' },
+
+      -- Docker Group (<leader>D)
+      { '<leader>DD', desc = 'Docker Panel' },
+      { '<leader>Dd', desc = 'Docker Panel' },
+      { '<leader>Db', desc = 'Build Dockerfile' },
+      { '<leader>Dr', desc = 'Run Docker Compose', mode = { 'n', 'v' } },
 
       -- Markdown Group (<leader>m)
       { '<leader>mt', desc = 'Create Table' },

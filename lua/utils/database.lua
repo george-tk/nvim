@@ -659,12 +659,10 @@ function M.open_drawer()
     end
   end
 
-  -- Mutually exclusive with other right panels (File Explorer, OpenCode)
+  -- Mutually exclusive with other right panels (File Explorer, OpenCode, Neogit)
   if _G.RightPanel then
-    if _G.RightPanel.active_mode == 'explorer' then
-      pcall(function()
-        Snacks.picker.pickers.explorer:close()
-      end)
+    if _G.RightPanel.close_all then
+      _G.RightPanel.close_all()
     end
     _G.RightPanel.active_mode = 'dbui'
   end
@@ -839,6 +837,26 @@ function M.setup_drawer_helpers()
     end
     editor.actions.execute_buffer = function()
       M.run_query(true)
+    end
+
+    if editor.create then
+      local orig_create = editor.create
+      editor.create = function(name)
+        local trimmed = vim.trim(name or '')
+        if trimmed ~= '' and trimmed:sub(-1) ~= '/' and not editor.filetype(trimmed) then
+          name = trimmed .. '.sql'
+        end
+        local buf, err = orig_create(name)
+        if buf and vim.api.nvim_buf_is_valid(buf) then
+          vim.b[buf].neocodeium_enabled = true
+          vim.b[buf].neocodeium_allowed_encoding = true
+          if M.current_db_name and not vim.b[buf].sqmeow_connection then
+            vim.b[buf].db_name = M.current_db_name
+            vim.b[buf].sqmeow_connection = M.current_db_name
+          end
+        end
+        return buf, err
+      end
     end
   end
 
@@ -1321,6 +1339,7 @@ end
 function M.open_query_scratchpad()
   local view_api = sqmeow 'api.view'
   if view_api and view_api.scratchpad then
+    M.setup_drawer_helpers()
     local default_prefix = M.current_db_name and (M.current_db_name .. '/') or nil
     view_api.scratchpad(nil, default_prefix)
     local cur_buf = vim.api.nvim_get_current_buf()

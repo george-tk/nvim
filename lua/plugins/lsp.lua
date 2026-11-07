@@ -81,11 +81,38 @@ return {
 
       -----------------------------------------------------------------------
       -- root_dir helpers (avoid starting servers in $HOME, etc.)
+      -- Supports both Neovim 0.11 `vim.lsp.config` `root_dir(bufnr, on_dir)`
+      -- and legacy `lspconfig` `root_dir(fname)` signatures.
       -----------------------------------------------------------------------
-      local util = require 'lspconfig.util'
       local function root_with(patterns, fallback)
-        return function(fname)
-          return util.root_pattern(unpack(patterns))(fname) or util.find_git_ancestor(fname) or fallback
+        return function(bufnr_or_fname, on_dir)
+          local fname
+          if type(bufnr_or_fname) == 'number' then
+            fname = vim.api.nvim_buf_get_name(bufnr_or_fname)
+          elseif type(bufnr_or_fname) == 'string' then
+            fname = bufnr_or_fname
+          end
+
+          local root = nil
+          if fname and fname ~= '' and not fname:find '^%[' and not fname:find '://' then
+            local ok_r, r = pcall(vim.fs.root, fname, patterns)
+            if ok_r and r then
+              root = r
+            else
+              local ok_g, g = pcall(vim.fs.root, fname, '.git')
+              if ok_g and g then
+                root = g
+              end
+            end
+          end
+          root = root or fallback or vim.uv.cwd()
+
+          if type(on_dir) == 'function' then
+            if root then
+              on_dir(root)
+            end
+          end
+          return root
         end
       end
 

@@ -98,7 +98,7 @@ local layout = require 'utils.layout'
 -------------------------------------------------------------------------------
 
 local function smart_close()
-  if vim.api.nvim_get_mode().mode == 't' then
+  if vim.api.nvim_get_mode().mode:match '^[it]' then
     vim.cmd 'stopinsert'
   end
   local cur_win = vim.api.nvim_get_current_win()
@@ -130,8 +130,15 @@ local function smart_close()
     return
   end
 
-  -- 1. If inside Right Panel (Explorer, DBUI, AI): close/hide the Right Panel
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  -- 1. If inside Right Panel (Explorer, DBUI, AI, Neogit, Dockyard, GrugFar): close sub-view or hide the Right Panel
+  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar then
+    if (info.is_neogit and info.ft ~= 'NeogitStatus') or (info.is_dockyard and info.ft ~= 'dockyard') then
+      -- Inside a Neogit or Dockyard sub-view/popup/loglens/files in the Right Panel: trigger its native `q` close to return to main view
+      vim.wo[cur_win].winfixbuf = false
+      vim.cmd 'stopinsert'
+      vim.api.nvim_feedkeys('q', 'm', false)
+      return
+    end
     layout.RightPanel.close_all()
     local ed = layout.get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -254,6 +261,7 @@ local function smart_close()
   end
 
   if next_target and vim.api.nvim_buf_is_valid(next_target) then
+    vim.wo[cur_win].winfixbuf = false
     pcall(vim.api.nvim_win_set_buf, cur_win, next_target)
     local ok, snacks = pcall(require, 'snacks')
     if ok and snacks.bufdelete then
@@ -263,6 +271,7 @@ local function smart_close()
     end
   else
     local new_buf = vim.api.nvim_create_buf(true, false)
+    vim.wo[cur_win].winfixbuf = false
     vim.api.nvim_win_set_buf(cur_win, new_buf)
 
     for _, b in ipairs(vim.api.nvim_list_bufs()) do
@@ -328,7 +337,7 @@ _G.smart_close = smart_close
 vim.keymap.set('n', '<leader>q', smart_close, { desc = 'Close Buffer' })
 vim.keymap.set({ 'n', 't', 'i' }, '<C-q>', smart_close, { desc = 'Close Buffer / Quit Terminal' })
 
--- Smart slot navigation (<C-1> through <C-4>) across Editor, Terminal, and Sidebar
+-- Smart slot navigation (<C-1> through <C-6>) across Editor, Terminal, and Sidebar
 local function smart_goto_slot(n)
   local cur_win = vim.api.nvim_get_current_win()
   local info = layout.get_win_info(cur_win)
@@ -339,12 +348,17 @@ local function smart_goto_slot(n)
     return
   end
 
-  if vim.api.nvim_get_mode().mode == 't' then
+  if vim.api.nvim_get_mode().mode:match '^[it]' then
     vim.cmd 'stopinsert'
   end
 
-  -- 2. In Right Panel (Explorer, DBUI, AI): switch to right panel slot 1..3
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  -- 2. In Right Panel (Explorer, DBUI, AI, Neogit, Dockyard, GrugFar): switch to right panel slot 1..6
+  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar then
+    layout.RightPanel.open_slot(n)
+    return
+  end
+
+  if n > 4 then
     layout.RightPanel.open_slot(n)
     return
   end
@@ -360,32 +374,38 @@ local function smart_goto_slot(n)
       if ring.create_filetype_buffer then
         ring.create_filetype_buffer(n)
       else
+        vim.wo[cur_win].winfixbuf = false
         vim.cmd 'enew'
       end
     end
   else
+    vim.wo[cur_win].winfixbuf = false
     pcall(vim.cmd, 'buffer ' .. n)
   end
 end
 
-for i = 1, 4 do
+for i = 1, 6 do
   vim.keymap.set({ 'n', 't', 'i' }, '<C-' .. i .. '>', function()
     smart_goto_slot(i)
-  end, { desc = 'Go to / Create Buffer or Terminal ' .. i })
+  end, { desc = 'Go to / Create Buffer or Panel Slot ' .. i })
 
   vim.keymap.set('n', '<leader>' .. i, function()
     smart_goto_slot(i)
-  end, { desc = 'Go to / Create Buffer or Terminal ' .. i })
+  end, { desc = 'Go to / Create Buffer or Panel Slot ' .. i })
 
   vim.keymap.set({ 'n', 't', 'i' }, '<M-' .. i .. '>', function()
     smart_goto_slot(i)
-  end, { desc = 'Go to / Create Buffer or Terminal ' .. i .. ' (Alt fallback)' })
+  end, { desc = 'Go to / Create Buffer or Panel Slot ' .. i .. ' (Alt fallback)' })
 end
 
--- Terminal emulator fallback: <C-2> often sends NUL (<C-@>)
+-- Terminal emulator fallbacks: <C-2> often sends NUL (<C-@>), and <C-6> often sends <C-^>
 vim.keymap.set({ 'n', 't', 'i' }, '<C-@>', function()
   smart_goto_slot(2)
 end, { desc = 'Go to / Create Buffer or Terminal 2 (C-2 fallback)' })
+
+vim.keymap.set({ 'n', 't', 'i' }, '<C-^>', function()
+  smart_goto_slot(6)
+end, { desc = 'Go to Panel Slot 6 (C-6 fallback)' })
 
 vim.keymap.set('n', '<leader>n', function()
   local ok, ring = pcall(require, 'utils.buffer-ring')
@@ -410,7 +430,14 @@ end, { desc = 'Toggle Pin Buffer' })
 vim.keymap.set('n', '<leader>Q', '<cmd>confirm qa<CR>', { desc = 'Quit Neovim' })
 vim.keymap.set('n', '<leader><Tab>', smart_bnext, { desc = 'Next Buffer' })
 vim.keymap.set('n', '<leader><S-Tab>', smart_bprev, { desc = 'Previous Buffer' })
-vim.keymap.set('n', '<leader>r', '<C-6>', { desc = 'Alternate Buffer' })
+vim.keymap.set('n', '<leader>r', function()
+  local ed = layout.get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+    vim.wo[ed].winfixbuf = false
+  end
+  pcall(vim.cmd, 'b#')
+end, { desc = 'Alternate Buffer' })
 
 -------------------------------------------------------------------------------
 -- Window Split Management (<leader>w)

@@ -53,6 +53,11 @@ return {
           end
 
           local ft = vim.bo[buf].filetype
+          local buf_name = vim.api.nvim_buf_get_name(buf)
+          if ft == '' and buf_name:find('/sqmeow/scratch/', 1, true) then
+            vim.bo[buf].filetype = 'sql'
+            ft = 'sql'
+          end
           local is_sql = ft == 'sql'
             or ft == 'mysql'
             or ft == 'plsql'

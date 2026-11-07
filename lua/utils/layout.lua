@@ -9,7 +9,7 @@ local Layout = {}
 
 local RightPanel = {
   custom_widths = {},
-  active_mode = 'explorer', -- 'explorer' | 'dbui' | 'opencode'
+  active_mode = 'explorer', -- 'explorer' | 'dbui' | 'opencode' | 'neogit' | 'dockyard' | 'grugfar'
   has_custom_editor_widths = false,
   has_custom_bottom_widths = false,
 }
@@ -43,6 +43,9 @@ local function get_win_info(win)
   local zone = vim.b[buf].panel_zone
   local ptype = vim.b[buf].panel_type
 
+  local cfg = vim.api.nvim_win_get_config(win)
+  local is_float = (cfg.relative ~= nil and cfg.relative ~= '')
+
   local bt = vim.bo[buf].buftype
   local is_explorer = (ptype == 'explorer') or (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil)
   local is_dbui = (ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil)
@@ -55,9 +58,14 @@ local function get_win_info(win)
         or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
       )
     )
+  local is_neogit = not is_float
+    and ((ptype == 'neogit') or (ft:match '^Neogit' ~= nil) or (ft == 'gitcommit' and (bname:find 'commit_editmsg' ~= nil or bname:find 'merge_msg' ~= nil)))
+  local is_dockyard = not is_float
+    and ((ptype == 'dockyard') or (ft == 'dockyard' or ft == 'dockyard-logs' or ft == 'dockyard-files' or ft == 'dockyard_popup'))
+  local is_grugfar = not is_float and ((ptype == 'grugfar') or (ft == 'grug-far'))
 
   -- Right panel zone takes absolute precedence over bottom terminal
-  if is_explorer or is_dbui or is_opencode or zone == 'right' then
+  if is_explorer or is_dbui or is_opencode or is_neogit or is_dockyard or is_grugfar or zone == 'right' then
     return {
       win = win,
       buf = buf,
@@ -66,6 +74,9 @@ local function get_win_info(win)
       is_explorer = is_explorer,
       is_dbui = is_dbui,
       is_opencode = is_opencode,
+      is_neogit = is_neogit,
+      is_dockyard = is_dockyard,
+      is_grugfar = is_grugfar,
       is_terminal = false,
       is_editor = false,
     }
@@ -86,9 +97,16 @@ local function get_win_info(win)
     is_explorer = false,
     is_dbui = false,
     is_opencode = false,
+    is_neogit = false,
+    is_dockyard = false,
+    is_grugfar = false,
     is_terminal = is_terminal,
     is_editor = is_editor,
   }
+end
+
+local function is_right_panel(info)
+  return info ~= nil and (info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar)
 end
 
 local function find_win_type(key)
@@ -107,18 +125,22 @@ local function find_win_type(key)
 end
 
 local function get_right_sidebar_win()
+  local fallback = nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       local cfg = vim.api.nvim_win_get_config(win)
       if not cfg.relative or cfg.relative == '' then
         local info = get_win_info(win)
-        if info.is_explorer or info.is_dbui or info.is_opencode then
-          return win
+        if is_right_panel(info) then
+          if info.ft == 'NeogitStatus' or info.ft == 'dockyard' or info.ft == 'grug-far' then
+            return win
+          end
+          fallback = fallback or win
         end
       end
     end
   end
-  return nil
+  return fallback
 end
 
 local function get_editor_win()
@@ -166,7 +188,7 @@ local function equalize_splits()
       local cfg = vim.api.nvim_win_get_config(w)
       if not cfg.relative or cfg.relative == '' then
         local info = get_win_info(w)
-        if info.is_explorer or info.is_dbui or info.is_opencode then
+        if is_right_panel(info) then
           has_sidebar = true
           sidebar_w = math.max(sidebar_w, vim.api.nvim_win_get_width(w))
         elseif info.is_terminal then
@@ -229,14 +251,37 @@ local function equalize_splits()
 end
 
 local function ensure_right_sidebar_precedence()
+  local right_wins = {}
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_is_valid(w) then
+      local cfg = vim.api.nvim_win_get_config(w)
+      if not cfg.relative or cfg.relative == '' then
+        local wi = get_win_info(w)
+        if is_right_panel(wi) then
+          table.insert(right_wins, w)
+        end
+      end
+    end
+  end
+
   local r_win = get_right_sidebar_win()
   if r_win and vim.api.nvim_win_is_valid(r_win) then
     vim.api.nvim_win_call(r_win, function()
-      vim.cmd 'wincmd L'
+      -- Only force `wincmd L` when there is a single right-panel window;
+      -- if Neogit or Dockyard has a stacked sub-view/popup split inside the Right Panel, preserve the vertical stack!
+      if #right_wins <= 1 then
+        vim.cmd 'wincmd L'
+      end
       local info = get_win_info(r_win)
       local custom = RightPanel.custom_widths or {}
       local width
-      if info.is_opencode then
+      if info.is_neogit then
+        width = custom['neogit'] or math.max(60, math.floor(vim.o.columns * 0.48))
+      elseif info.is_dockyard then
+        width = custom['dockyard'] or math.max(60, math.floor(vim.o.columns * 0.48))
+      elseif info.is_grugfar then
+        width = custom['grugfar'] or math.max(56, math.floor(vim.o.columns * 0.45))
+      elseif info.is_opencode then
         width = custom['opencode'] or math.max(45, math.floor(vim.o.columns * 0.38))
       elseif info.is_dbui then
         width = custom['dbui'] or 35
@@ -245,6 +290,17 @@ local function ensure_right_sidebar_precedence()
       end
       vim.cmd('vertical resize ' .. width)
     end)
+
+    for _, w in ipairs(right_wins) do
+      if vim.api.nvim_win_is_valid(w) then
+        local wi = get_win_info(w)
+        if wi.is_neogit or wi.is_grugfar or (wi.is_dockyard and (wi.ft == 'dockyard_popup' or wi.ft == 'dockyard-logs')) then
+          vim.wo[w].wrap = true
+          vim.wo[w].linebreak = true
+          vim.wo[w].breakindent = true
+        end
+      end
+    end
   end
   equalize_splits()
 end
@@ -262,15 +318,7 @@ local function reset_window_layout()
     end
   end
 
-  local r_win = get_right_sidebar_win()
-  if r_win and vim.api.nvim_win_is_valid(r_win) then
-    vim.api.nvim_win_call(r_win, function()
-      vim.cmd 'wincmd L'
-      local info = get_win_info(r_win)
-      local width = info.is_opencode and math.max(45, math.floor(vim.o.columns * 0.38)) or 35
-      vim.cmd('vertical resize ' .. width)
-    end)
-  end
+  ensure_right_sidebar_precedence()
 
   local bot_win = find_win_type 'is_terminal'
   if bot_win and vim.api.nvim_win_is_valid(bot_win) then
@@ -282,7 +330,8 @@ local function reset_window_layout()
 end
 
 local function prepare_nav()
-  if vim.api.nvim_get_mode().mode == 't' then
+  local m = vim.api.nvim_get_mode().mode
+  if m:match '^[it]' then
     vim.cmd 'stopinsert'
   end
 end
@@ -342,13 +391,47 @@ function RightPanel.close_all()
     closed = true
   end
 
-  -- Fallback: check all open windows for any lingering right-side panels
+  -- Close visible Neogit status buffer and any Neogit sub-buffers cleanly
+  if package.loaded['neogit.buffers.status'] then
+    pcall(function()
+      local status = require 'neogit.buffers.status'
+      local inst = status.instance and status.instance()
+      if inst and inst.buffer and inst.buffer:is_visible() then
+        inst:close()
+        closed = true
+      end
+    end)
+  end
+
+  -- Close visible Dockyard LogLens & main UI cleanly
+  if package.loaded['dockyard.ui.loglens'] then
+    pcall(function()
+      require('dockyard.ui.loglens').close()
+    end)
+  end
+  if package.loaded['dockyard.ui'] then
+    pcall(function()
+      local dy_ui = require 'dockyard.ui'
+      if dy_ui.is_open and dy_ui.is_open() then
+        dy_ui.close()
+        closed = true
+      end
+    end)
+  end
+
+  -- Fallback: check all open windows for any lingering right-side panels or auxiliary floats
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      local ft = vim.bo[buf].filetype
+      local bname = vim.api.nvim_buf_get_name(win and buf or 0):lower()
       local info = get_win_info(win)
-      if info.is_explorer or info.is_dbui or info.is_opencode then
+      if is_right_panel(info) or ft == 'grug-far-help' or ft == 'grug-far-history' then
         pcall(vim.api.nvim_win_close, win, true)
         closed = true
+      end
+      if ft == 'gitcommit' and (bname:find 'commit_editmsg' ~= nil or bname:find 'merge_msg' ~= nil) then
+        pcall(vim.api.nvim_buf_delete, buf, { force = true })
       end
     end
   end
@@ -541,9 +624,265 @@ function RightPanel.open_opencode(no_toggle, opts)
   end)
 end
 
+function RightPanel.open_neogit(no_toggle)
+  local info = get_win_info()
+  if info.is_neogit then
+    if no_toggle then
+      return
+    end
+    RightPanel.close_all()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_ng = find_win_type 'is_neogit'
+  if existing_ng and vim.api.nvim_win_is_valid(existing_ng) then
+    RightPanel.active_mode = 'neogit'
+    vim.api.nvim_set_current_win(existing_ng)
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+    return
+  end
+
+  RightPanel.close_all()
+  RightPanel.active_mode = 'neogit'
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  local ok, neogit = pcall(require, 'neogit')
+  if ok and neogit and neogit.open then
+    neogit.open { kind = 'vsplit' }
+  else
+    vim.cmd 'Neogit kind=vsplit'
+  end
+
+  local function style_neogit_win()
+    local ng_win = find_win_type 'is_neogit'
+    if ng_win and vim.api.nvim_win_is_valid(ng_win) then
+      local ng_buf = vim.api.nvim_win_get_buf(ng_win)
+      vim.b[ng_buf].panel_zone = 'right'
+      vim.b[ng_buf].panel_type = 'neogit'
+      vim.bo[ng_buf].buflisted = false
+      vim.wo[ng_win].spell = false
+      vim.wo[ng_win].wrap = true
+      vim.wo[ng_win].linebreak = true
+      vim.wo[ng_win].breakindent = true
+      vim.wo[ng_win].winfixbuf = false
+      vim.wo[ng_win].winfixwidth = true
+      ensure_right_sidebar_precedence()
+      vim.api.nvim_set_current_win(ng_win)
+      pcall(function()
+        require('lualine').refresh()
+      end)
+      return true
+    end
+    return false
+  end
+
+  if not style_neogit_win() then
+    vim.schedule(function()
+      if not style_neogit_win() then
+        vim.defer_fn(style_neogit_win, 60)
+      end
+    end)
+  end
+end
+
+function RightPanel.open_dockyard(no_toggle)
+  local info = get_win_info()
+  if info.is_dockyard then
+    if no_toggle then
+      return
+    end
+    RightPanel.close_all()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_dy = find_win_type 'is_dockyard'
+  if existing_dy and vim.api.nvim_win_is_valid(existing_dy) then
+    RightPanel.active_mode = 'dockyard'
+    vim.api.nvim_set_current_win(existing_dy)
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+    return
+  end
+
+  RightPanel.close_all()
+  RightPanel.active_mode = 'dockyard'
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  pcall(function()
+    require('lazy').load { plugins = { 'dockyard.nvim' } }
+  end)
+
+  local ok_dy, dy_ui = pcall(require, 'dockyard.ui')
+  if ok_dy and dy_ui and dy_ui.open then
+    dy_ui.open()
+  else
+    vim.cmd 'Dockyard'
+  end
+
+  vim.schedule(function()
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+  end)
+end
+
+function RightPanel.open_grugfar(no_toggle, opts)
+  opts = opts or {}
+  local has_prefills = opts.prefills ~= nil and next(opts.prefills) ~= nil
+  local info = get_win_info()
+  if info.is_grugfar then
+    if no_toggle or has_prefills then
+      if has_prefills then
+        pcall(function()
+          local gf = require 'grug-far'
+          local inst = gf.get_instance 'right_panel'
+          if inst then
+            inst:update_input_values(opts.prefills, false)
+            inst:search()
+          end
+        end)
+      end
+      return
+    end
+    RightPanel.close_all()
+    local ed = get_editor_win()
+    if ed and vim.api.nvim_win_is_valid(ed) then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_gf = find_win_type 'is_grugfar'
+  if existing_gf and vim.api.nvim_win_is_valid(existing_gf) then
+    RightPanel.active_mode = 'grugfar'
+    vim.api.nvim_set_current_win(existing_gf)
+    if has_prefills then
+      pcall(function()
+        local gf = require 'grug-far'
+        local inst = gf.get_instance 'right_panel'
+        if inst then
+          inst:update_input_values(opts.prefills, false)
+          inst:search()
+        end
+      end)
+    end
+    ensure_right_sidebar_precedence()
+    pcall(function()
+      require('lualine').refresh()
+    end)
+    return
+  end
+
+  RightPanel.close_all()
+  RightPanel.active_mode = 'grugfar'
+
+  local ed = get_editor_win()
+  if ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+  end
+
+  pcall(function()
+    require('lazy').load { plugins = { 'grug-far.nvim' } }
+  end)
+
+  local ok_gf, grug = pcall(require, 'grug-far')
+  if ok_gf and grug then
+    local reused = false
+    if grug.has_instance and grug.has_instance 'right_panel' then
+      local ok_inst, inst = pcall(grug.get_instance, 'right_panel')
+      local buf = ok_inst and inst and inst.get_buf and inst:get_buf() or nil
+      local is_valid_buf = buf and vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_line_count(buf) > 2 and inst._is_ready == true
+      if is_valid_buf and inst.open then
+        if inst._context and inst._context.options then
+          inst._context.options.windowCreationCommand = 'botright vsplit | setlocal nowinfixbuf'
+        end
+        inst:open()
+        pcall(function()
+          require 'grug-far.render'(buf, inst._context)
+        end)
+        if has_prefills and inst.update_input_values then
+          inst:update_input_values(opts.prefills, false)
+          inst:search()
+        end
+        reused = true
+      else
+        if ok_inst and inst and inst.close then
+          pcall(function()
+            inst:close()
+          end)
+        end
+        if buf and vim.api.nvim_buf_is_valid(buf) then
+          pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+        pcall(function()
+          require('grug-far.instances').remove_instance 'right_panel'
+        end)
+      end
+    end
+    if not reused then
+      grug.open(vim.tbl_deep_extend('force', { instanceName = 'right_panel', windowCreationCommand = 'botright vsplit | setlocal nowinfixbuf' }, opts))
+    end
+  else
+    vim.cmd 'GrugFar'
+  end
+
+  local function style_grugfar_win()
+    local gf_win = find_win_type 'is_grugfar'
+    if gf_win and vim.api.nvim_win_is_valid(gf_win) then
+      local gf_buf = vim.api.nvim_win_get_buf(gf_win)
+      vim.b[gf_buf].panel_zone = 'right'
+      vim.b[gf_buf].panel_type = 'grugfar'
+      vim.bo[gf_buf].buflisted = false
+      vim.wo[gf_win].spell = false
+      vim.wo[gf_win].wrap = true
+      vim.wo[gf_win].linebreak = true
+      vim.wo[gf_win].breakindent = true
+      vim.wo[gf_win].winfixbuf = false
+      vim.wo[gf_win].winfixwidth = true
+      ensure_right_sidebar_precedence()
+      vim.api.nvim_set_current_win(gf_win)
+      pcall(function()
+        require('lualine').refresh()
+      end)
+      return true
+    end
+    return false
+  end
+
+  if not style_grugfar_win() then
+    vim.schedule(function()
+      if not style_grugfar_win() then
+        vim.defer_fn(style_grugfar_win, 60)
+      end
+    end)
+  end
+end
+
 function RightPanel.open_slot(slot_idx)
   local m = vim.api.nvim_get_mode().mode
-  if (m == 't' or m == 'i') and slot_idx ~= 3 then
+  if m:match '^[it]' then
     vim.cmd 'stopinsert'
   end
   if slot_idx == 1 then
@@ -552,6 +891,12 @@ function RightPanel.open_slot(slot_idx)
     RightPanel.open_dbui(true)
   elseif slot_idx == 3 then
     RightPanel.open_opencode(true)
+  elseif slot_idx == 4 then
+    RightPanel.open_neogit(true)
+  elseif slot_idx == 5 then
+    RightPanel.open_dockyard(true)
+  elseif slot_idx == 6 then
+    RightPanel.open_grugfar(true)
   end
 end
 
@@ -587,21 +932,38 @@ function RightPanel.lualine_component()
   elseif info.is_opencode then
     cur_mode = 'opencode'
     RightPanel.active_mode = 'opencode'
+  elseif info.is_neogit then
+    cur_mode = 'neogit'
+    RightPanel.active_mode = 'neogit'
+  elseif info.is_dockyard then
+    cur_mode = 'dockyard'
+    RightPanel.active_mode = 'dockyard'
+  elseif info.is_grugfar then
+    cur_mode = 'grugfar'
+    RightPanel.active_mode = 'grugfar'
   end
 
   local slots = {
     { mode = 'explorer', label = '󰙅' },
     { mode = 'dbui', label = '󰆼' },
     { mode = 'opencode', label = '󰚩', is_running = _G.OpencodePromptRunning == true },
+    { mode = 'neogit', label = '󰊢' },
+    { mode = 'dockyard', label = '󰡨' },
+    { mode = 'grugfar', label = '󰛔' },
   }
 
   local entries = {}
-  for _, s in ipairs(slots) do
+  local num_slots = #slots
+  for idx, s in ipairs(slots) do
     local is_active = (s.mode == cur_mode)
     local group = is_active and active_hl or (s.is_running and 'TerminalTrackerRunning' or inactive_hl)
+    -- `` provides 1 visual cell on the left of Slot 1, and `` provides 1 visual cell on the right of the last Slot.
+    -- Pad inner edges with 2 spaces and cap-adjacent edges with 1 space so every segment is 5 cells wide with the icon at cell 3.
+    local left_pad = (idx == 1) and ' ' or '  '
+    local right_pad = (idx == num_slots) and ' ' or '  '
     table.insert(entries, {
       is_active = is_active,
-      text = string.format('%%#%s# %s %%*', group, s.label),
+      text = string.format('%%#%s#%s%s%s%%*', group, left_pad, s.label, right_pad),
     })
   end
 
@@ -626,7 +988,7 @@ function RightPanel.toggle_active()
   local info = get_win_info()
 
   -- 1. If currently inside any right panel: close it!
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  if is_right_panel(info) then
     RightPanel.close_all()
     local ed = get_editor_win()
     if ed then
@@ -636,7 +998,7 @@ function RightPanel.toggle_active()
   end
 
   -- 2. If a right panel is already visible on screen: focus into it!
-  local visible_right = find_win_type 'is_explorer' or find_win_type 'is_dbui' or find_win_type 'is_opencode'
+  local visible_right = get_right_sidebar_win()
 
   if visible_right and vim.api.nvim_win_is_valid(visible_right) then
     vim.api.nvim_set_current_win(visible_right)
@@ -645,7 +1007,13 @@ function RightPanel.toggle_active()
 
   -- 3. Otherwise: open the currently active right-side tool
   local mode = RightPanel.active_mode or 'explorer'
-  if mode == 'opencode' then
+  if mode == 'grugfar' then
+    RightPanel.open_grugfar()
+  elseif mode == 'dockyard' then
+    RightPanel.open_dockyard()
+  elseif mode == 'neogit' then
+    RightPanel.open_neogit()
+  elseif mode == 'opencode' then
     RightPanel.open_opencode()
   elseif mode == 'dbui' then
     RightPanel.open_dbui()
@@ -1047,8 +1415,14 @@ function BottomPanel.open_qf(no_toggle)
     vim.api.nvim_set_current_win(ed)
   end
 
+  local r_win = get_right_sidebar_win()
   local qf_height = math.floor(vim.o.lines * 0.35)
-  vim.cmd('botright copen ' .. qf_height)
+  if r_win and ed and vim.api.nvim_win_is_valid(ed) then
+    vim.api.nvim_set_current_win(ed)
+    vim.cmd('belowright copen ' .. qf_height)
+  else
+    vim.cmd('botright copen ' .. qf_height)
+  end
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_win_get_buf(win)
   vim.b[buf].panel_zone = 'bottom'
@@ -1184,7 +1558,7 @@ local function smart_navigate_right()
   local info = get_win_info(cur_win)
 
   -- 1. If currently inside any right panel: close it and return to editor
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  if is_right_panel(info) then
     RightPanel.close_all()
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -1211,7 +1585,7 @@ local function smart_navigate_right()
       return
     end
 
-    if target_info.is_explorer or target_info.is_dbui or target_info.is_opencode then
+    if is_right_panel(target_info) then
       vim.api.nvim_set_current_win(target_win)
       return
     end
@@ -1227,7 +1601,7 @@ local function smart_navigate_left()
   local info = get_win_info(cur_win)
 
   -- 1. If inside any right-side panel, jump directly back into the Code Editor
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  if is_right_panel(info) then
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
       vim.api.nvim_set_current_win(ed)
@@ -1299,6 +1673,19 @@ local function smart_navigate_down()
   local info = get_win_info(cur_win)
   local count = vim.v.count > 0 and vim.v.count or nil
 
+  -- If inside a stacked Right Panel (e.g. Neogit Commit Editor above NeogitStatus, or Dockyard above LogLens/Detail), step down within the Right Panel first
+  if info.is_neogit or info.is_dockyard then
+    local target_winnr = vim.fn.winnr 'j'
+    if target_winnr ~= vim.fn.winnr() then
+      local target_win = vim.fn.win_getid(target_winnr)
+      local tinfo = get_win_info(target_win)
+      if tinfo.is_neogit or tinfo.is_dockyard then
+        vim.api.nvim_set_current_win(target_win)
+        return
+      end
+    end
+  end
+
   if info.is_terminal then
     BottomPanel.toggle_active(count)
     return
@@ -1329,7 +1716,7 @@ local function smart_resize_width(delta)
 
   local info = get_win_info(cur_win)
 
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  if is_right_panel(info) then
     delta = -delta
   end
 
@@ -1338,7 +1725,13 @@ local function smart_resize_width(delta)
   pcall(vim.api.nvim_win_set_width, cur_win, new_w)
 
   RightPanel.custom_widths = RightPanel.custom_widths or {}
-  if info.is_opencode then
+  if info.is_neogit then
+    RightPanel.custom_widths['neogit'] = new_w
+  elseif info.is_dockyard then
+    RightPanel.custom_widths['dockyard'] = new_w
+  elseif info.is_grugfar then
+    RightPanel.custom_widths['grugfar'] = new_w
+  elseif info.is_opencode then
     RightPanel.custom_widths['opencode'] = new_w
   elseif info.is_dbui then
     RightPanel.custom_widths['dbui'] = new_w
@@ -1429,7 +1822,7 @@ local function smart_close_window(fallback_close_fn)
   end
   local info = get_win_info(cur_win)
 
-  if info.is_explorer or info.is_dbui or info.is_opencode then
+  if is_right_panel(info) then
     RightPanel.close_all()
     local ed = get_editor_win()
     if ed and vim.api.nvim_win_is_valid(ed) then
@@ -1489,6 +1882,14 @@ local function is_database_or_transient_buf(buf)
     or ft == 'dbout'
     or ft == 'snacks_dashboard'
     or ft == 'snacks_terminal'
+    or ft:match '^Neogit' ~= nil
+    or ft == 'dockyard'
+    or ft == 'dockyard-logs'
+    or ft == 'dockyard-files'
+    or ft == 'dockyard_popup'
+    or ft == 'grug-far'
+    or ft == 'grug-far-help'
+    or ft == 'grug-far-history'
   then
     return true
   end
@@ -1561,6 +1962,9 @@ local function setup_autocmds()
       local cfg = vim.api.nvim_win_get_config(win)
       if (not cfg.relative or cfg.relative == '') and get_win_info(win).is_editor then
         last_editor_win = win
+        vim.wo[win].winfixbuf = false
+        vim.wo[win].winfixwidth = false
+        vim.wo[win].winfixheight = false
       end
     end,
     desc = 'Track last focused non-floating editor window for multi-split navigation',
@@ -1593,17 +1997,74 @@ local function setup_autocmds()
 
       local info = get_win_info(win)
 
-      if info.is_explorer or info.is_dbui or info.is_opencode then
+      if is_right_panel(info) then
         vim.bo[buf].buflisted = false
         if vim.api.nvim_win_is_valid(win) then
-          vim.wo[win].winfixbuf = true
+          -- Allow in-place buffer switching for Neogit (log/commit/refs views), Dockyard (f/q), and GrugFar (history/preview)
+          vim.wo[win].winfixbuf = not (info.is_neogit or info.is_dockyard or info.is_grugfar)
           vim.wo[win].winfixwidth = true
+        end
+        if info.is_neogit then
+          vim.b[buf].panel_zone = 'right'
+          vim.b[buf].panel_type = 'neogit'
+          vim.wo[win].spell = false
+          vim.wo[win].wrap = true
+          vim.wo[win].linebreak = true
+          vim.wo[win].breakindent = true
+          RightPanel.active_mode = 'neogit'
+          vim.schedule(function()
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].wrap = true
+              vim.wo[win].linebreak = true
+              vim.wo[win].breakindent = true
+            end
+            ensure_right_sidebar_precedence()
+            pcall(function()
+              require('lualine').refresh()
+            end)
+          end)
+        elseif info.is_dockyard then
+          vim.b[buf].panel_zone = 'right'
+          vim.b[buf].panel_type = 'dockyard'
+          vim.wo[win].spell = false
+          RightPanel.active_mode = 'dockyard'
+          vim.schedule(function()
+            ensure_right_sidebar_precedence()
+            pcall(function()
+              require('lualine').refresh()
+            end)
+          end)
+        elseif info.is_grugfar then
+          vim.b[buf].panel_zone = 'right'
+          vim.b[buf].panel_type = 'grugfar'
+          vim.wo[win].spell = false
+          vim.wo[win].wrap = true
+          vim.wo[win].linebreak = true
+          vim.wo[win].breakindent = true
+          RightPanel.active_mode = 'grugfar'
+          vim.schedule(function()
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].wrap = true
+              vim.wo[win].linebreak = true
+              vim.wo[win].breakindent = true
+            end
+            ensure_right_sidebar_precedence()
+            pcall(function()
+              require('lualine').refresh()
+            end)
+          end)
         end
       elseif info.is_terminal then
         vim.bo[buf].buflisted = false
         if vim.api.nvim_win_is_valid(win) then
           vim.wo[win].winfixbuf = true
           vim.wo[win].winfixheight = true
+        end
+      elseif info.is_editor then
+        if vim.api.nvim_win_is_valid(win) then
+          vim.wo[win].winfixbuf = false
+          vim.wo[win].winfixwidth = false
+          vim.wo[win].winfixheight = false
         end
       end
     end,
@@ -1628,7 +2089,7 @@ local function setup_autocmds()
               local cfg = vim.api.nvim_win_get_config(w)
               if not cfg.relative or cfg.relative == '' then
                 local info = get_win_info(w)
-                if info.is_explorer or info.is_dbui or info.is_opencode or info.is_terminal then
+                if is_right_panel(info) or info.is_terminal then
                   non_editor_exists = true
                   break
                 end
@@ -1638,6 +2099,10 @@ local function setup_autocmds()
 
           if non_editor_exists then
             vim.cmd 'topleft split'
+            local new_win = vim.api.nvim_get_current_win()
+            vim.wo[new_win].winfixbuf = false
+            vim.wo[new_win].winfixwidth = false
+            vim.wo[new_win].winfixheight = false
             vim.cmd 'enew'
             ensure_right_sidebar_precedence()
           end
