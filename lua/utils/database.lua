@@ -824,6 +824,47 @@ function M.setup_drawer_helpers()
     end
   end
 
+  -- 2b. Register ERD actions (`ge` for contextual table/schema ERD, `gE` for full schema ERD) in drawer
+  if not M._drawer_erd_hooked then
+    M._drawer_erd_hooked = true
+    drawer.actions.erd = function()
+      require('utils.erd').from_drawer(false)
+    end
+    drawer.actions.erd_schema = function()
+      require('utils.erd').from_drawer(true)
+    end
+
+    local ok_km, km = pcall(require, 'sqmeow.keymap')
+    if ok_km and km and km.defaults and km.defaults.drawer then
+      local has_erd = false
+      for _, entry in ipairs(km.defaults.drawer) do
+        if entry.action == 'erd' then
+          has_erd = true
+          break
+        end
+      end
+      if not has_erd then
+        local insert_idx = #km.defaults.drawer + 1
+        for i, entry in ipairs(km.defaults.drawer) do
+          if entry.action == 'relationships' then
+            insert_idx = i + 1
+            break
+          end
+        end
+        table.insert(km.defaults.drawer, insert_idx, {
+          action = 'erd',
+          lhs = 'ge',
+          desc = 'Generate ERD (table neighborhood or schema)',
+        })
+        table.insert(km.defaults.drawer, insert_idx + 1, {
+          action = 'erd_schema',
+          lhs = 'gE',
+          desc = 'Generate Full Schema ERD',
+        })
+      end
+    end
+  end
+
   -- 3. Route sqmeow editor actions (<CR>, visual <CR>, <leader>E) through M.run_query
   -- so buffer-local connections are auto-opened and BottomPanel is coordinated
   local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')

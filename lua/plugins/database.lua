@@ -178,6 +178,12 @@ return {
           vim.keymap.set('n', '<C-j>', function()
             _G.BottomPanel.toggle_active()
           end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
+          vim.keymap.set('n', 'ge', function()
+            require('utils.erd').from_drawer(false)
+          end, { buffer = args.buf, nowait = true, silent = true, desc = 'sqmeow: Generate ERD (table neighborhood or schema)' })
+          vim.keymap.set('n', 'gE', function()
+            require('utils.erd').from_drawer(true)
+          end, { buffer = args.buf, nowait = true, silent = true, desc = 'sqmeow: Generate Full Schema ERD' })
           vim.keymap.set('n', 'q', function()
             if _G.RightPanel then
               _G.RightPanel.close_all()
