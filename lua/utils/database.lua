@@ -684,7 +684,130 @@ function M.open_drawer()
   end)
 end
 
+-------------------------------------------------------------------------------
+-- Lost Connection Watcher
+-- The sqmeow engine never emits a `conn:state` change when the server goes away
+-- (e.g. a container is stopped): the connection stays `connected`, every request
+-- fails with "connection closed", and the drawer is stuck showing that error even
+-- after the server comes back. Detect those errors and properly disconnect, so the
+-- saved connection reappears as disconnected and `l`/`<CR>` reconnects it.
+-------------------------------------------------------------------------------
+
+local lost_patterns = {
+  'connection closed',
+  'connection is closed',
+  'connection reset',
+  'connection refused',
+  'broken pipe',
+  'server closed the connection',
+  'terminating connection',
+  'unexpected eof',
+  'error communicating with',
+  'not connected',
+  'connection was killed',
+  'lost connection',
+  'gone away',
+}
+
+function M.is_connection_lost_error(err)
+  if type(err) ~= 'string' or err == '' then
+    return false
+  end
+  local lower = err:lower()
+  for _, pat in ipairs(lost_patterns) do
+    if lower:find(pat, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+M._lost_pending = M._lost_pending or {}
+
+-- Disconnect the whole connection tree a lost connection belongs to (a cluster child's
+-- server is the parent's server, so the parent is dead too).
+function M.handle_connection_lost(conn_id, err)
+  local state = sqmeow 'core.state'
+  if not state or not conn_id or not state.connections[conn_id] or M._lost_pending[conn_id] then
+    return
+  end
+  M._lost_pending[conn_id] = true
+
+  vim.schedule(function()
+    M._lost_pending[conn_id] = nil
+    local conn = state.connections[conn_id]
+    if not conn then
+      return
+    end
+    local root = conn
+    while root.parent and state.connections[root.parent] do
+      root = state.connections[root.parent]
+    end
+
+    local gone = { root.id }
+    for _, c in ipairs(state.connection_list()) do
+      if c.parent == root.id then
+        table.insert(gone, c.id)
+      end
+    end
+
+    local api = sqmeow 'api.connection'
+    if api and api.disconnect then
+      pcall(api.disconnect, root.id)
+    else
+      for _, id in ipairs(gone) do
+        state.remove_connection(id)
+      end
+    end
+
+    local drawer = sqmeow 'ui.drawer'
+    if drawer then
+      for _, id in ipairs(gone) do
+        pcall(drawer.forget, id)
+      end
+    end
+    state.failures[root.name] = nil
+    if drawer and drawer.render then
+      pcall(drawer.render)
+    end
+    pcall(function()
+      require('sqmeow.ui.editor').update_winbar()
+    end)
+    local ok_lualine, lualine = pcall(require, 'lualine')
+    if ok_lualine and lualine.refresh then
+      lualine.refresh()
+    end
+
+    vim.notify(
+      ('Lost connection to %s (%s). Disconnected — press l/<CR> on it in the explorer to reconnect.'):format(root.name, err or 'connection closed'),
+      vim.log.levels.WARN,
+      { title = 'Database' }
+    )
+  end)
+end
+
+function M.watch_connection_loss()
+  if M._lost_watch_wired then
+    return
+  end
+  local rpc = sqmeow 'rpc.client'
+  if not rpc or not rpc.on then
+    return
+  end
+  M._lost_watch_wired = true
+
+  local function check(payload)
+    if payload and payload.conn_id and M.is_connection_lost_error(payload.error) then
+      M.handle_connection_lost(payload.conn_id, payload.error)
+    end
+  end
+  for _, event in ipairs { 'schema:nodes', 'call:state', 'structure:done', 'relationships:done', 'routine:done' } do
+    rpc.on(event, check)
+  end
+end
+
 function M.setup_drawer_helpers()
+  M.watch_connection_loss()
   local drawer = sqmeow 'ui.drawer'
   if not drawer or not drawer.actions then
     return
