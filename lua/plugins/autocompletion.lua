@@ -206,6 +206,9 @@ return {
               end
             end
             local sources = { 'lsp', 'path', 'snippets', 'buffer' }
+            if vim.bo.filetype == 'markdown' then
+              table.insert(sources, 1, 'markdown')
+            end
             if vim.g.markdown_dict_completion or vim.b.markdown_dict_completion then
               table.insert(sources, 'dictionary')
             end

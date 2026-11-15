@@ -684,130 +684,7 @@ function M.open_drawer()
   end)
 end
 
--------------------------------------------------------------------------------
--- Lost Connection Watcher
--- The sqmeow engine never emits a `conn:state` change when the server goes away
--- (e.g. a container is stopped): the connection stays `connected`, every request
--- fails with "connection closed", and the drawer is stuck showing that error even
--- after the server comes back. Detect those errors and properly disconnect, so the
--- saved connection reappears as disconnected and `l`/`<CR>` reconnects it.
--------------------------------------------------------------------------------
-
-local lost_patterns = {
-  'connection closed',
-  'connection is closed',
-  'connection reset',
-  'connection refused',
-  'broken pipe',
-  'server closed the connection',
-  'terminating connection',
-  'unexpected eof',
-  'error communicating with',
-  'not connected',
-  'connection was killed',
-  'lost connection',
-  'gone away',
-}
-
-function M.is_connection_lost_error(err)
-  if type(err) ~= 'string' or err == '' then
-    return false
-  end
-  local lower = err:lower()
-  for _, pat in ipairs(lost_patterns) do
-    if lower:find(pat, 1, true) then
-      return true
-    end
-  end
-  return false
-end
-
-M._lost_pending = M._lost_pending or {}
-
--- Disconnect the whole connection tree a lost connection belongs to (a cluster child's
--- server is the parent's server, so the parent is dead too).
-function M.handle_connection_lost(conn_id, err)
-  local state = sqmeow 'core.state'
-  if not state or not conn_id or not state.connections[conn_id] or M._lost_pending[conn_id] then
-    return
-  end
-  M._lost_pending[conn_id] = true
-
-  vim.schedule(function()
-    M._lost_pending[conn_id] = nil
-    local conn = state.connections[conn_id]
-    if not conn then
-      return
-    end
-    local root = conn
-    while root.parent and state.connections[root.parent] do
-      root = state.connections[root.parent]
-    end
-
-    local gone = { root.id }
-    for _, c in ipairs(state.connection_list()) do
-      if c.parent == root.id then
-        table.insert(gone, c.id)
-      end
-    end
-
-    local api = sqmeow 'api.connection'
-    if api and api.disconnect then
-      pcall(api.disconnect, root.id)
-    else
-      for _, id in ipairs(gone) do
-        state.remove_connection(id)
-      end
-    end
-
-    local drawer = sqmeow 'ui.drawer'
-    if drawer then
-      for _, id in ipairs(gone) do
-        pcall(drawer.forget, id)
-      end
-    end
-    state.failures[root.name] = nil
-    if drawer and drawer.render then
-      pcall(drawer.render)
-    end
-    pcall(function()
-      require('sqmeow.ui.editor').update_winbar()
-    end)
-    local ok_lualine, lualine = pcall(require, 'lualine')
-    if ok_lualine and lualine.refresh then
-      lualine.refresh()
-    end
-
-    vim.notify(
-      ('Lost connection to %s (%s). Disconnected — press l/<CR> on it in the explorer to reconnect.'):format(root.name, err or 'connection closed'),
-      vim.log.levels.WARN,
-      { title = 'Database' }
-    )
-  end)
-end
-
-function M.watch_connection_loss()
-  if M._lost_watch_wired then
-    return
-  end
-  local rpc = sqmeow 'rpc.client'
-  if not rpc or not rpc.on then
-    return
-  end
-  M._lost_watch_wired = true
-
-  local function check(payload)
-    if payload and payload.conn_id and M.is_connection_lost_error(payload.error) then
-      M.handle_connection_lost(payload.conn_id, payload.error)
-    end
-  end
-  for _, event in ipairs { 'schema:nodes', 'call:state', 'structure:done', 'relationships:done', 'routine:done' } do
-    rpc.on(event, check)
-  end
-end
-
 function M.setup_drawer_helpers()
-  M.watch_connection_loss()
   local drawer = sqmeow 'ui.drawer'
   if not drawer or not drawer.actions then
     return
@@ -1024,45 +901,10 @@ function M.setup_drawer_helpers()
     end
   end
 
-  -- 4. Render non-grid result messages (e.g. "2 rows affected", "no rows", "running…")
-  -- directly inside the result buffer body when `ui.winbar = false`
+  -- 4. Keep lualine/terminal-tracker statusline in sync when result renders or winbar updates
   local ok_res, result = pcall(require, 'sqmeow.ui.result')
-  if ok_res and result and not M._result_non_grid_hooked then
-    M._result_non_grid_hooked = true
-    local ns = vim.api.nvim_create_namespace 'sqmeow_non_grid_status'
-
-    local function render_non_grid_summary(summary)
-      local state = sqmeow 'core.state'
-      local call = (state and state.call) or summary
-      if not call or call.state == 'error' then
-        return
-      end
-      local handle = result.buffer and result.buffer()
-      if not handle or not vim.api.nvim_buf_is_valid(handle) then
-        return
-      end
-      if call.columns and #call.columns > 0 then
-        vim.api.nvim_buf_clear_namespace(handle, ns, 0, -1)
-        return
-      end
-      if call.state == 'executing' then
-        return
-      end
-      local desc = result.describe and result.describe(call, false) or ''
-      if desc == '' then
-        return
-      end
-      local line = '  ' .. desc
-      vim.bo[handle].modifiable = true
-      vim.api.nvim_buf_set_lines(handle, 0, -1, false, { line })
-      vim.api.nvim_buf_clear_namespace(handle, ns, 0, -1)
-      local hl = call.state == 'executing' and 'Comment' or 'SqmeowSignAdded'
-      pcall(vim.api.nvim_buf_set_extmark, handle, ns, 0, 0, {
-        end_col = #line,
-        hl_group = hl,
-      })
-      vim.bo[handle].modifiable = false
-    end
+  if ok_res and result and not M._result_statusline_hooked then
+    M._result_statusline_hooked = true
 
     local function refresh_statusline()
       local ok_tt, tt = pcall(require, 'utils.terminal-tracker')
@@ -1087,7 +929,6 @@ function M.setup_drawer_helpers()
     local orig_render = result.render
     result.render = function(summary)
       local r = orig_render(summary)
-      render_non_grid_summary(summary)
       refresh_statusline()
       return r
     end
@@ -1095,7 +936,6 @@ function M.setup_drawer_helpers()
     local orig_update_winbar = result.update_winbar
     result.update_winbar = function(summary)
       local r = orig_update_winbar(summary)
-      render_non_grid_summary(summary)
       refresh_statusline()
       return r
     end

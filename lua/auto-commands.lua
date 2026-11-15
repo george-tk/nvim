@@ -86,44 +86,6 @@ api.nvim_create_autocmd({ 'InsertLeave', 'CursorHold' }, {
   desc = 'Autosave markdown files on CursorHold/InsertLeave',
 })
 
--- Markdown specific foldexpr function
-function M.markdown_foldexpr()
-  local lnum = vim.v.lnum
-  local line = fn.getline(lnum)
-
-  -- Treesitter-native check: Is the current line in a fenced code block?
-  local ok, node = pcall(vim.treesitter.get_node, { pos = { lnum - 1, 0 } })
-  if ok and node then
-    local current = node
-    while current do
-      if current:type() == 'fenced_code_block' then
-        return '='
-      end
-      current = current:parent()
-    end
-  end
-
-  if line:match '^%s*[-*+>]%s' then
-    return '='
-  end
-  local heading_match = line:match '^(#+)%s.+'
-  if heading_match then
-    local level = #heading_match
-    if level == 1 then
-      local fm_end = vim.b.frontmatter_end
-      if fm_end and type(fm_end) == 'number' and (lnum == fm_end + 1) then
-        return '>1'
-      elseif lnum == 1 then
-        return '>1'
-      end
-      return '>1'
-    elseif level >= 2 and level <= 6 then
-      return '>' .. level
-    end
-  end
-  return '='
-end
-
 -- User command to echo current buffer's foldexpr
 api.nvim_create_user_command('EchoFoldExpr', function()
   local expr = vim.api.nvim_get_option_value('foldexpr', { scope = 'local' })
@@ -161,7 +123,9 @@ api.nvim_create_autocmd('FileType', {
   group = augroups.user_markdown_folding,
   callback = function(args)
     vim.wo.foldmethod = 'expr'
-    vim.wo.foldexpr = "v:lua.require('auto-commands').markdown_foldexpr()"
+    vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+    -- Keep H1 sections open while collapsing H2+ headings and fenced code blocks
+    vim.wo.foldlevel = 1
     opt_local.fillchars:append { eob = ' ' }
 
     -- Local options for Markdown note taking
@@ -174,11 +138,31 @@ api.nvim_create_autocmd('FileType', {
     vim.keymap.set({ 'n', 'x' }, 'j', "v:count == 0 ? 'gj' : 'j'", { expr = true, silent = true, buffer = args.buf })
     vim.keymap.set({ 'n', 'x' }, 'k', "v:count == 0 ? 'gk' : 'k'", { expr = true, silent = true, buffer = args.buf })
 
-    cmd 'normal! zM'
-    cmd 'normal! zr'
     pcall(cmd, 'normal! zv')
   end,
   desc = 'Setup Markdown folding and local options',
+})
+
+-- Keep Treesitter folding (queries/markdown/folds.scm) active for markdown even if an LSP attaches
+api.nvim_create_autocmd('LspAttach', {
+  group = augroups.user_markdown_folding,
+  callback = function(args)
+    if bo[args.buf].filetype ~= 'markdown' then
+      return
+    end
+    vim.schedule(function()
+      if not api.nvim_buf_is_valid(args.buf) then
+        return
+      end
+      for _, win in ipairs(fn.win_findbuf(args.buf)) do
+        if api.nvim_win_is_valid(win) then
+          vim.wo[win].foldmethod = 'expr'
+          vim.wo[win].foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+        end
+      end
+    end)
+  end,
+  desc = 'Preserve Treesitter heading + code-block folding for markdown',
 })
 
 -- Function to choose fold level (can be called via :lua require('auto-commands').choose_fold_level(1))

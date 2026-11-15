@@ -125,12 +125,6 @@ return {
             end
           end
 
-          for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-            if vim.api.nvim_win_is_valid(win) then
-              vim.wo[win].winbar = ''
-            end
-          end
-
           pcall(function()
             vim.b[buf].neocodeium_enabled = true
             vim.b[buf].neocodeium_allowed_encoding = true

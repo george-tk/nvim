@@ -10,8 +10,19 @@ return {
     },
     opts = {
       render_modes = true,
+      completions = {
+        blink = { enabled = true },
+      },
       bullet = {
         enabled = true,
+      },
+      code = {
+        border = 'thin',
+        width = 'block',
+        right_pad = 2,
+      },
+      pipe_table = {
+        border_virtual = true,
       },
       heading = {
         position = 'overlay',

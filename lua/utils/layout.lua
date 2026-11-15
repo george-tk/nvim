@@ -624,10 +624,13 @@ function RightPanel.open_opencode(no_toggle, opts)
   end)
 end
 
-function RightPanel.open_neogit(no_toggle)
+function RightPanel.open_neogit(no_toggle, on_ready)
   local info = get_win_info()
   if info.is_neogit then
     if no_toggle then
+      if on_ready then
+        vim.schedule(on_ready)
+      end
       return
     end
     RightPanel.close_all()
@@ -646,6 +649,9 @@ function RightPanel.open_neogit(no_toggle)
     pcall(function()
       require('lualine').refresh()
     end)
+    if on_ready then
+      vim.schedule(on_ready)
+    end
     return
   end
 
@@ -678,10 +684,19 @@ function RightPanel.open_neogit(no_toggle)
       vim.wo[ng_win].winfixbuf = false
       vim.wo[ng_win].winfixwidth = true
       ensure_right_sidebar_precedence()
-      vim.api.nvim_set_current_win(ng_win)
+      local cur_buf = vim.api.nvim_get_current_buf()
+      local cur_ft = vim.api.nvim_buf_is_valid(cur_buf) and vim.bo[cur_buf].filetype or ''
+      if cur_ft ~= 'NeogitPopup' and cur_ft ~= 'gitcommit' and cur_ft ~= 'NeogitRebaseTodo' then
+        vim.api.nvim_set_current_win(ng_win)
+      end
       pcall(function()
         require('lualine').refresh()
       end)
+      if on_ready then
+        local cb = on_ready
+        on_ready = nil
+        vim.schedule(cb)
+      end
       return true
     end
     return false

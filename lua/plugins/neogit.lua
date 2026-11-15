@@ -1,3 +1,16 @@
+local function open_neogit_with_popup(popup_name)
+  local function open_popup()
+    require('neogit').open { popup_name }
+  end
+
+  if _G.RightPanel and _G.RightPanel.open_neogit then
+    _G.RightPanel.open_neogit(true, open_popup)
+  else
+    require('neogit').open { kind = 'vsplit' }
+    vim.schedule(open_popup)
+  end
+end
+
 return {
   'NeogitOrg/neogit',
   dependencies = {
@@ -14,7 +27,7 @@ return {
       spell_check = true,
     },
     popup = {
-      kind = 'split',
+      kind = 'popup',
     },
     commit_select_view = { kind = 'replace' },
     commit_view = { kind = 'replace' },
@@ -30,9 +43,6 @@ return {
         -- Free `l` for Explorer-style fold toggling; move LogPopup to `L`
         ['l'] = false,
         ['L'] = 'LogPopup',
-        -- Move full Commit Options popup (amend/reword/fixup/flags) to `C` so `c` commits directly like VS Code
-        ['c'] = false,
-        ['C'] = 'CommitPopup',
       },
       status = {
         -- Explorer-style fold navigation: `l` opens/toggles folds, `h` closes/collapses folds
@@ -141,14 +151,12 @@ return {
           return win
         end
 
-        local anchor_win = get_neogit_anchor_win()
-        if not (anchor_win and vim.api.nvim_win_is_valid(anchor_win)) then
-          if _G.RightPanel and _G.RightPanel.open_neogit then
-            _G.RightPanel.open_neogit(true)
-            anchor_win = get_neogit_anchor_win()
-          end
+        -- Never hijack floating windows or git console output into Right Panel splits
+        if self.kind == 'floating' or self.kind == 'floating_console' then
+          return orig_show(self)
         end
 
+        local anchor_win = get_neogit_anchor_win()
         local is_popup = (ft == 'NeogitPopup' or self.kind == 'popup' or bname:match 'Popup$' ~= nil)
         local is_editor = (
           ft == 'gitcommit'
@@ -162,16 +170,19 @@ return {
           if is_popup then
             close_neogit_popups_sync()
             anchor_win = get_neogit_anchor_win() or anchor_win
+            local anchor_h = vim.api.nvim_win_get_height(anchor_win)
+            local popup_h = math.min(14, math.max(8, math.floor(anchor_h * 0.45)))
             local win = vim.api.nvim_open_win(self.handle, true, {
               split = 'below',
               win = anchor_win,
-              height = 14,
+              height = popup_h,
             })
             self.win_handle = win
             vim.b[self.handle].panel_zone = 'right'
             vim.b[self.handle].panel_type = 'neogit'
             vim.wo[win].wrap = true
             vim.wo[win].linebreak = true
+            vim.wo[win].winfixheight = true
             vim.wo[win].winfixwidth = true
             return win
           elseif is_editor then
@@ -272,39 +283,6 @@ return {
                 vim.wo[win].linebreak = true
                 vim.wo[win].breakindent = true
                 vim.wo[win].spell = false
-
-                -- Bind `c` in NeogitStatus to open the Commit Message box directly at the top of the Right Panel (VS Code style)
-                -- while `C` opens the full Commit Options popup (for amend/reword/fixup/flags)
-                vim.keymap.set('n', 'c', function()
-                  local a = require 'neogit.lib.async'
-                  local git = require 'neogit.lib.git'
-                  local client = require 'neogit.client'
-                  local input = require 'neogit.lib.input'
-                  local notification = require 'neogit.lib.notification'
-                  a.run(function()
-                    if not git.status.anything_staged() then
-                      if git.status.anything_unstaged() or #git.repo.state.untracked.items > 0 then
-                        if input.get_permission 'Nothing is staged. Stage all changes and commit?' then
-                          git.status.stage_all()
-                        else
-                          return
-                        end
-                      else
-                        notification.warn 'No changes to commit.'
-                        return
-                      end
-                    end
-                    client.wrap(git.cli.commit, {
-                      autocmd = 'NeogitCommitComplete',
-                      msg = {
-                        success = 'Committed',
-                        fail = 'Commit failed',
-                      },
-                      interactive = true,
-                      show_diff = false,
-                    })
-                  end)
-                end, { buffer = buf, nowait = true, silent = true, desc = 'Direct Commit (Top of Right Panel)' })
               end
             end
           end
@@ -507,11 +485,41 @@ return {
       end,
       desc = 'Status (Right Panel)',
     },
-    { '<leader>gc', ':Neogit commit <CR>', desc = 'Commit' },
-    { '<leader>gl', ':Neogit log <CR>', desc = 'Log' },
-    { '<leader>gp', ':Neogit pull <CR>', desc = 'Pull' },
-    { '<leader>gP', ':Neogit push <CR>', desc = 'Push' },
-    { '<leader>gb', ':Neogit branch <CR>', desc = 'Branch' },
+    {
+      '<leader>gc',
+      function()
+        open_neogit_with_popup 'commit'
+      end,
+      desc = 'Commit',
+    },
+    {
+      '<leader>gl',
+      function()
+        open_neogit_with_popup 'log'
+      end,
+      desc = 'Log',
+    },
+    {
+      '<leader>gp',
+      function()
+        open_neogit_with_popup 'pull'
+      end,
+      desc = 'Pull',
+    },
+    {
+      '<leader>gP',
+      function()
+        open_neogit_with_popup 'push'
+      end,
+      desc = 'Push',
+    },
+    {
+      '<leader>gb',
+      function()
+        open_neogit_with_popup 'branch'
+      end,
+      desc = 'Branch',
+    },
     {
       '<leader>gd',
       function()

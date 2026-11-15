@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `d0bb4a7` (`build(deps): bump oracledb from 26.0.0-beta.4 to 26.0.0-beta.5 (#111)`, Mon Nov 2 2026, includes PR #106 `ea9f2c2` & PR #108 `9fe3b16`)
+- **Baseline Commit Pinned**: `e948c8e` (`chore: small update in README`, `v3.2.0+`, includes `#105` non-row summary when winbar disabled and `a719760`–`9f4b3ae` lost-connection cleanup)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log d0bb4a7..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log e948c8e..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff d0bb4a7..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff e948c8e..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
