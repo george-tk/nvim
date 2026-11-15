@@ -684,10 +684,171 @@ function M.open_drawer()
   end)
 end
 
+-------------------------------------------------------------------------------
+-- Lost Connection Watcher
+-- Prebuilt `sqmeow-core` release binaries (v3.2.0) do not yet include the
+-- post-v3.2.0 `payload.lost` engine event (`a719760`), so when a DB server or
+-- container restarts, the connection can stay marked `connected` and cache
+-- "connection closed" errors in the drawer. Watch engine events + drawer toggle
+-- to cleanly disconnect dead sessions and reload cleared nodes on `l`/`<CR>`.
+-------------------------------------------------------------------------------
+
+local lost_patterns = {
+  'connection closed',
+  'connection is closed',
+  'connection reset',
+  'connection refused',
+  'broken pipe',
+  'server closed the connection',
+  'terminating connection',
+  'unexpected eof',
+  'error communicating with',
+  'not connected',
+  'connection was killed',
+  'lost connection',
+  'gone away',
+  'closed pool',
+  'pool timed out',
+  'eof',
+}
+
+function M.is_connection_lost_error(err)
+  if type(err) ~= 'string' or err == '' then
+    return false
+  end
+  local lower = err:lower()
+  for _, pat in ipairs(lost_patterns) do
+    if lower:find(pat, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+M._lost_pending = M._lost_pending or {}
+
+-- Disconnect the whole connection tree a lost connection belongs to (a cluster child's
+-- server is the parent's server, so the parent is dead too).
+function M.handle_connection_lost(conn_id, err)
+  local state = sqmeow 'core.state'
+  if not state or not conn_id or not state.connections[conn_id] or M._lost_pending[conn_id] then
+    return
+  end
+  M._lost_pending[conn_id] = true
+
+  vim.schedule(function()
+    M._lost_pending[conn_id] = nil
+    local conn = state.connections[conn_id]
+    if not conn then
+      return
+    end
+    local root = conn
+    while root.parent and state.connections[root.parent] do
+      root = state.connections[root.parent]
+    end
+
+    local gone = { root.id }
+    local gone_names = { [root.name] = true }
+    for _, c in ipairs(state.connection_list()) do
+      if c.parent == root.id then
+        table.insert(gone, c.id)
+        if c.name then
+          gone_names[c.name] = true
+        end
+      end
+    end
+
+    local api = sqmeow 'api.connection'
+    if api and api.disconnect then
+      pcall(api.disconnect, root.id)
+    else
+      for _, id in ipairs(gone) do
+        state.remove_connection(id)
+      end
+    end
+
+    local drawer = sqmeow 'ui.drawer'
+    if drawer then
+      for _, id in ipairs(gone) do
+        pcall(drawer.forget, id)
+      end
+    end
+    for name in pairs(gone_names) do
+      state.failures[name] = nil
+    end
+    if drawer and drawer.render then
+      pcall(drawer.render)
+    end
+    pcall(function()
+      require('sqmeow.ui.editor').update_winbar()
+    end)
+    local ok_lualine, lualine = pcall(require, 'lualine')
+    if ok_lualine and lualine.refresh then
+      lualine.refresh()
+    end
+  end)
+end
+
+function M.watch_connection_loss()
+  if M._lost_watch_wired then
+    return
+  end
+  local rpc = sqmeow 'rpc.client'
+  if not rpc or not rpc.on then
+    return
+  end
+  M._lost_watch_wired = true
+
+  local function check(payload)
+    if not payload then
+      return
+    end
+    local cid = payload.conn_id or payload.id
+    if cid and (payload.lost or M.is_connection_lost_error(payload.error)) then
+      M.handle_connection_lost(cid, payload.error)
+    end
+  end
+  for _, event in ipairs { 'conn:state', 'schema:nodes', 'call:state', 'structure:done', 'relationships:done', 'routine:done' } do
+    rpc.on(event, check)
+  end
+end
+
 function M.setup_drawer_helpers()
+  M.watch_connection_loss()
   local drawer = sqmeow 'ui.drawer'
   if not drawer or not drawer.actions then
     return
+  end
+
+  -- 0. Hook drawer.actions.toggle so pressing l/<CR> on a connection/node that
+  -- cached an error (e.g. "connection closed" while DB was down) invalidates the
+  -- stale error cache and reconnects/reloads cleanly once the DB is back up.
+  if not M._drawer_toggle_hooked and drawer.actions.toggle then
+    M._drawer_toggle_hooked = true
+    local orig_toggle = drawer.actions.toggle
+    drawer.actions.toggle = function(...)
+      local node = drawer.current_node and drawer.current_node()
+      if node and node.conn_id then
+        local cached = drawer.cached_nodes and drawer.cached_nodes(node.conn_id, node.path or {})
+        if cached and #cached == 0 then
+          if node.kind == 'connection' then
+            local api = sqmeow 'api.connection'
+            local state = sqmeow 'core.state'
+            if api and api.disconnect and api.connect_named then
+              pcall(api.disconnect, node.conn_id)
+              pcall(drawer.forget, node.conn_id)
+              if state and state.failures and node.name then
+                state.failures[node.name] = nil
+              end
+              return api.connect_named(node.name)
+            end
+          else
+            pcall(drawer.invalidate, node.conn_id, node.path or {})
+          end
+        end
+      end
+      return orig_toggle(...)
+    end
   end
 
   -- 1. Hook drawer.actions.preview_editor to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
