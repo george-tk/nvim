@@ -4,5 +4,6 @@ return {
   event = 'VeryLazy',
   opts = {
     foldtext = { enabled = false },
+    autoFold = { enabled = false },
   },
 }

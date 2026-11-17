@@ -117,15 +117,46 @@ api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
   desc = 'Scope spellcheck to prose and git commit buffers per buffer',
 })
 
--- FileType markdown setup
-api.nvim_create_autocmd('FileType', {
-  pattern = { 'markdown' },
+-- Ensure non-markdown editor files always start with all folds open (foldlevel = 99),
+-- preventing window-local `foldlevel = 1` from a Markdown buffer from leaking into code files.
+api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
   group = augroups.user_markdown_folding,
   callback = function(args)
+    local buf = args.buf
+    if not api.nvim_buf_is_valid(buf) then
+      return
+    end
+    local ft = bo[buf].filetype
+    local bt = bo[buf].buftype
+    if ft == 'markdown' or bt ~= '' then
+      return
+    end
+    if not vim.b[buf]._initial_folds_opened then
+      vim.b[buf]._initial_folds_opened = true
+      vim.wo.foldlevel = 99
+      pcall(cmd, 'normal! zR')
+    elseif vim.wo.foldlevel == 1 then
+      vim.wo.foldlevel = 99
+    end
+  end,
+  desc = 'Keep all non-markdown editor files unfolded by default',
+})
+
+-- FileType markdown setup
+api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+  pattern = { 'markdown', '*.md', '*.markdown' },
+  group = augroups.user_markdown_folding,
+  callback = function(args)
+    if not api.nvim_buf_is_valid(args.buf) or bo[args.buf].filetype ~= 'markdown' then
+      return
+    end
     vim.wo.foldmethod = 'expr'
     vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
-    -- Keep H1 sections open while collapsing H2+ headings and fenced code blocks
-    vim.wo.foldlevel = 1
+    -- Keep H1 sections open while collapsing H2+ headings and fenced code blocks on initial open
+    if not vim.b[args.buf]._markdown_fold_initialized then
+      vim.b[args.buf]._markdown_fold_initialized = true
+      vim.wo.foldlevel = 1
+    end
     opt_local.fillchars:append { eob = ' ' }
 
     -- Local options for Markdown note taking
