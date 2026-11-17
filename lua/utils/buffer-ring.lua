@@ -621,12 +621,17 @@ function M.lualine_component()
 
       table.insert(entries, {
         is_active = is_active,
+        is_empty = false,
         text = string.format('%%#%s# %s%s %s%s %%*', hl, pin, icon, name, modified),
       })
     else
+      -- Standard 5-cell slot width matching RightPanel (`` adds 1 cell on left of slot 1, `` adds 1 cell on right of max_slot)
+      local left_pad = (i == 1) and ' ' or '  '
+      local right_pad = (i == max_slot) and ' ' or '  '
       table.insert(entries, {
         is_active = false,
-        text = string.format('%%#%s#   %%*', inactive_hl),
+        is_empty = true,
+        text = string.format('%%#LualinePillSep#%s%d%s%%*', left_pad, i, right_pad),
       })
     end
   end
@@ -640,7 +645,7 @@ function M.lualine_component()
     table.insert(parts, entry.text)
     if idx < #entries then
       local next_entry = entries[idx + 1]
-      if not entry.is_active and not next_entry.is_active then
+      if entry.is_empty or next_entry.is_empty or (not entry.is_active and not next_entry.is_active) then
         table.insert(parts, '%#LualinePillSep#|%*')
       end
     end
