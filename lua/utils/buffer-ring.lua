@@ -538,6 +538,13 @@ end
 function M.lualine_component()
   M.clean_slots()
   local cur_buf = vim.api.nvim_get_current_buf()
+  if M.find_slot(cur_buf) == nil then
+    local ok_l, layout = pcall(require, 'utils.layout')
+    local ed_win = ok_l and layout.get_editor_win and layout.get_editor_win() or nil
+    if ed_win and vim.api.nvim_win_is_valid(ed_win) then
+      cur_buf = vim.api.nvim_win_get_buf(ed_win)
+    end
+  end
   local active_hl = get_active_hl()
   local inactive_hl = get_inactive_hl()
   local entries = {}

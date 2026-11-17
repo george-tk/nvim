@@ -419,23 +419,14 @@ function M.get_terminals()
       local db_running = false
       local db_modified = false
       local result_pos = nil
-      local ok_st, st = pcall(require, 'sqmeow.core.state')
-      if ok_st and st and st.call then
-        if st.call.state == 'executing' then
-          db_running = true
+      local ok_view, view = pcall(require, 'sqmeow.api.view')
+      local status = (ok_view and view and view.status) and view.status(dbout_buf) or nil
+      if status then
+        db_running = (status.state == 'executing')
+        db_modified = (status.staged_changes or 0) > 0
+        if status.result_index and status.total_results then
+          result_pos = string.format('%d/%d', status.result_index, status.total_results)
         end
-        if st.call.results and #st.call.results > 1 then
-          for idx, entry in ipairs(st.call.results) do
-            if entry.call_id == st.call.call_id then
-              result_pos = string.format('%d/%d', idx, #st.call.results)
-              break
-            end
-          end
-        end
-      end
-      local ok_ed, edit = pcall(require, 'sqmeow.ui.edit')
-      if ok_ed and edit and edit.count and edit.count() > 0 then
-        db_modified = true
       end
 
       table.insert(terms, {

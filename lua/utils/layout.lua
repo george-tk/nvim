@@ -47,15 +47,32 @@ local function get_win_info(win)
   local is_float = (cfg.relative ~= nil and cfg.relative ~= '')
 
   local bt = vim.bo[buf].buftype
-  local is_explorer = (ptype == 'explorer') or (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil)
-  local is_dbui = (ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil)
-  local is_opencode = (ptype == 'opencode')
+  local is_explorer = (ptype == 'explorer')
+    or (not is_float and (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil))
     or (
-      bt ~= ''
-      and (
-        (ft:match 'opencode' ~= nil and ft ~= 'opencode_ask')
-        or (bt == 'terminal' and bname:find ':%S*opencode' ~= nil)
-        or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
+      is_float
+      and ft == 'snacks_picker_input'
+      and (function()
+        local ok_sp, sp = pcall(function()
+          return Snacks.picker.get { source = 'explorer' }
+        end)
+        if ok_sp and sp and sp[1] and sp[1].input and sp[1].input.win then
+          return sp[1].input.win.win == win
+        end
+        return false
+      end)()
+    )
+  local is_dbui = not is_float and ((ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil))
+  local is_opencode = not is_float
+    and (
+      (ptype == 'opencode')
+      or (
+        bt ~= ''
+        and (
+          (ft:match 'opencode' ~= nil and ft ~= 'opencode_ask')
+          or (bt == 'terminal' and bname:find ':%S*opencode' ~= nil)
+          or (vim.b[buf].snacks_terminal and vim.b[buf].snacks_terminal.cmd and tostring(vim.b[buf].snacks_terminal.cmd):find 'opencode' ~= nil)
+        )
       )
     )
   local is_neogit = not is_float
@@ -296,6 +313,7 @@ local function ensure_right_sidebar_precedence()
 
     for _, w in ipairs(right_wins) do
       if vim.api.nvim_win_is_valid(w) then
+        vim.wo[w].winfixwidth = true
         local wi = get_win_info(w)
         if wi.is_neogit or wi.is_grugfar or (wi.is_dockyard and (wi.ft == 'dockyard_popup' or wi.ft == 'dockyard-logs')) then
           vim.wo[w].wrap = true
@@ -488,6 +506,8 @@ function RightPanel.open_explorer(no_toggle)
   local width_opt = (RightPanel.custom_widths and RightPanel.custom_widths['explorer']) or 35
 
   Snacks.explorer {
+    hidden = true,
+    ignored = true,
     layout = { layout = { position = 'right', width = width_opt } },
     jump = { close = false },
   }
@@ -1354,6 +1374,8 @@ function BottomPanel.open_dbout(no_toggle)
       vim.wo[res_win].winfixbuf = true
     end
 
+    ensure_right_sidebar_precedence()
+    equalize_splits()
     vim.schedule(function()
       ensure_right_sidebar_precedence()
       pcall(function()
@@ -1698,6 +1720,18 @@ local function smart_navigate_down()
       local target_win = vim.fn.win_getid(target_winnr)
       local tinfo = get_win_info(target_win)
       if tinfo.is_neogit or tinfo.is_dockyard then
+        vim.api.nvim_set_current_win(target_win)
+        return
+      end
+    end
+  end
+
+  -- If inside an Editor split with another horizontal Editor split below it, step down to that Editor split first
+  if info.is_editor then
+    local target_winnr = vim.fn.winnr 'j'
+    if target_winnr ~= vim.fn.winnr() then
+      local target_win = vim.fn.win_getid(target_winnr)
+      if get_win_info(target_win).is_editor then
         vim.api.nvim_set_current_win(target_win)
         return
       end

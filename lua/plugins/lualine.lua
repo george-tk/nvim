@@ -409,17 +409,8 @@ return {
 
                 -- Format query telemetry from upstream `sqmeow.api.view.status()`
                 local telemetry = ''
-                local result_pos = nil
-                local ok_st2, st2 = pcall(require, 'sqmeow.core.state')
-                local active_call = ok_st2 and st2 and st2.call
-                if active_call and active_call.results and #active_call.results > 1 then
-                  for idx, entry in ipairs(active_call.results) do
-                    if entry.call_id == active_call.call_id then
-                      result_pos = string.format('result %d/%d', idx, #active_call.results)
-                      break
-                    end
-                  end
-                end
+                local result_pos = (info and info.result_index and info.total_results) and string.format('result %d/%d', info.result_index, info.total_results)
+                  or nil
                 if info and info.state then
                   if info.state == 'executing' then
                     telemetry = ' ·  running…'

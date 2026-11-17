@@ -88,16 +88,18 @@ return {
                 require('sqmeow.api.query').cancel()
               end)
             end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Stop the running query' })
-            vim.keymap.set('n', ']r', function()
-              pcall(function()
-                require('sqmeow.ui.result').actions.next_result()
-              end)
-            end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the next statement's result" })
-            vim.keymap.set('n', '[r', function()
-              pcall(function()
-                require('sqmeow.ui.result').actions.prev_result()
-              end)
-            end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the previous statement's result" })
+            if not vim.b[buf].sqmeow_editor then
+              vim.keymap.set('n', ']r', function()
+                pcall(function()
+                  require('sqmeow.api.query').next_result()
+                end)
+              end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the next statement's result" })
+              vim.keymap.set('n', '[r', function()
+                pcall(function()
+                  require('sqmeow.api.query').prev_result()
+                end)
+              end, { buffer = buf, nowait = true, silent = true, desc = "sqmeow: Show the previous statement's result" })
+            end
           end
 
           local db_url, db_name = db.get_active_db(buf)
