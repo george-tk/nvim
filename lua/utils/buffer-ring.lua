@@ -542,7 +542,19 @@ function M.lualine_component()
   local inactive_hl = get_inactive_hl()
   local entries = {}
 
+  local max_slot = 0
   for i = 1, M.max_slots do
+    local b = M.slots[i]
+    if b and vim.api.nvim_buf_is_valid(b) then
+      max_slot = i
+    end
+  end
+
+  if max_slot == 0 then
+    return ''
+  end
+
+  for i = 1, max_slot do
     local b = M.slots[i]
     if b and vim.api.nvim_buf_is_valid(b) then
       local is_active = (b == cur_buf)
@@ -611,11 +623,12 @@ function M.lualine_component()
         is_active = is_active,
         text = string.format('%%#%s# %s%s %s%s %%*', hl, pin, icon, name, modified),
       })
+    else
+      table.insert(entries, {
+        is_active = false,
+        text = string.format('%%#%s#   %%*', inactive_hl),
+      })
     end
-  end
-
-  if #entries == 0 then
-    return ''
   end
 
   local active_cap = get_active_cap_hl()

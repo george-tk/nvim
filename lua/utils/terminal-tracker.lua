@@ -353,8 +353,9 @@ function M.get_terminals()
         or bname:find ':%S*opencode' ~= nil
         or (st and tostring(st.cmd):find 'opencode' ~= nil)
       local is_dbout = ft == 'dbout' or ft == 'sqmeow-result' or bname:find '/sqmeow/' or bname:find '/db_ui/'
+      local is_neogit_console = ft == 'NeogitConsole' or ft:match '^Neogit' ~= nil or bname:find 'neogitconsole' ~= nil
 
-      if is_term and not is_opencode and not is_dbout then
+      if is_term and not is_opencode and not is_dbout and not is_neogit_console then
         local id = (st and st.id) or 1
         if not seen_term[id] then
           seen_term[id] = true

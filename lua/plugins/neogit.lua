@@ -37,7 +37,7 @@ return {
     refs_view = { kind = 'replace' },
     rebase_editor = { kind = 'split_above' },
     merge_editor = { kind = 'split_above' },
-    preview_buffer = { kind = 'split' },
+    preview_buffer = { kind = 'floating_console' },
     mappings = {
       popup = {
         -- Free `l` for Explorer-style fold toggling; move LogPopup to `L`
@@ -152,7 +152,7 @@ return {
         end
 
         -- Never hijack floating windows or git console output into Right Panel splits
-        if self.kind == 'floating' or self.kind == 'floating_console' then
+        if self.kind == 'floating' or self.kind == 'floating_console' or ft == 'NeogitConsole' or bname == 'NeogitConsole' then
           return orig_show(self)
         end
 
@@ -461,6 +461,187 @@ return {
         vim.keymap.set('n', 'l', '<CR>', { buffer = ev.buf, remap = true, silent = true, nowait = true, desc = 'Open Commit / Item' })
       end,
     })
+
+    -- 4. GPG Passphrase Loopback & Interactive Console Stability (WSL / Ubuntu)
+    -- Prevents `pinentry-curses` from hijacking Neovim's outer terminal (`GPG_TTY`) or drawing an
+    -- un-typeable curses box inside `NeogitConsole`. Instead, forces `--pinentry-mode loopback`
+    -- so GPG prompts `"Enter passphrase: "` over Neogit's PTY and triggers Neovim's native `inputsecret()`.
+    local ok_proc, Process = pcall(require, 'neogit.process')
+    local ok_util, neogit_util = pcall(require, 'neogit.lib.util')
+    if ok_proc and Process then
+      local state_dir = vim.fn.stdpath 'state'
+      vim.fn.mkdir(state_dir, 'p')
+      local gpg_wrapper_path = state_dir .. '/neogit-gpg-loopback.sh'
+      local wrapper_script = table.concat({
+        '#!/usr/bin/env sh',
+        'gpg_bin="${NEOGIT_REAL_GPG:-gpg}"',
+        'case "$1" in',
+        '  -Y) exec ssh-keygen "$@" ;;',
+        'esac',
+        'gnupg_home="${GNUPGHOME:-$HOME/.gnupg}"',
+        'if [ -d "$gnupg_home" ]; then',
+        '  agent_conf="$gnupg_home/gpg-agent.conf"',
+        '  if [ ! -f "$agent_conf" ] || ! grep -q "^allow-loopback-pinentry" "$agent_conf" 2>/dev/null; then',
+        '    if ! grep -q "^no-allow-loopback-pinentry" "$agent_conf" 2>/dev/null; then',
+        '      printf "\\nallow-loopback-pinentry\\n" >> "$agent_conf" 2>/dev/null',
+        '      gpg-connect-agent reloadagent /bye >/dev/null 2>&1 || true',
+        '    fi',
+        '  fi',
+        'fi',
+        'exec "$gpg_bin" --pinentry-mode loopback "$@"',
+        '',
+      }, '\n')
+      pcall(vim.fn.writefile, vim.split(wrapper_script, '\n', { plain = true }), gpg_wrapper_path)
+      pcall(vim.uv.fs_chmod, gpg_wrapper_path, tonumber('755', 8))
+
+      local user_gpg_prog = nil
+      local resolved_gpg_prog = false
+      local function get_user_gpg_program()
+        if resolved_gpg_prog then
+          return user_gpg_prog
+        end
+        resolved_gpg_prog = true
+        if vim.system then
+          local ok_sys, res = pcall(function()
+            return vim.system({ 'git', 'config', '--get', 'gpg.program' }, { text = true }):wait(1000)
+          end)
+          if ok_sys and res and res.code == 0 and res.stdout then
+            local val = vim.trim(res.stdout)
+            if val ~= '' and val ~= gpg_wrapper_path then
+              user_gpg_prog = val
+            end
+          end
+        end
+        return user_gpg_prog
+      end
+
+      local function is_commit_or_rebase_editor_open()
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_is_valid(win) then
+            local b = vim.api.nvim_win_get_buf(win)
+            if vim.api.nvim_buf_is_valid(b) then
+              local ft = vim.bo[b].filetype
+              local bname = vim.api.nvim_buf_get_name(b)
+              if
+                ft == 'gitcommit'
+                or ft == 'NeogitRebaseTodo'
+                or bname:find 'COMMIT_EDITMSG' ~= nil
+                or bname:find 'MERGE_MSG' ~= nil
+                or bname:find 'git%-rebase%-todo' ~= nil
+              then
+                return true
+              end
+            end
+          end
+        end
+        return false
+      end
+
+      local orig_show_console = Process.show_console
+      function Process:show_console()
+        -- Never pop up NeogitConsole while the commit/merge/rebase message editor is open
+        if is_commit_or_rebase_editor_open() then
+          return
+        end
+        return orig_show_console(self)
+      end
+
+      local orig_spawn = Process.spawn
+      function Process:spawn(cb)
+        if self.pty then
+          self.env = self.env or {}
+          -- Prevent gpg-agent / pinentry-curses from drawing onto Neovim's outer TTY
+          self.env.GPG_TTY = ''
+          self.env.PINENTRY_USER_DATA = 'USE_TTY=1'
+          local real_gpg = get_user_gpg_program()
+          if real_gpg then
+            self.env.NEOGIT_REAL_GPG = real_gpg
+          end
+
+          if type(self.cmd) == 'table' and self.cmd[1] and (self.cmd[1] == 'git' or self.cmd[1]:match '/git$') then
+            local has_gpg_override = false
+            for _, arg in ipairs(self.cmd) do
+              if type(arg) == 'string' and arg:find '^gpg%.program=' then
+                has_gpg_override = true
+                break
+              end
+            end
+            if not has_gpg_override then
+              table.insert(self.cmd, 2, '-c')
+              table.insert(self.cmd, 3, 'gpg.program=' .. gpg_wrapper_path)
+            end
+          end
+
+          if self.on_partial_line then
+            local orig_on_partial = self.on_partial_line
+            self.on_partial_line = function(proc, line)
+              local clean = line or ''
+              if ok_util and neogit_util and neogit_util.remove_ansi_escape_codes then
+                clean = neogit_util.remove_ansi_escape_codes(clean)
+              end
+              -- Ignore empty/cursor-erase chunks and git's editor-wait hint so they do not
+              -- call `process.defer_show_preview_buffers()` and restart the console timer prematurely
+              if clean:match '^%s*$' or clean:find('Waiting for your editor to close the file', 1, true) then
+                return
+              end
+              -- Normalize GPG / pinentry / SSH passphrase prompts so Neogit's runner.lua
+              -- reliably triggers Neovim's native `vim.fn.inputsecret()` prompt
+              if clean:find '[Ee]nter passphrase' or clean:find 'Please enter the passphrase' or clean:find 'Passphrase:' or clean:find '[Ee]nter PIN' then
+                pcall(vim.cmd, 'stopinsert')
+                if not clean:match '^Enter passphrase' and not clean:match '^Password for' and not clean:match '^Enter PIN for' then
+                  line = 'Enter passphrase: '
+                else
+                  line = clean
+                end
+              end
+              return orig_on_partial(proc, line)
+            end
+          end
+        end
+        return orig_spawn(self, cb)
+      end
+    end
+
+    -- If NeogitConsole is ever opened directly for an interactive hook, wire its terminal channel
+    -- `on_input` callback to the underlying process so keystrokes are forwarded instead of dropped
+    local ok_pbuf, ProcessBuffer = pcall(require, 'neogit.buffers.process')
+    if ok_pbuf and ProcessBuffer and ok_buf and Buffer then
+      local active_opening_process = nil
+      local orig_open_term = Buffer.open_terminal_channel
+      function Buffer:open_terminal_channel()
+        local proc = self._neogit_process or active_opening_process
+        if proc then
+          self._neogit_process = proc
+          assert(self.chan == nil, 'Terminal channel already open')
+          self.chan = vim.api.nvim_open_term(self.handle, {
+            on_input = function(_, _, _, data)
+              if proc and proc.send then
+                pcall(proc.send, proc, data)
+              end
+            end,
+          })
+          self:unlock()
+          self:set_lines(0, -1, false, {})
+          self:lock()
+          return
+        end
+        return orig_open_term(self)
+      end
+
+      local orig_pbuf_open = ProcessBuffer.open
+      function ProcessBuffer:open()
+        active_opening_process = self.process
+        local ok_open, res = pcall(orig_pbuf_open, self)
+        active_opening_process = nil
+        if not ok_open then
+          error(res)
+        end
+        if self.buffer and self.process then
+          self.buffer._neogit_process = self.process
+        end
+        return res
+      end
+    end
   end,
   keys = {
     {

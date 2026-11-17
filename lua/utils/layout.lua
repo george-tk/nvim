@@ -59,6 +59,7 @@ local function get_win_info(win)
       )
     )
   local is_neogit = not is_float
+    and ft ~= 'NeogitConsole'
     and ((ptype == 'neogit') or (ft:match '^Neogit' ~= nil) or (ft == 'gitcommit' and (bname:find 'commit_editmsg' ~= nil or bname:find 'merge_msg' ~= nil)))
   local is_dockyard = not is_float
     and ((ptype == 'dockyard') or (ft == 'dockyard' or ft == 'dockyard-logs' or ft == 'dockyard-files' or ft == 'dockyard_popup'))
@@ -84,10 +85,12 @@ local function get_win_info(win)
 
   local is_dbout = (ptype == 'dbout') or (ft == 'dbout' or ft == 'sqmeow-result' or bname:find 'sqmeow://result' ~= nil)
   local is_qf = (ptype == 'qf') or (ft == 'qf' or vim.bo[buf].buftype == 'quickfix')
-  local is_term = (ptype == 'terminal') or (ft == 'snacks_terminal' or ft == 'terminal' or vim.bo[buf].buftype == 'terminal' or bname:find 'term://' ~= nil)
+  local is_term = not is_float
+    and ft ~= 'NeogitConsole'
+    and ((ptype == 'terminal') or (ft == 'snacks_terminal' or ft == 'terminal' or vim.bo[buf].buftype == 'terminal' or bname:find 'term://' ~= nil))
   local is_terminal = (zone == 'bottom') or is_dbout or is_qf or is_term
 
-  local is_editor = not is_terminal and ft ~= 'snacks_dashboard'
+  local is_editor = not is_float and not is_terminal and ft ~= 'snacks_dashboard' and ft ~= 'NeogitConsole'
 
   return {
     win = win,
