@@ -279,6 +279,10 @@ return {
           root_dir = root_with({ 'pyproject.toml', 'ruff.toml', '.ruff.toml', 'setup.py', 'requirements.txt', '.git' }, vim.uv.cwd()),
         },
 
+        postgres_lsp = {
+          root_dir = root_with({ 'postgres-language-server.jsonc', 'postgres-language-server.json', '.git' }, vim.uv.cwd()),
+        },
+
         -- Uncomment to enable TypeScript/JavaScript (tsserver via ts_ls)
         -- ts_ls = {
         --   root_dir = root_with({ 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' }, vim.uv.cwd()),

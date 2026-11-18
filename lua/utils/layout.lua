@@ -51,13 +51,20 @@ local function get_win_info(win)
     or (not is_float and (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil))
     or (
       is_float
-      and ft == 'snacks_picker_input'
+      and (ft == 'snacks_picker_input' or ft == 'snacks_picker_list')
       and (function()
         local ok_sp, sp = pcall(function()
           return Snacks.picker.get { source = 'explorer' }
         end)
-        if ok_sp and sp and sp[1] and sp[1].input and sp[1].input.win then
-          return sp[1].input.win.win == win
+        if ok_sp and sp then
+          for _, p in ipairs(sp) do
+            for _, key in ipairs { 'input', 'list' } do
+              local w = p[key] and p[key].win and p[key].win.win
+              if w == win then
+                return true
+              end
+            end
+          end
         end
         return false
       end)()
