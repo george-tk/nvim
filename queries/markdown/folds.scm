@@ -1,5 +1,12 @@
-([
-  (fenced_code_block)
-  (section)
+[
+  (section
+    (atx_heading
+      [
+        (atx_h2_marker)
+        (atx_h3_marker)
+        (atx_h4_marker)
+        (atx_h5_marker)
+        (atx_h6_marker)
+      ]))
 ] @fold
-  (#trim! @fold))
+  (#trim! @fold)

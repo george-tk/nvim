@@ -218,7 +218,7 @@ o.foldcolumn = '0' -- Disable separate fold column (folds shown in statuscolumn)
 o.foldmethod = 'expr' -- Expression folding
 o.foldexpr = 'v:lua.vim.treesitter.foldexpr()' -- Treesitter folding
 o.foldlevel = 99 -- All folds open
-o.foldlevelstart = 99 -- Start all files with folds open (Markdown overrides to foldlevel = 1)
+o.foldlevelstart = 99 -- Start all files with folds open (Markdown overrides per window)
 o.foldenable = true -- Enable folding
 o.foldtext = '' -- Empty fold text
 o.foldopen = 'mark,percent,quickfix,search,tag,undo' -- Auto-open folds (except horizontal movement)

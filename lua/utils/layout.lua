@@ -384,7 +384,7 @@ local function get_opencode_cmd()
       binary = 'opencode'
     end
   end
-  return binary .. ' --port'
+  return binary .. ' --port --agent plan'
 end
 
 function RightPanel.close_all()

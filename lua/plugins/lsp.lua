@@ -28,12 +28,35 @@ return {
 
       -- Blink is our completion client; we’ll use its capabilities
       'saghen/blink.cmp',
+
+      -- JSON schemas for jsonls (package.json, tsconfig.json, etc.)
+      'b0o/schemastore.nvim',
     },
 
-    config = function()
-      -----------------------------------------------------------------------
-      -- Diagnostics: reasonable defaults, sorted by severity, rounded float
-      -----------------------------------------------------------------------
+      config = function()
+        -----------------------------------------------------------------------
+        -- Compose files need a dedicated filetype so Docker's language server
+        -- attaches to them without hijacking every other YAML file.
+        -----------------------------------------------------------------------
+        vim.filetype.add {
+          filename = {
+            ['docker-compose.yml'] = 'yaml.docker-compose',
+            ['docker-compose.yaml'] = 'yaml.docker-compose',
+            ['docker-compose.override.yml'] = 'yaml.docker-compose',
+            ['docker-compose.override.yaml'] = 'yaml.docker-compose',
+            ['compose.yml'] = 'yaml.docker-compose',
+            ['compose.yaml'] = 'yaml.docker-compose',
+            ['compose.override.yml'] = 'yaml.docker-compose',
+            ['compose.override.yaml'] = 'yaml.docker-compose',
+          },
+        }
+
+        local ok_schema, schemastore = pcall(require, 'schemastore')
+        local json_schemas = ok_schema and schemastore.json.schemas() or {}
+
+        -----------------------------------------------------------------------
+        -- Diagnostics: reasonable defaults, sorted by severity, rounded float
+        -----------------------------------------------------------------------
       vim.diagnostic.config {
         severity_sort = true,
         float = { border = 'rounded', source = 'if_many' },
@@ -241,6 +264,37 @@ return {
       -- Servers
       -----------------------------------------------------------------------
       local servers = {
+        bashls = {
+          root_dir = root_with({ '.git' }, vim.uv.cwd()),
+          settings = {
+            bashIde = {
+              globPattern = '*@(.sh|.inc|.bash|.command)',
+            },
+          },
+        },
+
+        jsonls = {
+          root_dir = root_with({ 'package.json', 'tsconfig.json', '.git' }, vim.uv.cwd()),
+          settings = {
+            json = {
+              validate = { enable = true },
+              schemas = json_schemas,
+            },
+          },
+        },
+
+        docker_language_server = {
+          root_dir = root_with({
+            'Dockerfile',
+            'docker-compose.yaml',
+            'docker-compose.yml',
+            'compose.yaml',
+            'compose.yml',
+            'docker-bake.hcl',
+            '.git',
+          }, vim.uv.cwd()),
+        },
+
         marksman = {
           root_dir = root_with({ '.marksman.toml', '.git' }, vim.uv.cwd()),
         },
@@ -308,6 +362,14 @@ return {
         'stylua', -- Lua Formatter
         'prettier', -- Markdown, JSON, YAML, HTML, CSS Formatter
         'sql-formatter', -- SQL Formatter
+        'bash-language-server', -- Bash LSP (bashls)
+        'json-lsp', -- JSON LSP (jsonls)
+        'docker-language-server', -- Dockerfile / Compose / Bake LSP
+        'hadolint', -- Dockerfile linter
+        'docker-compose-linter', -- Compose linter (dclint)
+        'markdownlint-cli2', -- Markdown linter
+        'shellcheck', -- Bash linter
+        'shfmt', -- Bash formatter
       })
 
       local mti = require 'mason-tool-installer'

@@ -22,6 +22,9 @@ return {
         'vimdoc',
         'python',
         'sql',
+        'json',
+        'yaml',
+        'dockerfile',
       }
 
       -- Enable Treesitter highlighting and indenting natively in Neovim 0.12+ (with large-file & special-buffer guard)
@@ -34,6 +37,10 @@ return {
           end
           local ft = vim.bo[buf].filetype
           local bt = vim.bo[buf].buftype
+          if ft == 'yaml.docker-compose' then
+            pcall(vim.treesitter.start, buf, 'yaml')
+            return
+          end
           if ft == 'bigfile' or ft == 'sqmeow-result' or ft == 'sqmeow-drawer' or ft == 'dbout' or ft == 'dbui' or ft:match '^snacks' then
             return
           end

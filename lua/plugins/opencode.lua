@@ -16,7 +16,7 @@ return {
         binary = 'opencode'
       end
     end
-    local opencode_cmd = binary .. ' --port'
+    local opencode_cmd = binary .. ' --port --agent plan'
 
     ---@type snacks.terminal.Opts
     local snacks_terminal_opts = {
@@ -410,6 +410,10 @@ return {
       set_prompt_running(false)
       require('opencode').command 'session.interrupt'
     end, { desc = 'Stop AI Generation' })
+
+    vim.keymap.set({ 'n' }, '<leader>at', function()
+      require('opencode').command 'agent.cycle'
+    end, { desc = 'Toggle AI Agent (Plan/Build)' })
 
     vim.keymap.set({ 'n', 'x' }, 'go', function()
       return require('opencode').operator '@this '
