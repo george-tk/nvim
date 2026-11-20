@@ -1035,7 +1035,7 @@ function M.setup_drawer_helpers()
         vim.wo[ed_win].winfixbuf = false
       end
 
-      vim.bo[v.buf].buflisted = true
+      vim.bo[v.buf].buflisted = false
       if prev_buf and prev_buf ~= v.buf and vim.api.nvim_buf_is_valid(prev_buf) then
         v._prev_buf = prev_buf
       end
@@ -1066,10 +1066,6 @@ function M.setup_drawer_helpers()
         end,
       })
 
-      local ok_br, br = pcall(require, 'utils.buffer-ring')
-      if ok_br and br.on_buf_enter then
-        br.on_buf_enter(v.buf)
-      end
       return started, err
     end
   end

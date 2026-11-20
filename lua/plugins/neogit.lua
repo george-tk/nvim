@@ -15,7 +15,25 @@ return {
   'NeogitOrg/neogit',
   dependencies = {
     'nvim-lua/plenary.nvim', -- required
-    'sindrets/diffview.nvim', -- optional - Diff integration
+    {
+      'sindrets/diffview.nvim', -- Diff integration (transient overlay, no tab bar, `q` closes)
+      init = function()
+        vim.opt.showtabline = 0
+      end,
+      opts = {
+        keymaps = {
+          view = {
+            { 'n', 'q', '<cmd>DiffviewClose<CR>', { desc = 'Close Diffview' } },
+          },
+          file_panel = {
+            { 'n', 'q', '<cmd>DiffviewClose<CR>', { desc = 'Close Diffview' } },
+          },
+          file_history_panel = {
+            { 'n', 'q', '<cmd>DiffviewClose<CR>', { desc = 'Close Diffview' } },
+          },
+        },
+      },
+    },
     'folke/snacks.nvim',
   },
   opts = {

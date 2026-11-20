@@ -143,7 +143,7 @@ local function is_right_panel(info)
 end
 
 local function find_win_type(key)
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) then
       local cfg = vim.api.nvim_win_get_config(win)
       if not cfg.relative or cfg.relative == '' then
@@ -159,7 +159,7 @@ end
 
 local function get_right_sidebar_win()
   local fallback = nil
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) then
       local cfg = vim.api.nvim_win_get_config(win)
       if not cfg.relative or cfg.relative == '' then
@@ -211,12 +211,15 @@ end
 -------------------------------------------------------------------------------
 
 local function equalize_splits()
+  if vim.t.diffview_view_initialized then
+    return
+  end
   local editor_wins = {}
   local bottom_wins = {}
   local sidebar_w = 0
   local has_sidebar = false
 
-  for _, w in ipairs(vim.api.nvim_list_wins()) do
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(w) then
       local cfg = vim.api.nvim_win_get_config(w)
       if not cfg.relative or cfg.relative == '' then
@@ -329,11 +332,14 @@ local function equalize_splits()
 end
 
 local function ensure_right_sidebar_precedence()
+  if vim.t.diffview_view_initialized then
+    return
+  end
   local right_wins = {}
   local bottom_wins = {}
   local editor_wins = {}
   local sidebar_w = 0
-  for _, w in ipairs(vim.api.nvim_list_wins()) do
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(w) then
       local cfg = vim.api.nvim_win_get_config(w)
       if not cfg.relative or cfg.relative == '' then
@@ -407,11 +413,28 @@ local function ensure_right_sidebar_precedence()
         end
       end
     end
+
+    -- Keep Snacks Explorer child floats synced with the docked root width
+    local ok_sp, pickers = pcall(function()
+      return Snacks.picker.get { source = 'explorer' }
+    end)
+    if ok_sp and pickers then
+      for _, p in ipairs(pickers) do
+        if p.layout and p.layout.update then
+          pcall(function()
+            p.layout:update()
+          end)
+        end
+      end
+    end
   end
   equalize_splits()
 end
 
 local function reset_window_layout()
+  if vim.t.diffview_view_initialized then
+    return
+  end
   local default_bot_height = math.floor(vim.o.lines * 0.38)
 
   RightPanel.custom_widths = {}
@@ -420,7 +443,7 @@ local function reset_window_layout()
   RightPanel.has_custom_bottom_widths = false
   BottomPanel.custom_height = nil
 
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if vim.api.nvim_win_is_valid(win) then
       vim.w[win].custom_split_ratio = nil
       vim.w[win].custom_height_ratio = nil
@@ -429,9 +452,13 @@ local function reset_window_layout()
 
   ensure_right_sidebar_precedence()
 
-  local bot_win = find_win_type 'is_terminal'
-  if bot_win and vim.api.nvim_win_is_valid(bot_win) then
-    pcall(vim.api.nvim_win_set_height, bot_win, default_bot_height)
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_is_valid(win) then
+      local cfg = vim.api.nvim_win_get_config(win)
+      if (not cfg.relative or cfg.relative == '') and get_win_info(win).is_terminal then
+        pcall(vim.api.nvim_win_set_height, win, default_bot_height)
+      end
+    end
   end
 
   equalize_splits()
@@ -2043,6 +2070,7 @@ local function is_database_or_transient_buf(buf)
     or ft == 'snacks_dashboard'
     or ft == 'snacks_terminal'
     or ft:match '^Neogit' ~= nil
+    or ft:match '^Diffview' ~= nil
     or ft == 'dockyard'
     or ft == 'dockyard-logs'
     or ft == 'dockyard-files'
@@ -2247,11 +2275,14 @@ local function setup_autocmds()
       if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
         return
       end
+      if vim.t.diffview_view_initialized then
+        return
+      end
 
       local editor_win = get_editor_win()
       if not editor_win then
         local non_editor_exists = false
-        for _, w in ipairs(vim.api.nvim_list_wins()) do
+        for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
           if vim.api.nvim_win_is_valid(w) then
             local cfg = vim.api.nvim_win_get_config(w)
             if not cfg.relative or cfg.relative == '' then
@@ -2287,7 +2318,7 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('WinNew', {
     group = layout_lock_group,
     callback = function()
-      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil or vim.t.diffview_view_initialized then
         return
       end
       local new_win = vim.api.nvim_get_current_win()
@@ -2305,7 +2336,7 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('WinClosed', {
     group = layout_lock_group,
     callback = function()
-      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil or vim.t.diffview_view_initialized then
         return
       end
       schedule_layout_pass(true)
@@ -2316,6 +2347,9 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('VimResized', {
     group = layout_lock_group,
     callback = function()
+      if vim.t.diffview_view_initialized then
+        return
+      end
       schedule_layout_pass(true)
     end,
     desc = 'Auto-equalize splits and enforce sidebar geometry on terminal resize',
