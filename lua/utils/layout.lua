@@ -11,12 +11,14 @@ local RightPanel = {
   custom_widths = {},
   active_mode = 'explorer', -- 'explorer' | 'dbui' | 'opencode' | 'neogit' | 'dockyard' | 'grugfar'
   has_custom_editor_widths = false,
+  has_custom_editor_heights = false,
   has_custom_bottom_widths = false,
 }
 
 local BottomPanel = {
   active_mode = 'terminal', -- 'terminal' | 'dbout' | 'qf'
   active_terminal_count = 1,
+  custom_height = nil,
   last_dbout_buf = nil,
   dbout_open = false,
   last_qf_buf = nil,
@@ -255,8 +257,10 @@ local function equalize_splits()
     table.sort(cols)
 
     local n = #cols
-    local seps = n - 1
-    local net_w = avail_w - seps
+    local net_w = 0
+    for _, c in ipairs(cols) do
+      net_w = net_w + vim.api.nvim_win_get_width(col_map[c])
+    end
     if net_w <= 0 then
       return
     end
@@ -277,12 +281,58 @@ local function equalize_splits()
     end
   end
 
+  local function balance_heights(wins)
+    if #wins <= 1 then
+      return
+    end
+    -- Group windows by column so each vertical stack of horizontal splits is balanced independently
+    local stacks = {}
+    for _, w in ipairs(wins) do
+      if vim.api.nvim_win_is_valid(w) then
+        local pos = vim.api.nvim_win_get_position(w)
+        local c = pos[2]
+        stacks[c] = stacks[c] or {}
+        table.insert(stacks[c], { win = w, row = pos[1] })
+      end
+    end
+    for _, stack in pairs(stacks) do
+      if #stack > 1 then
+        table.sort(stack, function(a, b)
+          return a.row < b.row
+        end)
+        local net_h = 0
+        for _, item in ipairs(stack) do
+          net_h = net_h + vim.api.nvim_win_get_height(item.win)
+        end
+        if net_h > 0 then
+          if not RightPanel.has_custom_editor_heights then
+            local target = math.floor(net_h / #stack)
+            for i = 1, #stack - 1 do
+              pcall(vim.api.nvim_win_set_height, stack[i].win, target)
+            end
+          else
+            for i = 1, #stack - 1 do
+              local w = stack[i].win
+              local r = vim.w[w].custom_height_ratio or (1 / #stack)
+              local target = math.max(4, math.floor(net_h * r))
+              pcall(vim.api.nvim_win_set_height, w, target)
+            end
+          end
+        end
+      end
+    end
+  end
+
   balance_group(editor_wins, RightPanel.has_custom_editor_widths)
+  balance_heights(editor_wins)
   balance_group(bottom_wins, RightPanel.has_custom_bottom_widths)
 end
 
 local function ensure_right_sidebar_precedence()
   local right_wins = {}
+  local bottom_wins = {}
+  local editor_wins = {}
+  local sidebar_w = 0
   for _, w in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(w) then
       local cfg = vim.api.nvim_win_get_config(w)
@@ -290,7 +340,31 @@ local function ensure_right_sidebar_precedence()
         local wi = get_win_info(w)
         if is_right_panel(wi) then
           table.insert(right_wins, w)
+          sidebar_w = math.max(sidebar_w, vim.api.nvim_win_get_width(w))
+        elseif wi.is_terminal then
+          table.insert(bottom_wins, w)
+        elseif wi.is_editor then
+          table.insert(editor_wins, w)
         end
+      end
+    end
+  end
+
+  -- When the editor is vertically split and there is a single bottom panel,
+  -- ensure the bottom panel spans the full width beneath all editor splits
+  -- (before the right panel reclaims full-height precedence on the far right).
+  if #bottom_wins == 1 and #editor_wins > 1 and #right_wins <= 1 then
+    local bot_win = bottom_wins[1]
+    local expected_w = vim.o.columns - (#right_wins > 0 and (sidebar_w + 1) or 0)
+    if vim.api.nvim_win_is_valid(bot_win) and vim.api.nvim_win_get_width(bot_win) < expected_w - 2 then
+      local cur = vim.api.nvim_get_current_win()
+      local h = vim.api.nvim_win_get_height(bot_win)
+      vim.api.nvim_win_call(bot_win, function()
+        vim.cmd 'wincmd J'
+      end)
+      pcall(vim.api.nvim_win_set_height, bot_win, h)
+      if vim.api.nvim_win_is_valid(cur) then
+        pcall(vim.api.nvim_set_current_win, cur)
       end
     end
   end
@@ -342,11 +416,14 @@ local function reset_window_layout()
 
   RightPanel.custom_widths = {}
   RightPanel.has_custom_editor_widths = false
+  RightPanel.has_custom_editor_heights = false
   RightPanel.has_custom_bottom_widths = false
+  BottomPanel.custom_height = nil
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) then
       vim.w[win].custom_split_ratio = nil
+      vim.w[win].custom_height_ratio = nil
     end
   end
 
@@ -395,11 +472,19 @@ function RightPanel.close_all()
   local closed = false
 
   -- Close Snacks File Explorer picker if open
+  -- Close child floats (preview, list, input) before `p:close()` closes the docked root split,
+  -- preventing Neovim from briefly flashing orphaned floats at column 0 (left side).
   local ok, pickers = pcall(function()
     return Snacks.picker.get { source = 'explorer' }
   end)
   if ok and pickers and #pickers > 0 then
     for _, p in ipairs(pickers) do
+      for _, part in ipairs { p.preview, p.input, p.list } do
+        local pw = part and part.win and part.win.win
+        if pw and vim.api.nvim_win_is_valid(pw) then
+          pcall(vim.cmd, ('noautocmd call nvim_win_close(%d, v:true)'):format(pw))
+        end
+      end
       pcall(function()
         p:close()
       end)
@@ -1216,15 +1301,10 @@ function BottomPanel.open_terminal(count, no_toggle)
     vim.api.nvim_set_current_win(ed)
   end
 
-  local r_win = get_right_sidebar_win()
-  local relative = (r_win and vim.api.nvim_win_is_valid(r_win) and ed) and 'win' or 'editor'
-  local win_target = (relative == 'win') and ed or nil
-
   local win_opts = {
     position = 'bottom',
-    relative = relative,
-    win = win_target,
-    height = 0.38,
+    relative = 'editor',
+    height = BottomPanel.custom_height or 0.38,
     wo = {
       winbar = '',
       winfixheight = true,
@@ -1238,8 +1318,9 @@ function BottomPanel.open_terminal(count, no_toggle)
     win = win_opts,
   })
   if target_term then
-    target_term.opts.relative = relative
-    target_term.opts.win = win_target
+    target_term.opts.relative = 'editor'
+    target_term.opts.win = nil
+    target_term.opts.height = BottomPanel.custom_height or 0.38
     target_term:show()
     if target_term.buf and vim.api.nvim_buf_is_valid(target_term.buf) then
       vim.b[target_term.buf].panel_zone = 'bottom'
@@ -1292,18 +1373,13 @@ function BottomPanel.split_terminal(count)
     end
   end
   local target_count = (count and count > 0 and count) or (max_id + 1)
-  local ed = get_editor_win()
-  local r_win = get_right_sidebar_win()
-  local relative = (r_win and vim.api.nvim_win_is_valid(r_win) and ed) and 'win' or 'editor'
-  local win_target = (relative == 'win') and ed or nil
 
   Snacks.terminal.open(nil, {
     count = target_count,
     win = {
       position = 'bottom',
-      relative = relative,
-      win = win_target,
-      height = 0.38,
+      relative = 'editor',
+      height = BottomPanel.custom_height or 0.38,
       wo = {
         winbar = '',
         winfixheight = true,
@@ -1383,6 +1459,9 @@ function BottomPanel.open_dbout(no_toggle)
       vim.wo[res_win].spell = false
       vim.wo[res_win].winfixheight = true
       vim.wo[res_win].winfixbuf = true
+      if BottomPanel.custom_height then
+        pcall(vim.api.nvim_win_set_height, res_win, BottomPanel.custom_height)
+      end
     end
 
     ensure_right_sidebar_precedence()
@@ -1422,18 +1501,9 @@ function BottomPanel.open_dbout(no_toggle)
     vim.api.nvim_set_current_win(ed)
   end
 
-  local r_win = get_right_sidebar_win()
-  local results_height = math.floor(vim.o.lines * 0.35)
-  local win
-  if r_win and ed and vim.api.nvim_win_is_valid(ed) then
-    vim.api.nvim_win_call(ed, function()
-      vim.cmd('belowright ' .. results_height .. 'split')
-      win = vim.api.nvim_get_current_win()
-    end)
-  else
-    vim.cmd('botright ' .. results_height .. 'split')
-    win = vim.api.nvim_get_current_win()
-  end
+  local results_height = BottomPanel.custom_height or math.floor(vim.o.lines * 0.35)
+  vim.cmd('botright ' .. results_height .. 'split')
+  local win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(win, dbout_buf)
   vim.wo[win].winfixheight = true
   vim.wo[win].winfixbuf = true
@@ -1466,14 +1536,8 @@ function BottomPanel.open_qf(no_toggle)
     vim.api.nvim_set_current_win(ed)
   end
 
-  local r_win = get_right_sidebar_win()
-  local qf_height = math.floor(vim.o.lines * 0.35)
-  if r_win and ed and vim.api.nvim_win_is_valid(ed) then
-    vim.api.nvim_set_current_win(ed)
-    vim.cmd('belowright copen ' .. qf_height)
-  else
-    vim.cmd('botright copen ' .. qf_height)
-  end
+  local qf_height = BottomPanel.custom_height or math.floor(vim.o.lines * 0.35)
+  vim.cmd('botright copen ' .. qf_height)
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_win_get_buf(win)
   vim.b[buf].panel_zone = 'bottom'
@@ -1843,9 +1907,35 @@ local function smart_resize_height(delta)
     return
   end
 
+  local info = get_win_info(cur_win)
   local cur_h = vim.api.nvim_win_get_height(cur_win)
   local new_h = math.max(4, cur_h + delta)
   pcall(vim.api.nvim_win_set_height, cur_win, new_h)
+
+  if info.is_terminal then
+    BottomPanel.custom_height = new_h
+  elseif info.is_editor then
+    RightPanel.has_custom_editor_heights = true
+    local col = vim.api.nvim_win_get_position(cur_win)[2]
+    vim.schedule(function()
+      local stack = {}
+      local total_h = 0
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_is_valid(w) then
+          local cfg = vim.api.nvim_win_get_config(w)
+          if (not cfg.relative or cfg.relative == '') and get_win_info(w).is_editor and vim.api.nvim_win_get_position(w)[2] == col then
+            table.insert(stack, w)
+            total_h = total_h + vim.api.nvim_win_get_height(w)
+          end
+        end
+      end
+      if total_h > 0 and #stack > 1 then
+        for _, w in ipairs(stack) do
+          vim.w[w].custom_height_ratio = vim.api.nvim_win_get_height(w) / total_h
+        end
+      end
+    end)
+  end
 end
 
 -------------------------------------------------------------------------------
@@ -1865,6 +1955,12 @@ local function editor_split(direction)
     vim.api.nvim_set_current_win(ed)
   end
   if direction == 'horizontal' then
+    RightPanel.has_custom_editor_heights = false
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_is_valid(w) and get_win_info(w).is_editor then
+        vim.w[w].custom_height_ratio = nil
+      end
+    end
     vim.cmd 'split'
   else
     RightPanel.has_custom_editor_widths = false
@@ -2134,46 +2230,85 @@ local function setup_autocmds()
     end,
   })
 
+  local layout_pass_pending = false
+  local layout_pass_needs_precedence = false
+  local function schedule_layout_pass(full_precedence)
+    if full_precedence then
+      layout_pass_needs_precedence = true
+    end
+    if layout_pass_pending then
+      return
+    end
+    layout_pass_pending = true
+    vim.schedule(function()
+      local do_precedence = layout_pass_needs_precedence
+      layout_pass_pending = false
+      layout_pass_needs_precedence = false
+      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+        return
+      end
+
+      local editor_win = get_editor_win()
+      if not editor_win then
+        local non_editor_exists = false
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_is_valid(w) then
+            local cfg = vim.api.nvim_win_get_config(w)
+            if not cfg.relative or cfg.relative == '' then
+              local info = get_win_info(w)
+              if is_right_panel(info) or info.is_terminal then
+                non_editor_exists = true
+                break
+              end
+            end
+          end
+        end
+
+        if non_editor_exists then
+          vim.cmd 'topleft split'
+          local new_win = vim.api.nvim_get_current_win()
+          vim.wo[new_win].winfixbuf = false
+          vim.wo[new_win].winfixwidth = false
+          vim.wo[new_win].winfixheight = false
+          vim.cmd 'enew'
+          ensure_right_sidebar_precedence()
+          return
+        end
+      end
+
+      if do_precedence then
+        ensure_right_sidebar_precedence()
+      else
+        equalize_splits()
+      end
+    end)
+  end
+
+  vim.api.nvim_create_autocmd('WinNew', {
+    group = layout_lock_group,
+    callback = function()
+      if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+        return
+      end
+      local new_win = vim.api.nvim_get_current_win()
+      local cfg = vim.api.nvim_win_is_valid(new_win) and vim.api.nvim_win_get_config(new_win) or nil
+      if cfg and cfg.relative and cfg.relative ~= '' then
+        return
+      end
+      local info = vim.api.nvim_win_is_valid(new_win) and get_win_info(new_win) or nil
+      local is_panel = info and (is_right_panel(info) or info.is_terminal)
+      schedule_layout_pass(is_panel)
+    end,
+    desc = 'Auto-equalize splits and enforce panel geometry when a new window opens',
+  })
+
   vim.api.nvim_create_autocmd('WinClosed', {
     group = layout_lock_group,
     callback = function()
       if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
         return
       end
-      vim.schedule(function()
-        if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
-          return
-        end
-
-        local editor_win = get_editor_win()
-        if not editor_win then
-          local non_editor_exists = false
-          for _, w in ipairs(vim.api.nvim_list_wins()) do
-            if vim.api.nvim_win_is_valid(w) then
-              local cfg = vim.api.nvim_win_get_config(w)
-              if not cfg.relative or cfg.relative == '' then
-                local info = get_win_info(w)
-                if is_right_panel(info) or info.is_terminal then
-                  non_editor_exists = true
-                  break
-                end
-              end
-            end
-          end
-
-          if non_editor_exists then
-            vim.cmd 'topleft split'
-            local new_win = vim.api.nvim_get_current_win()
-            vim.wo[new_win].winfixbuf = false
-            vim.wo[new_win].winfixwidth = false
-            vim.wo[new_win].winfixheight = false
-            vim.cmd 'enew'
-            ensure_right_sidebar_precedence()
-          end
-        else
-          ensure_right_sidebar_precedence()
-        end
-      end)
+      schedule_layout_pass(true)
     end,
     desc = 'Prevent sidebars from overtaking screen when editor windows close and auto-equalize splits',
   })
@@ -2181,7 +2316,7 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('VimResized', {
     group = layout_lock_group,
     callback = function()
-      vim.schedule(ensure_right_sidebar_precedence)
+      schedule_layout_pass(true)
     end,
     desc = 'Auto-equalize splits and enforce sidebar geometry on terminal resize',
   })
