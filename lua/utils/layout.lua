@@ -47,28 +47,32 @@ local function get_win_info(win)
   local is_float = (cfg.relative ~= nil and cfg.relative ~= '')
 
   local bt = vim.bo[buf].buftype
+  local is_snacks_ft = ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil
   local is_explorer = (ptype == 'explorer')
-    or (not is_float and (ft:match '^snacks_picker' ~= nil or ft:match '^snacks_layout' ~= nil))
-    or (
-      is_float
-      and (ft == 'snacks_picker_input' or ft == 'snacks_picker_list')
-      and (function()
-        local ok_sp, sp = pcall(function()
-          return Snacks.picker.get { source = 'explorer' }
-        end)
-        if ok_sp and sp then
-          for _, p in ipairs(sp) do
-            for _, key in ipairs { 'input', 'list' } do
-              local w = p[key] and p[key].win and p[key].win.win
-              if w == win then
-                return true
-              end
-            end
+    or (not is_float and is_snacks_ft)
+    -- The docked Explorer sidebar renders its list/input as floats anchored to a split root window,
+    -- so floats only count as the Explorer when they belong to the Explorer picker itself
+    -- (other floating pickers like <leader>ff must not hijack the Right Panel zone).
+    or (is_float and is_snacks_ft and (function()
+      local ok_sp, pickers = pcall(function()
+        return Snacks.picker.get { source = 'explorer' }
+      end)
+      if not (ok_sp and pickers) then
+        return false
+      end
+      for _, p in ipairs(pickers) do
+        for _, part in ipairs { p.list, p.input, p.preview } do
+          if part and part.win and part.win.win == win then
+            return true
           end
         end
-        return false
-      end)()
-    )
+        local root = p.layout and p.layout.root and p.layout.root.win
+        if root and cfg.relative == 'win' and cfg.win == root then
+          return true
+        end
+      end
+      return false
+    end)())
   local is_dbui = not is_float and ((ptype == 'dbui') or (ft == 'dbui' or ft == 'sqmeow-drawer' or bname:find 'sqmeow://drawer' ~= nil))
   local is_opencode = not is_float
     and (
@@ -1936,6 +1940,7 @@ local function is_database_or_transient_buf(buf)
   if
     ft == 'sqmeow-drawer'
     or ft == 'sqmeow-result'
+    or ft == 'sqmeow-erd'
     or ft == 'sqmeow-output'
     or ft == 'dbui'
     or ft == 'dbout'

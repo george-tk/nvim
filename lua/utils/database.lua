@@ -684,171 +684,10 @@ function M.open_drawer()
   end)
 end
 
--------------------------------------------------------------------------------
--- Lost Connection Watcher
--- Prebuilt `sqmeow-core` release binaries (v3.2.0) do not yet include the
--- post-v3.2.0 `payload.lost` engine event (`a719760`), so when a DB server or
--- container restarts, the connection can stay marked `connected` and cache
--- "connection closed" errors in the drawer. Watch engine events + drawer toggle
--- to cleanly disconnect dead sessions and reload cleared nodes on `l`/`<CR>`.
--------------------------------------------------------------------------------
-
-local lost_patterns = {
-  'connection closed',
-  'connection is closed',
-  'connection reset',
-  'connection refused',
-  'broken pipe',
-  'server closed the connection',
-  'terminating connection',
-  'unexpected eof',
-  'error communicating with',
-  'not connected',
-  'connection was killed',
-  'lost connection',
-  'gone away',
-  'closed pool',
-  'pool timed out',
-  'eof',
-}
-
-function M.is_connection_lost_error(err)
-  if type(err) ~= 'string' or err == '' then
-    return false
-  end
-  local lower = err:lower()
-  for _, pat in ipairs(lost_patterns) do
-    if lower:find(pat, 1, true) then
-      return true
-    end
-  end
-  return false
-end
-
-M._lost_pending = M._lost_pending or {}
-
--- Disconnect the whole connection tree a lost connection belongs to (a cluster child's
--- server is the parent's server, so the parent is dead too).
-function M.handle_connection_lost(conn_id, err)
-  local state = sqmeow 'core.state'
-  if not state or not conn_id or not state.connections[conn_id] or M._lost_pending[conn_id] then
-    return
-  end
-  M._lost_pending[conn_id] = true
-
-  vim.schedule(function()
-    M._lost_pending[conn_id] = nil
-    local conn = state.connections[conn_id]
-    if not conn then
-      return
-    end
-    local root = conn
-    while root.parent and state.connections[root.parent] do
-      root = state.connections[root.parent]
-    end
-
-    local gone = { root.id }
-    local gone_names = { [root.name] = true }
-    for _, c in ipairs(state.connection_list()) do
-      if c.parent == root.id then
-        table.insert(gone, c.id)
-        if c.name then
-          gone_names[c.name] = true
-        end
-      end
-    end
-
-    local api = sqmeow 'api.connection'
-    if api and api.disconnect then
-      pcall(api.disconnect, root.id)
-    else
-      for _, id in ipairs(gone) do
-        state.remove_connection(id)
-      end
-    end
-
-    local drawer = sqmeow 'ui.drawer'
-    if drawer then
-      for _, id in ipairs(gone) do
-        pcall(drawer.forget, id)
-      end
-    end
-    for name in pairs(gone_names) do
-      state.failures[name] = nil
-    end
-    if drawer and drawer.render then
-      pcall(drawer.render)
-    end
-    pcall(function()
-      require('sqmeow.ui.editor').update_winbar()
-    end)
-    local ok_lualine, lualine = pcall(require, 'lualine')
-    if ok_lualine and lualine.refresh then
-      lualine.refresh()
-    end
-  end)
-end
-
-function M.watch_connection_loss()
-  if M._lost_watch_wired then
-    return
-  end
-  local rpc = sqmeow 'rpc.client'
-  if not rpc or not rpc.on then
-    return
-  end
-  M._lost_watch_wired = true
-
-  local function check(payload)
-    if not payload then
-      return
-    end
-    local cid = payload.conn_id or payload.id
-    if cid and (payload.lost or M.is_connection_lost_error(payload.error)) then
-      M.handle_connection_lost(cid, payload.error)
-    end
-  end
-  for _, event in ipairs { 'conn:state', 'schema:nodes', 'call:state', 'structure:done', 'relationships:done', 'routine:done' } do
-    rpc.on(event, check)
-  end
-end
-
 function M.setup_drawer_helpers()
-  M.watch_connection_loss()
   local drawer = sqmeow 'ui.drawer'
   if not drawer or not drawer.actions then
     return
-  end
-
-  -- 0. Hook drawer.actions.toggle so pressing l/<CR> on a connection/node that
-  -- cached an error (e.g. "connection closed" while DB was down) invalidates the
-  -- stale error cache and reconnects/reloads cleanly once the DB is back up.
-  if not M._drawer_toggle_hooked and drawer.actions.toggle then
-    M._drawer_toggle_hooked = true
-    local orig_toggle = drawer.actions.toggle
-    drawer.actions.toggle = function(...)
-      local node = drawer.current_node and drawer.current_node()
-      if node and node.conn_id then
-        local cached = drawer.cached_nodes and drawer.cached_nodes(node.conn_id, node.path or {})
-        if cached and #cached == 0 then
-          if node.kind == 'connection' then
-            local api = sqmeow 'api.connection'
-            local state = sqmeow 'core.state'
-            if api and api.disconnect and api.connect_named then
-              pcall(api.disconnect, node.conn_id)
-              pcall(drawer.forget, node.conn_id)
-              if state and state.failures and node.name then
-                state.failures[node.name] = nil
-              end
-              return api.connect_named(node.name)
-            end
-          else
-            pcall(drawer.invalidate, node.conn_id, node.path or {})
-          end
-        end
-      end
-      return orig_toggle(...)
-    end
   end
 
   -- 1. Hook drawer.actions.preview_editor to attach save-query on :w, manage preview ring slots, and track bottom panel dbout mode
@@ -985,47 +824,6 @@ function M.setup_drawer_helpers()
     end
   end
 
-  -- 2b. Register ERD actions (`ge` for contextual table/schema ERD, `gE` for full schema ERD) in drawer
-  if not M._drawer_erd_hooked then
-    M._drawer_erd_hooked = true
-    drawer.actions.erd = function()
-      require('utils.erd').from_drawer(false)
-    end
-    drawer.actions.erd_schema = function()
-      require('utils.erd').from_drawer(true)
-    end
-
-    local ok_km, km = pcall(require, 'sqmeow.keymap')
-    if ok_km and km and km.defaults and km.defaults.drawer then
-      local has_erd = false
-      for _, entry in ipairs(km.defaults.drawer) do
-        if entry.action == 'erd' then
-          has_erd = true
-          break
-        end
-      end
-      if not has_erd then
-        local insert_idx = #km.defaults.drawer + 1
-        for i, entry in ipairs(km.defaults.drawer) do
-          if entry.action == 'relationships' then
-            insert_idx = i + 1
-            break
-          end
-        end
-        table.insert(km.defaults.drawer, insert_idx, {
-          action = 'erd',
-          lhs = 'ge',
-          desc = 'Generate ERD (table neighborhood or schema)',
-        })
-        table.insert(km.defaults.drawer, insert_idx + 1, {
-          action = 'erd_schema',
-          lhs = 'gE',
-          desc = 'Generate Full Schema ERD',
-        })
-      end
-    end
-  end
-
   -- 3. Route sqmeow editor actions (<CR>, visual <CR>, <leader>E) through M.run_query
   -- so buffer-local connections are auto-opened and BottomPanel is coordinated
   local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
@@ -1102,39 +900,177 @@ function M.setup_drawer_helpers()
     end
   end
 
-  -- 5. When a multi-statement query finishes, start on the first result instead of the final statement
-  local ok_ev, events = pcall(require, 'sqmeow.rpc.events')
-  if ok_ev and events and events.on_call and not M._events_on_call_hooked then
-    M._events_on_call_hooked = true
-    local orig_on_call = events.on_call
-    events.on_call = function(payload)
-      orig_on_call(payload)
-      if payload and payload.state == 'done' and payload.results and #payload.results > 1 then
-        local state = sqmeow 'core.state'
-        local res_mod = sqmeow 'ui.result'
-        local call = state and state.call
-        if call and call.results and #call.results > 1 then
-          local target_entry = call.results[1]
-          for _, entry in ipairs(call.results) do
-            if entry.columns and #entry.columns > 0 then
-              target_entry = entry
-              break
-            end
-          end
-          if target_entry and target_entry.call_id ~= call.call_id then
-            local shown = vim.tbl_extend('force', {
-              conn_id = call.conn_id,
-              statement = call.statement,
-              sql = call.sql,
-              history = false,
-            }, target_entry, { results = call.results })
-            state.call = shown
-            if res_mod and res_mod.render then
-              res_mod.render(shown)
+  -- 5. Open sqmeow ER diagrams as a listed buffer in the main editor window (no tabs)
+  --    while scoping its canvas window options & winbar strictly to the ERD buffer.
+  local ok_erd, erd = pcall(require, 'sqmeow.ui.erd')
+  if ok_erd and erd and erd.open and not M._erd_buffer_hooked then
+    M._erd_buffer_hooked = true
+
+    local saved_win_opts = {}
+    local erd_win_opts = {
+      wrap = false,
+      number = false,
+      relativenumber = false,
+      signcolumn = 'no',
+      foldcolumn = '0',
+      colorcolumn = '',
+      cursorline = false,
+      cursorcolumn = false,
+      list = false,
+      spell = false,
+      statuscolumn = '',
+      sidescrolloff = 0,
+      virtualedit = 'all',
+    }
+
+    local function apply_erd_win_opts(win, buf)
+      if not win or not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      if not saved_win_opts[win] then
+        local snap = { winbar = vim.api.nvim_get_option_value('winbar', { scope = 'local', win = win }) }
+        for k in pairs(erd_win_opts) do
+          snap[k] = vim.api.nvim_get_option_value(k, { scope = 'local', win = win })
+        end
+        saved_win_opts[win] = snap
+      end
+      for k, val in pairs(erd_win_opts) do
+        pcall(vim.api.nvim_set_option_value, k, val, { scope = 'local', win = win })
+      end
+      if buf and vim.api.nvim_buf_is_valid(buf) and vim.b[buf].sqmeow_erd_winbar then
+        pcall(vim.api.nvim_set_option_value, 'winbar', vim.b[buf].sqmeow_erd_winbar, { scope = 'local', win = win })
+      end
+    end
+
+    local function restore_erd_win_opts(win, buf)
+      if win and vim.api.nvim_win_is_valid(win) and buf and vim.api.nvim_buf_is_valid(buf) then
+        local cur_wb = vim.api.nvim_get_option_value('winbar', { scope = 'local', win = win })
+        if cur_wb ~= '' then
+          vim.b[buf].sqmeow_erd_winbar = cur_wb
+        end
+      end
+      local snap = win and saved_win_opts[win]
+      if not snap then
+        return
+      end
+      saved_win_opts[win] = nil
+      if vim.api.nvim_win_is_valid(win) then
+        for k, val in pairs(snap) do
+          pcall(vim.api.nvim_set_option_value, k, val, { scope = 'local', win = win })
+        end
+      end
+    end
+
+    local orig_close = erd.close
+    local function close_erd_buffer()
+      local v = erd.state and erd.state() or nil
+      if not v then
+        return orig_close()
+      end
+      local buf = v.buf
+      local win = v.win
+      local prev = v._prev_buf
+      if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+        restore_erd_win_opts(win, buf)
+        local target = (prev and prev ~= buf and vim.api.nvim_buf_is_valid(prev)) and prev or nil
+        if not target then
+          local ok_br, br = pcall(require, 'utils.buffer-ring')
+          if ok_br and br.slots then
+            for _, sb in ipairs(br.slots) do
+              if sb and sb ~= buf and vim.api.nvim_buf_is_valid(sb) then
+                target = sb
+                break
+              end
             end
           end
         end
+        if target then
+          pcall(vim.api.nvim_win_set_buf, win, target)
+        else
+          pcall(vim.api.nvim_win_call, win, function()
+            vim.cmd.enew()
+          end)
+        end
+        v.win = -1
       end
+      orig_close()
+    end
+
+    erd.close = close_erd_buffer
+    if erd.actions then
+      erd.actions.close = close_erd_buffer
+    end
+
+    local orig_open = erd.open
+    erd.open = function(opts)
+      local prev_tab = vim.api.nvim_get_current_tabpage()
+      local ed_win = (_G.RightPanel and _G.RightPanel.get_editor_win and _G.RightPanel.get_editor_win())
+        or vim.api.nvim_get_current_win()
+      local prev_buf = (ed_win and vim.api.nvim_win_is_valid(ed_win)) and vim.api.nvim_win_get_buf(ed_win) or nil
+
+      local started, err = orig_open(opts)
+      local v = erd.state and erd.state() or nil
+      if not v or not vim.api.nvim_buf_is_valid(v.buf) then
+        return started, err
+      end
+
+      local initial_wb = vim.api.nvim_win_is_valid(v.win) and vim.api.nvim_get_option_value('winbar', { scope = 'local', win = v.win }) or ''
+      if initial_wb ~= '' then
+        vim.b[v.buf].sqmeow_erd_winbar = initial_wb
+      end
+
+      -- Move ERD buffer out of the newly created tab into the main editor window
+      if vim.api.nvim_win_is_valid(v.win) then
+        local erd_tab = vim.api.nvim_win_get_tabpage(v.win)
+        if erd_tab ~= prev_tab and vim.api.nvim_tabpage_is_valid(prev_tab) then
+          vim.api.nvim_set_current_tabpage(prev_tab)
+          pcall(vim.cmd.tabclose, vim.api.nvim_tabpage_get_number(erd_tab))
+        end
+      end
+
+      if not (ed_win and vim.api.nvim_win_is_valid(ed_win)) then
+        ed_win = vim.api.nvim_get_current_win()
+      end
+      if vim.fn.exists '&winfixbuf' == 1 and vim.wo[ed_win].winfixbuf then
+        vim.wo[ed_win].winfixbuf = false
+      end
+
+      vim.bo[v.buf].buflisted = true
+      if prev_buf and prev_buf ~= v.buf and vim.api.nvim_buf_is_valid(prev_buf) then
+        v._prev_buf = prev_buf
+      end
+
+      vim.api.nvim_win_set_buf(ed_win, v.buf)
+      vim.api.nvim_set_current_win(ed_win)
+      v.win = ed_win
+      apply_erd_win_opts(ed_win, v.buf)
+
+      local erd_group = vim.api.nvim_create_augroup('SqmeowErdBufferMode', { clear = true })
+      vim.api.nvim_create_autocmd('BufWinEnter', {
+        group = erd_group,
+        buffer = v.buf,
+        callback = function()
+          local w = vim.api.nvim_get_current_win()
+          local cur_v = erd.state and erd.state() or nil
+          if cur_v and cur_v.buf == v.buf then
+            cur_v.win = w
+          end
+          apply_erd_win_opts(w, v.buf)
+        end,
+      })
+      vim.api.nvim_create_autocmd('BufWinLeave', {
+        group = erd_group,
+        buffer = v.buf,
+        callback = function()
+          restore_erd_win_opts(vim.api.nvim_get_current_win(), v.buf)
+        end,
+      })
+
+      local ok_br, br = pcall(require, 'utils.buffer-ring')
+      if ok_br and br.on_buf_enter then
+        br.on_buf_enter(v.buf)
+      end
+      return started, err
     end
   end
 end

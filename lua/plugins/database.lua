@@ -26,7 +26,7 @@ return {
           end
           local ft = vim.bo[buf].filetype
           local name = vim.api.nvim_buf_get_name(buf)
-          if ft == 'dbui' or ft == 'dbout' or ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or name:find 'sqmeow://' ~= nil then
+          if ft == 'dbui' or ft == 'dbout' or ft == 'sqmeow-drawer' or ft == 'sqmeow-result' or ft == 'sqmeow-erd' or name:find 'sqmeow://' ~= nil then
             vim.opt_local.spell = false
             for _, win in ipairs(vim.fn.win_findbuf(buf)) do
               if vim.api.nvim_win_is_valid(win) then
@@ -174,12 +174,6 @@ return {
           vim.keymap.set('n', '<C-j>', function()
             _G.BottomPanel.toggle_active()
           end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
-          vim.keymap.set('n', 'ge', function()
-            require('utils.erd').from_drawer(false)
-          end, { buffer = args.buf, nowait = true, silent = true, desc = 'sqmeow: Generate ERD (table neighborhood or schema)' })
-          vim.keymap.set('n', 'gE', function()
-            require('utils.erd').from_drawer(true)
-          end, { buffer = args.buf, nowait = true, silent = true, desc = 'sqmeow: Generate Full Schema ERD' })
           vim.keymap.set('n', 'q', function()
             if _G.RightPanel then
               _G.RightPanel.close_all()

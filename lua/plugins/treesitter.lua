@@ -41,7 +41,7 @@ return {
             pcall(vim.treesitter.start, buf, 'yaml')
             return
           end
-          if ft == 'bigfile' or ft == 'sqmeow-result' or ft == 'sqmeow-drawer' or ft == 'dbout' or ft == 'dbui' or ft:match '^snacks' then
+          if ft == 'bigfile' or ft == 'sqmeow-result' or ft == 'sqmeow-drawer' or ft == 'sqmeow-erd' or ft == 'dbout' or ft == 'dbui' or ft:match '^snacks' then
             return
           end
           if bt ~= '' and not vim.b[buf].sqmeow_editor and not vim.b[buf].is_preview_buffer then

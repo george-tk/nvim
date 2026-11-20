@@ -21,8 +21,8 @@ function M.is_qualifying(buf)
 
   local name = vim.api.nvim_buf_get_name(buf)
 
-  -- Preview buffers from database relation viewer are allowed
-  if vim.b[buf].is_preview_buffer or name:match '%[Preview: ' then
+  -- Preview buffers and ER diagrams from sqmeow are allowed
+  if vim.b[buf].is_preview_buffer or name:match '%[Preview: ' or vim.bo[buf].filetype == 'sqmeow-erd' or name == 'sqmeow://erd' then
     return true
   end
 
@@ -596,6 +596,11 @@ function M.lualine_component()
           tbl = tbl:match '%.([^%.]+)$' or tbl
         end
         name = tbl and ('alter:' .. tbl) or 'alter'
+      elseif ft == 'sqmeow-erd' or raw == 'sqmeow://erd' then
+        local ok_erd, erd = pcall(require, 'sqmeow.ui.erd')
+        local v = ok_erd and erd.state and erd.state() or nil
+        local rel = v and v.opts and v.opts.relation
+        name = (rel and rel ~= '') and ('ERD:' .. rel) or 'ERD'
       elseif raw:match '%[Routine: ' then
         local routine = raw:match '%[Routine: (.-)%]'
         if routine then

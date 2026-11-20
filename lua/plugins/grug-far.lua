@@ -62,6 +62,7 @@ return {
         'dockyard_popup',
         'sqmeow-drawer',
         'sqmeow-result',
+        'sqmeow-erd',
         'dbui',
         'dbout',
         'qf',
