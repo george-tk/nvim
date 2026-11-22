@@ -17,6 +17,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
       { '<leader>D', group = 'Docker', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
+      { '<leader>j', group = 'Jira' },
       { '<leader>s', group = 'Spelling' },
       { '<leader>w', group = 'Window' },
 
@@ -146,6 +147,16 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>we', desc = 'Balance Splits' },
       { '<leader>wq', desc = 'Close Window Split' },
       { '<leader>wo', desc = 'Close Other Splits' },
+
+      { '<leader>jj', desc = 'Jira Board (Home)' },
+      { '<leader>jf', desc = 'Find Issues' },
+      { '<leader>jm', desc = 'My Tasks' },
+      { '<leader>jk', desc = 'Kanban Board List' },
+      { '<leader>jK', desc = 'Kanban Backlog List' },
+      { '<leader>jc', desc = 'Create Issue' },
+      { '<leader>jp', desc = 'Select Projects' },
+      { '<leader>ji', desc = 'Issue Details' },
+      { '<leader>ja', desc = 'Auth / Login' },
     },
   },
 }
