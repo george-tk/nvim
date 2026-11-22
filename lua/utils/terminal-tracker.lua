@@ -555,9 +555,18 @@ function M.lualine_component()
     budget = 8
   end
 
+  local active_num_hl = 'LualinePillNumActive_normal'
+  local ok_hl, lhl = pcall(require, 'lualine.highlight')
+  if ok_hl and lhl.get_mode_suffix then
+    local num_name = 'LualinePillNumActive' .. lhl.get_mode_suffix()
+    if vim.fn.hlexists(num_name) == 1 then
+      active_num_hl = num_name
+    end
+  end
+
   local entries = {}
 
-  for _, t in ipairs(terms) do
+  for idx, t in ipairs(terms) do
     local is_active = (t.buf == cur_buf or t.buf == win_buf)
     local raw_cmd = t.cmd or 'zsh'
     local truncated = truncate(raw_cmd, budget)
@@ -580,10 +589,11 @@ function M.lualine_component()
     else
       hl = inactive_hl
     end
+    local num_hl = is_active and active_num_hl or 'LualinePillSep'
 
     table.insert(entries, {
       is_active = is_active,
-      text = string.format('%%#%s# %s %%*', hl, label),
+      text = string.format('%%#%s# %d %%*%%#%s#%s %%*', num_hl, idx, hl, label),
     })
   end
 

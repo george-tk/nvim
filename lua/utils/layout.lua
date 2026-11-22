@@ -9,7 +9,7 @@ local Layout = {}
 
 local RightPanel = {
   custom_widths = {},
-  active_mode = 'explorer', -- 'explorer' | 'dbui' | 'opencode' | 'neogit' | 'dockyard' | 'grugfar'
+  active_mode = 'explorer', -- 'explorer' | 'dbui' | 'opencode' | 'neogit' | 'dockyard' | 'grugfar' | 'jira'
   has_custom_editor_widths = false,
   has_custom_editor_heights = false,
   has_custom_bottom_widths = false,
@@ -94,9 +94,10 @@ local function get_win_info(win)
   local is_dockyard = not is_float
     and ((ptype == 'dockyard') or (ft == 'dockyard' or ft == 'dockyard-logs' or ft == 'dockyard-files' or ft == 'dockyard_popup'))
   local is_grugfar = not is_float and ((ptype == 'grugfar') or (ft == 'grug-far'))
+  local is_jira = not is_float and ((ptype == 'jira') or (ft == 'jira-board') or (bname:find('Jira: ', 1, true) ~= nil) or (bname:find('Jira Edit: ', 1, true) ~= nil))
 
   -- Right panel zone takes absolute precedence over bottom terminal
-  if is_explorer or is_dbui or is_opencode or is_neogit or is_dockyard or is_grugfar or zone == 'right' then
+  if is_explorer or is_dbui or is_opencode or is_neogit or is_dockyard or is_grugfar or is_jira or zone == 'right' then
     return {
       win = win,
       buf = buf,
@@ -108,6 +109,7 @@ local function get_win_info(win)
       is_neogit = is_neogit,
       is_dockyard = is_dockyard,
       is_grugfar = is_grugfar,
+      is_jira = is_jira,
       is_terminal = false,
       is_editor = false,
     }
@@ -133,13 +135,14 @@ local function get_win_info(win)
     is_neogit = false,
     is_dockyard = false,
     is_grugfar = false,
+    is_jira = false,
     is_terminal = is_terminal,
     is_editor = is_editor,
   }
 end
 
 local function is_right_panel(info)
-  return info ~= nil and (info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar)
+  return info ~= nil and (info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar or info.is_jira)
 end
 
 local function find_win_type(key)
@@ -165,7 +168,7 @@ local function get_right_sidebar_win()
       if not cfg.relative or cfg.relative == '' then
         local info = get_win_info(win)
         if is_right_panel(info) then
-          if info.ft == 'NeogitStatus' or info.ft == 'dockyard' or info.ft == 'grug-far' then
+          if info.ft == 'NeogitStatus' or info.ft == 'dockyard' or info.ft == 'grug-far' or info.ft == 'jira-board' then
             return win
           end
           fallback = fallback or win
@@ -392,6 +395,8 @@ local function ensure_right_sidebar_precedence()
         width = custom['dockyard'] or math.max(60, math.floor(vim.o.columns * 0.48))
       elseif info.is_grugfar then
         width = custom['grugfar'] or math.max(56, math.floor(vim.o.columns * 0.45))
+      elseif info.is_jira then
+        width = custom['jira'] or math.max(96, math.floor(vim.o.columns * 0.55))
       elseif info.is_opencode then
         width = custom['opencode'] or math.max(45, math.floor(vim.o.columns * 0.38))
       elseif info.is_dbui then
@@ -516,6 +521,36 @@ function RightPanel.close_all()
         p:close()
       end)
       closed = true
+    end
+  end
+
+  -- Close visible Jira Board / Viewer / Editor windows if open
+  local ok_js, jstate = pcall(require, 'jira.board.state')
+  if ok_js and jstate then
+    if jstate.win and vim.api.nvim_win_is_valid(jstate.win) then
+      pcall(vim.api.nvim_win_close, jstate.win, true)
+      jstate.win = nil
+      closed = true
+    end
+    if jstate.buf and vim.api.nvim_buf_is_valid(jstate.buf) then
+      pcall(vim.api.nvim_buf_delete, jstate.buf, { force = true })
+      jstate.buf = nil
+    end
+    if jstate.dim_win and vim.api.nvim_win_is_valid(jstate.dim_win) then
+      pcall(vim.api.nvim_win_close, jstate.dim_win, true)
+      jstate.dim_win = nil
+    end
+  end
+  local ok_is, istate = pcall(require, 'jira.issue.state')
+  if ok_is and istate then
+    if istate.win and vim.api.nvim_win_is_valid(istate.win) then
+      pcall(vim.api.nvim_win_close, istate.win, true)
+      istate.win = nil
+      closed = true
+    end
+    if istate.buf and vim.api.nvim_buf_is_valid(istate.buf) then
+      pcall(vim.api.nvim_buf_delete, istate.buf, { force = true })
+      istate.buf = nil
     end
   end
 
@@ -1041,6 +1076,54 @@ function RightPanel.open_grugfar(no_toggle, opts)
   end
 end
 
+function RightPanel.open_jira(no_toggle)
+  local info = get_win_info()
+  if info.is_jira then
+    if no_toggle then
+      return
+    end
+    RightPanel.close_all()
+    local ed = get_editor_win()
+    if ed then
+      vim.api.nvim_set_current_win(ed)
+    end
+    return
+  end
+
+  local existing_jira = find_win_type 'is_jira'
+  if existing_jira and vim.api.nvim_win_is_valid(existing_jira) then
+    RightPanel.active_mode = 'jira'
+    vim.api.nvim_set_current_win(existing_jira)
+    pcall(function()
+      require('lualine').refresh()
+    end)
+    return
+  end
+
+  RightPanel.close_all()
+  RightPanel.active_mode = 'jira'
+
+  local ok_lazy, lazy = pcall(require, 'lazy')
+  if ok_lazy and lazy.load then
+    pcall(lazy.load, { plugins = { 'jira.nvim' } })
+  end
+
+  local ok_picker, jpicker = pcall(require, 'utils.jira-picker')
+  if not ok_picker then
+    vim.notify('jira.nvim picker utils not available', vim.log.levels.WARN, { title = 'Jira' })
+    return
+  end
+
+  jpicker.with_target_project(function(p)
+    local board = require('jira.board')
+    if board.open_default_tab then
+      board.open_default_tab(p)
+    else
+      board.open(p)
+    end
+  end)
+end
+
 function RightPanel.open_slot(slot_idx)
   local m = vim.api.nvim_get_mode().mode
   if m:match '^[it]' then
@@ -1058,6 +1141,8 @@ function RightPanel.open_slot(slot_idx)
     RightPanel.open_dockyard(true)
   elseif slot_idx == 6 then
     RightPanel.open_grugfar(true)
+  elseif slot_idx == 7 then
+    RightPanel.open_jira(true)
   end
 end
 
@@ -1066,6 +1151,7 @@ function RightPanel.lualine_component()
   local active_hl = 'BufferRingActive'
   local inactive_hl = 'BufferRingInactive'
   local active_cap = 'LualinePillCapActive_normal'
+  local active_num_hl = 'LualinePillNumActive_normal'
   if ok_hl and hl.get_mode_suffix then
     local suffix = hl.get_mode_suffix()
     local a_name = 'lualine_a' .. suffix
@@ -1079,6 +1165,10 @@ function RightPanel.lualine_component()
     local cap_name = 'LualinePillCapActive' .. suffix
     if vim.fn.hlexists(cap_name) == 1 then
       active_cap = cap_name
+    end
+    local num_name = 'LualinePillNumActive' .. suffix
+    if vim.fn.hlexists(num_name) == 1 then
+      active_num_hl = num_name
     end
   end
 
@@ -1102,6 +1192,9 @@ function RightPanel.lualine_component()
   elseif info.is_grugfar then
     cur_mode = 'grugfar'
     RightPanel.active_mode = 'grugfar'
+  elseif info.is_jira then
+    cur_mode = 'jira'
+    RightPanel.active_mode = 'jira'
   end
 
   local slots = {
@@ -1111,6 +1204,7 @@ function RightPanel.lualine_component()
     { mode = 'neogit', label = '󰊢' },
     { mode = 'dockyard', label = '󰡨' },
     { mode = 'grugfar', label = '󰛔' },
+    { mode = 'jira', label = '' },
   }
 
   local entries = {}
@@ -1118,13 +1212,12 @@ function RightPanel.lualine_component()
   for idx, s in ipairs(slots) do
     local is_active = (s.mode == cur_mode)
     local group = is_active and active_hl or (s.is_running and 'TerminalTrackerRunning' or inactive_hl)
-    -- `` provides 1 visual cell on the left of Slot 1, and `` provides 1 visual cell on the right of the last Slot.
-    -- Pad inner edges with 2 spaces and cap-adjacent edges with 1 space so every segment is 5 cells wide with the icon at cell 3.
-    local left_pad = (idx == 1) and ' ' or '  '
-    local right_pad = (idx == num_slots) and ' ' or '  '
+    local num_group = is_active and active_num_hl or 'LualinePillSep'
+    local left_pad = (idx == 1) and '' or ' '
+    local right_pad = (idx == num_slots) and '' or ' '
     table.insert(entries, {
       is_active = is_active,
-      text = string.format('%%#%s#%s%s%s%%*', group, left_pad, s.label, right_pad),
+      text = string.format('%%#%s#%s%d %%*%%#%s#%s%s%%*', num_group, left_pad, idx, group, s.label, right_pad),
     })
   end
 
@@ -1168,7 +1261,9 @@ function RightPanel.toggle_active()
 
   -- 3. Otherwise: open the currently active right-side tool
   local mode = RightPanel.active_mode or 'explorer'
-  if mode == 'grugfar' then
+  if mode == 'jira' then
+    RightPanel.open_jira()
+  elseif mode == 'grugfar' then
     RightPanel.open_grugfar()
   elseif mode == 'dockyard' then
     RightPanel.open_dockyard()
@@ -1885,6 +1980,8 @@ local function smart_resize_width(delta)
     RightPanel.custom_widths['dockyard'] = new_w
   elseif info.is_grugfar then
     RightPanel.custom_widths['grugfar'] = new_w
+  elseif info.is_jira then
+    RightPanel.custom_widths['jira'] = new_w
   elseif info.is_opencode then
     RightPanel.custom_widths['opencode'] = new_w
   elseif info.is_dbui then
@@ -2078,6 +2175,7 @@ local function is_database_or_transient_buf(buf)
     or ft == 'grug-far'
     or ft == 'grug-far-help'
     or ft == 'grug-far-history'
+    or ft == 'jira-board'
   then
     return true
   end
@@ -2189,7 +2287,7 @@ local function setup_autocmds()
         vim.bo[buf].buflisted = false
         if vim.api.nvim_win_is_valid(win) then
           -- Allow in-place buffer switching for Neogit (log/commit/refs views), Dockyard (f/q), and GrugFar (history/preview)
-          vim.wo[win].winfixbuf = not (info.is_neogit or info.is_dockyard or info.is_grugfar)
+          vim.wo[win].winfixbuf = not (info.is_neogit or info.is_dockyard or info.is_grugfar or info.is_jira)
           vim.wo[win].winfixwidth = true
         end
         if info.is_neogit then
@@ -2235,6 +2333,26 @@ local function setup_autocmds()
               vim.wo[win].wrap = true
               vim.wo[win].linebreak = true
               vim.wo[win].breakindent = true
+            end
+            ensure_right_sidebar_precedence()
+            pcall(function()
+              require('lualine').refresh()
+            end)
+          end)
+        elseif info.is_jira then
+          vim.b[buf].panel_zone = 'right'
+          vim.b[buf].panel_type = 'jira'
+          vim.wo[win].spell = false
+          local is_board = (vim.bo[buf].filetype == 'jira-board')
+          vim.wo[win].wrap = not is_board
+          if not is_board then
+            vim.wo[win].linebreak = true
+            vim.wo[win].breakindent = true
+          end
+          RightPanel.active_mode = 'jira'
+          vim.schedule(function()
+            if vim.api.nvim_win_is_valid(win) then
+              vim.wo[win].wrap = not is_board
             end
             ensure_right_sidebar_precedence()
             pcall(function()

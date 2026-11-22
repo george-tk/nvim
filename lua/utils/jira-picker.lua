@@ -195,7 +195,7 @@ local function status_rank(status)
 end
 
 local function request_agile_page(base, headers, endpoint, start_at, callback)
-  local fields = 'summary,status,assignee,priority,parent,issuetype,labels,updated,statuscategorychangedate,resolutiondate,timespent,timeoriginalestimate'
+  local fields = 'summary,status,assignee,priority,parent,issuetype,labels,created,updated,statuscategorychangedate,resolutiondate,timespent,timeoriginalestimate'
   local url = base .. endpoint .. '?startAt=' .. start_at .. '&maxResults=100&fields=' .. fields
   local cmd = { 'curl', '-s', '-L', '--max-time', '10' }
   for _, h in ipairs(headers) do
@@ -314,6 +314,7 @@ local function to_board_issue(issue)
   local priority = non_nil(f.priority)
   local assignee = non_nil(f.assignee)
   local issuetype = non_nil(f.issuetype)
+  local labels = non_nil(f.labels)
   return {
     key = issue.key,
     summary = non_nil(f.summary) or '',
@@ -324,6 +325,8 @@ local function to_board_issue(issue)
     time_spent = non_nil(f.timespent),
     time_estimate = non_nil(f.timeoriginalestimate),
     type = (issuetype and non_nil(issuetype.name)) or 'Task',
+    created = non_nil(f.created),
+    labels = (type(labels) == 'table') and labels or {},
   }
 end
 
