@@ -24,6 +24,11 @@ function M.is_qualifying(buf)
     return false
   end
 
+  -- Never pull transient SQL inspector / explain plan buffers into the 4-slot ring
+  if vim.b[buf].is_sql_inspector or vim.bo[buf].filetype == 'sqmeow-explain' then
+    return false
+  end
+
   local name = vim.api.nvim_buf_get_name(buf)
 
   -- Preview buffers from database relation viewer are allowed

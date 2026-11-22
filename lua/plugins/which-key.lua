@@ -67,17 +67,20 @@ return { -- Useful plugin to show you pending keybinds.
 
       -- Database Group (<leader>b)
       { '<leader>bb', desc = 'Database Explorer' },
+      { '<leader>bf', desc = 'Find DB Tables & Columns' },
+      { '<leader>be', desc = 'Visual Explain Plan', mode = { 'n', 'v' } },
+      { '<leader>bt', desc = 'SQL Query Templates' },
+      { '<leader>bn', desc = 'New Query Scratchpad' },
       { '<leader>bs', desc = 'Switch / Bind Database' },
-      { '<leader>bw', desc = 'Save Query' },
-      { '<leader>bl', desc = 'Select Saved Query' },
-      { '<leader>br', desc = 'Run Query (Buffer / Selection)', mode = { 'n', 'v' } },
-      { '<leader>bq', desc = 'Query Scratchpad' },
       { '<leader>bo', desc = 'Query Output' },
-      { '<leader>ba', desc = 'Add Database' },
-      { '<leader>bd', desc = 'Delete Database' },
-      { '<leader>bf', desc = 'Toggle Float Results' },
+      { '<leader>bO', desc = 'Toggle Float Output' },
+      { '<leader>br', desc = 'Run Whole Buffer' },
+      { '<leader>bw', desc = 'Save Query' },
+      { '<leader>bl', desc = 'Load Saved Query' },
       { '<leader>bv', desc = 'Review & Apply In-Grid Edits' },
       { '<leader>bx', desc = 'Export Results' },
+      { '<leader>bA', desc = 'Add Database' },
+      { '<leader>bD', desc = 'Delete Database' },
 
       -- Todo Group (<leader>T)
       { '<leader>TT', desc = 'Todo List' },
@@ -97,7 +100,6 @@ return { -- Useful plugin to show you pending keybinds.
 
       -- Docker Group (<leader>D)
       { '<leader>DD', desc = 'Docker Panel' },
-      { '<leader>Dd', desc = 'Docker Panel' },
       { '<leader>Db', desc = 'Build Dockerfile' },
       { '<leader>Dr', desc = 'Run Docker Compose', mode = { 'n', 'v' } },
 
@@ -148,15 +150,13 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>wq', desc = 'Close Window Split' },
       { '<leader>wo', desc = 'Close Other Splits' },
 
-      { '<leader>jj', desc = 'Jira Board (Home)' },
-      { '<leader>jf', desc = 'Find Issues' },
-      { '<leader>jm', desc = 'My Tasks' },
-      { '<leader>jk', desc = 'Kanban Board List' },
-      { '<leader>jK', desc = 'Kanban Backlog List' },
-      { '<leader>jc', desc = 'Create Issue' },
+      -- Jira Group (<leader>j)
+      { '<leader>jj', desc = 'Jira (My Tasks)' },
+      { '<leader>jn', desc = 'New Local Ticket' },
+      { '<leader>jN', desc = 'New Jira Issue' },
       { '<leader>jp', desc = 'Select Projects' },
       { '<leader>ji', desc = 'Issue Details' },
-      { '<leader>ja', desc = 'Auth / Login' },
+      { '<leader>ja', desc = 'Jira Auth / Login' },
     },
   },
 }

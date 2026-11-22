@@ -73,13 +73,13 @@ return {
       desc = 'New Local Ticket',
     },
     {
-      '<leader>jc',
+      '<leader>jN',
       function()
         require('utils.jira-picker').with_target_project(function(p)
           require('jira.create').open(p)
         end)
       end,
-      desc = 'Create Issue',
+      desc = 'New Jira Issue',
     },
     {
       '<leader>ji',
@@ -372,6 +372,42 @@ return {
       return 'Comment'
     end
 
+    local active_filter = ''
+
+    local function matches_filter(node, needle)
+      if not needle or needle == '' then
+        return true
+      end
+      local haystack = table.concat({
+        node.key or '',
+        node.summary or '',
+        node.status or '',
+        node.priority or '',
+        node.assignee or '',
+        node.type or '',
+      }, ' '):lower()
+      return haystack:find(needle, 1, true) ~= nil
+    end
+
+    local function filter_tree(nodes, needle)
+      if not needle or needle == '' then
+        return nodes
+      end
+      local out = {}
+      for _, node in ipairs(nodes or {}) do
+        local filtered_children = filter_tree(node.children or {}, needle)
+        if matches_filter(node, needle) or #filtered_children > 0 then
+          local copy = vim.tbl_extend('force', {}, node)
+          copy.children = filtered_children
+          if #filtered_children > 0 then
+            copy.expanded = true
+          end
+          table.insert(out, copy)
+        end
+      end
+      return out
+    end
+
     local function render_tab_header()
       local buf = bstate.buf
       if not (buf and vim.api.nvim_buf_is_valid(buf)) then
@@ -396,6 +432,18 @@ return {
           start_col = start_col,
           end_col = start_col + #tab_str,
           hl = is_active and 'JiraTabActive' or 'JiraTabInactive',
+        })
+      end
+
+      if active_filter ~= '' and current ~= 'Help' then
+        local badge = (' 󰈲 %s '):format(active_filter)
+        local sc = #header
+        header = header .. badge
+        table.insert(hls, {
+          row = 0,
+          start_col = sc,
+          end_col = sc + #badge,
+          hl = 'DiagnosticWarn',
         })
       end
 
@@ -527,7 +575,14 @@ return {
         bstate.jql_line = nil
         bstate.query_map = {}
         render_tab_header()
+        issues = filter_tree(issues, active_filter:lower())
         align_col = compute_align_col(issues)
+        if #(issues or {}) == 0 and active_filter ~= '' then
+          vim.api.nvim_set_option_value('modifiable', true, { buf = bstate.buf })
+          vim.api.nvim_buf_set_lines(bstate.buf, 2, -1, false, { '  No tickets matching "' .. active_filter .. '" (press F to clear filter)' })
+          vim.api.nvim_set_option_value('modifiable', false, { buf = bstate.buf })
+          return 3
+        end
       end
 
       local local_divider_drawn = false
@@ -599,8 +654,10 @@ return {
         { k = '<Tab> / <S-Tab>', d = 'Cycle tabs (My Tasks → Board → Backlog → Help)' },
         { k = 'j / k', d = 'Jump to next / previous ticket' },
         { k = 'l / gd', d = 'Open ticket viewer (D/C/H tabs, S to change status)' },
+        { k = 'h', d = 'Collapse subtasks / jump to parent (or back from viewer)' },
         { k = '<CR>', d = 'Expand / collapse subtasks' },
         { k = 'zR / zM', d = 'Expand / collapse all subtasks' },
+        { k = 'f / F', d = 'Filter tickets in current tab / Clear filter' },
         { k = '/', d = 'Run custom JQL query' },
         { k = 'r', d = 'Refresh current tab' },
         { k = 'q', d = 'Close Jira panel' },
@@ -650,6 +707,7 @@ return {
     local orig_setup_keymaps = board.setup_keymaps
 
     local function cycle_tab(dir)
+      active_filter = ''
       local current = active_tab_id(bstate)
       local idx = 1
       for i, tab in ipairs(TABS) do
@@ -819,6 +877,48 @@ return {
           end)
         end
       end, map_opts('Delete local ticket'))
+      vim.keymap.set('n', 'h', function()
+        local node = bhelper.get_node_at_cursor()
+        if not node then
+          return
+        end
+        if node.children and #node.children > 0 and node.expanded then
+          board.toggle_node()
+          return
+        end
+        if node.parent then
+          for r, n in pairs(bstate.line_map or {}) do
+            if n.key == node.parent then
+              pcall(vim.api.nvim_win_set_cursor, bstate.win, { r + 1, 0 })
+              return
+            end
+          end
+        end
+      end, map_opts('Collapse subtasks / parent'))
+      vim.keymap.set('n', 'f', function()
+        vim.ui.input({ prompt = 'Filter tickets (empty to clear): ', default = active_filter }, function(input)
+          if input == nil then
+            return
+          end
+          active_filter = vim.trim(input)
+          if bstate.buf and vim.api.nvim_buf_is_valid(bstate.buf) and bstate.current_view ~= 'Help' then
+            board_render.clear(bstate.buf)
+            board_render.render_issue_tree(bstate.tree or {}, bstate.current_view)
+            board.setup_keymaps()
+          end
+        end)
+      end, map_opts('Filter tickets in panel'))
+      vim.keymap.set('n', 'F', function()
+        if active_filter == '' then
+          return
+        end
+        active_filter = ''
+        if bstate.buf and vim.api.nvim_buf_is_valid(bstate.buf) and bstate.current_view ~= 'Help' then
+          board_render.clear(bstate.buf)
+          board_render.render_issue_tree(bstate.tree or {}, bstate.current_view)
+          board.setup_keymaps()
+        end
+      end, map_opts('Clear ticket filter'))
       vim.keymap.set('n', '/', function()
         board.prompt_jql()
       end, map_opts('Custom JQL query'))
@@ -922,7 +1022,7 @@ return {
               buffer = buf,
               desc = 'Jira: Change status',
             })
-            vim.keymap.set('n', 'q', function()
+            local close_viewer = function()
               local win = issue_state.win
               if win and vim.api.nvim_win_is_valid(win) and bstate.buf and vim.api.nvim_buf_is_valid(bstate.buf) then
                 vim.wo[win].winfixbuf = false
@@ -940,7 +1040,15 @@ return {
                   vim.api.nvim_set_current_win(ed)
                 end
               end
-            end, {
+            end
+            vim.keymap.set('n', 'q', close_viewer, {
+              noremap = true,
+              silent = true,
+              nowait = true,
+              buffer = buf,
+              desc = 'Jira: Back to board',
+            })
+            vim.keymap.set('n', 'h', close_viewer, {
               noremap = true,
               silent = true,
               nowait = true,

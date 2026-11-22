@@ -71,7 +71,7 @@ return {
 
           vim.opt_local.spell = false
 
-          -- Bind <CR> (normal & visual), <leader>E (whole buffer), and <C-c> (cancel) on every SQL buffer
+          -- Bind <CR> (normal & visual), <leader>br (whole buffer), and <C-c> (cancel) on every SQL buffer
           if not vim.b[buf].sql_exec_keymaps_bound then
             vim.b[buf].sql_exec_keymaps_bound = true
             vim.keymap.set('n', '<CR>', function()
@@ -80,9 +80,9 @@ return {
             vim.keymap.set('x', '<CR>', function()
               db.run_query(false)
             end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Run the selection' })
-            vim.keymap.set('n', '<leader>E', function()
+            vim.keymap.set('n', '<leader>br', function()
               db.run_query(true)
-            end, { buffer = buf, nowait = true, silent = true, desc = 'sqmeow: Run the whole buffer' })
+            end, { buffer = buf, nowait = true, silent = true, desc = 'Run Whole Buffer' })
             vim.keymap.set('n', '<C-c>', function()
               pcall(function()
                 require('sqmeow.api.query').cancel()
@@ -156,8 +156,6 @@ return {
           vim.b[buf].panel_zone = 'right'
           vim.b[buf].panel_type = 'dbui'
           db.setup_drawer_helpers()
-          vim.keymap.set('n', '<Tab>', 'j', { buffer = args.buf, silent = true, desc = 'Next Item' })
-          vim.keymap.set('n', '<S-Tab>', 'k', { buffer = args.buf, silent = true, desc = 'Previous Item' })
           vim.keymap.set('n', 'l', '<CR>', { buffer = args.buf, remap = true, silent = true, desc = 'Open / Expand Node' })
           vim.keymap.set('n', 'h', function()
             local cur_line = vim.api.nvim_get_current_line()
@@ -216,6 +214,9 @@ return {
           vim.keymap.set('n', 'g$', function()
             db.last_result_column()
           end, { buffer = args.buf, silent = true, desc = 'Last Column' })
+          vim.keymap.set('n', 'gi', function()
+            require('utils.sql-cell-inspector').inspect_current_cell()
+          end, { buffer = args.buf, nowait = true, silent = true, desc = 'Inspect Cell (JSON / XML / Text)' })
 
           vim.keymap.set('n', 'q', function()
             if _G.smart_close then
@@ -275,40 +276,40 @@ return {
         desc = 'Database Explorer',
       },
       {
+        '<leader>bf',
+        function()
+          require('utils.sql-objects').pick_objects()
+        end,
+        desc = 'Find DB Tables & Columns',
+      },
+      {
+        '<leader>be',
+        function()
+          require('utils.sql-explain').explain_current()
+        end,
+        desc = 'Visual Explain Plan (Postgres)',
+        mode = { 'n', 'v' },
+      },
+      {
+        '<leader>bt',
+        function()
+          require('utils.sql-objects').pick_template()
+        end,
+        desc = 'SQL Query Templates',
+      },
+      {
+        '<leader>bn',
+        function()
+          db.open_query_scratchpad()
+        end,
+        desc = 'New Query Scratchpad',
+      },
+      {
         '<leader>bs',
         function()
           db.select_connection()
         end,
         desc = 'Switch / Bind Database',
-      },
-      {
-        '<leader>bw',
-        function()
-          db.save_query()
-        end,
-        desc = 'Save Query',
-      },
-      {
-        '<leader>bl',
-        function()
-          db.select_saved_query()
-        end,
-        desc = 'Select Saved Query',
-      },
-      {
-        '<leader>br',
-        function()
-          db.run_query()
-        end,
-        desc = 'Run Query (Buffer / Selection)',
-        mode = { 'n', 'v' },
-      },
-      {
-        '<leader>bq',
-        function()
-          db.open_query_scratchpad()
-        end,
-        desc = 'Query Scratchpad',
       },
       {
         '<leader>bo',
@@ -324,27 +325,34 @@ return {
         desc = 'Query Output',
       },
       {
-        '<leader>ba',
-        function()
-          db.add_connection()
-        end,
-        desc = 'Add Database',
-      },
-      {
-        '<leader>bd',
-        function()
-          db.delete_connection()
-        end,
-        desc = 'Delete Database',
-      },
-      {
-        '<leader>bf',
+        '<leader>bO',
         function()
           pcall(function()
             require('sqmeow.api.view').toggle_float()
           end)
         end,
-        desc = 'Toggle Float Result',
+        desc = 'Toggle Float Output',
+      },
+      {
+        '<leader>br',
+        function()
+          db.run_query(true)
+        end,
+        desc = 'Run Whole Buffer',
+      },
+      {
+        '<leader>bw',
+        function()
+          db.save_query()
+        end,
+        desc = 'Save Query',
+      },
+      {
+        '<leader>bl',
+        function()
+          db.select_saved_query()
+        end,
+        desc = 'Load Saved Query',
       },
       {
         '<leader>bv',
@@ -368,6 +376,20 @@ return {
           end)
         end,
         desc = 'Export Results',
+      },
+      {
+        '<leader>bA',
+        function()
+          db.add_connection()
+        end,
+        desc = 'Add Database',
+      },
+      {
+        '<leader>bD',
+        function()
+          db.delete_connection()
+        end,
+        desc = 'Delete Database',
       },
     },
   },

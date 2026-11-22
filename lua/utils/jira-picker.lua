@@ -458,35 +458,68 @@ function M.select_projects(on_selected)
       })
     end
 
-    local function toggle_item(picker)
-      local current = picker:current()
+    local function toggle_item(picker, item)
+      local current = item or (picker and picker.current and picker:current())
       if not current or not current.key then return end
       selected_map[current.key] = not selected_map[current.key]
-      picker:render()
+      if picker and picker.list and picker.list.update then
+        picker.list:update({ force = true })
+      elseif picker and picker.update then
+        picker:update({ force = true })
+      end
+    end
+
+    local function refresh_projects(picker)
+      if picker and picker.close then
+        picker:close()
+      end
+      M.fetch_all_projects(function()
+        M.select_projects(on_selected)
+      end, true)
+    end
+
+    local function toggle_bottom()
+      vim.cmd('stopinsert')
+      if _G.BottomPanel and _G.BottomPanel.toggle_active then
+        _G.BottomPanel.toggle_active()
+      end
     end
 
     Snacks.picker({
-      title = 'Select Active Jira Projects (<Space> to Toggle, <CR> to Save)',
+      title = 'Jira Projects — M-x / C-x Toggle · M-r Refresh · <CR> Save',
       items = items,
       layout = {
         preset = 'default',
+      },
+      actions = {
+        toggle_project = toggle_item,
+        refresh_projects = refresh_projects,
+        toggle_bottom = toggle_bottom,
       },
       win = {
         input = {
           keys = {
             ['<Tab>'] = { 'list_down', mode = { 'i', 'n' } },
             ['<S-Tab>'] = { 'list_up', mode = { 'i', 'n' } },
-            ['<C-Space>'] = { function(picker) toggle_item(picker) end, mode = { 'i', 'n' }, desc = 'Toggle Project' },
-            ['<C-j>'] = { function() vim.cmd('stopinsert'); _G.BottomPanel.toggle_active() end, mode = { 'i', 'n' } },
+            ['<M-x>'] = { 'toggle_project', mode = { 'i', 'n' }, desc = 'Toggle Project' },
+            ['<C-x>'] = { 'toggle_project', mode = { 'i', 'n' }, desc = 'Toggle Project' },
+            ['<M-Space>'] = { 'toggle_project', mode = { 'i', 'n' }, desc = 'Toggle Project' },
+            ['<C-Space>'] = { 'toggle_project', mode = { 'i', 'n' }, desc = 'Toggle Project' },
+            ['<M-r>'] = { 'refresh_projects', mode = { 'i', 'n' }, desc = 'Refresh Projects' },
+            ['<C-j>'] = { 'toggle_bottom', mode = { 'i', 'n' } },
           },
         },
         list = {
           keys = {
             ['<Tab>'] = { 'list_down', mode = { 'n', 'x' } },
             ['<S-Tab>'] = { 'list_up', mode = { 'n', 'x' } },
-            ['<Space>'] = { function(picker) toggle_item(picker) end, mode = { 'n' }, desc = 'Toggle Project' },
-            ['x'] = { function(picker) toggle_item(picker) end, mode = { 'n' }, desc = 'Toggle Project' },
-            ['<C-j>'] = { function() _G.BottomPanel.toggle_active() end, mode = { 'n' } },
+            ['<Space>'] = { 'toggle_project', mode = { 'n' }, desc = 'Toggle Project' },
+            ['x'] = { 'toggle_project', mode = { 'n' }, desc = 'Toggle Project' },
+            ['<M-x>'] = { 'toggle_project', mode = { 'n' }, desc = 'Toggle Project' },
+            ['<C-x>'] = { 'toggle_project', mode = { 'n' }, desc = 'Toggle Project' },
+            ['r'] = { 'refresh_projects', mode = { 'n' }, desc = 'Refresh Projects' },
+            ['<M-r>'] = { 'refresh_projects', mode = { 'n' }, desc = 'Refresh Projects' },
+            ['<C-j>'] = { 'toggle_bottom', mode = { 'n' } },
           },
         },
       },
@@ -731,49 +764,77 @@ local function show_issue_picker(items, title)
   end
 
   Snacks.picker({
-    title = title or ('Jira Issues (' .. #items .. ' found)'),
+    title = (title or ('Jira Issues (' .. #items .. ' found)')) .. ' — M-e Edit · M-b Board · M-o Browser · M-y Yank',
     items = items,
     matcher = { sort = false },
     layout = {
       preset = 'ivy',
+    },
+    actions = {
+      toggle_bottom = function()
+        vim.cmd('stopinsert')
+        if _G.BottomPanel and _G.BottomPanel.toggle_active then
+          _G.BottomPanel.toggle_active()
+        end
+      end,
+      edit_issue = function(picker, item)
+        if not is_real(item) then return end
+        picker:close()
+        require('jira.edit').open(item.key)
+      end,
+      open_board = function(picker, item)
+        if not is_real(item) then return end
+        picker:close()
+        require('jira.board').open(item.project_key)
+      end,
+      open_browser = function(_, item)
+        if not is_real(item) then return end
+        local auth = require('jira.common.auth').get_auth()
+        local base_url = (auth.base or ''):gsub('/+$', '')
+        if base_url ~= '' then
+          vim.ui.open(base_url .. '/browse/' .. item.key)
+        end
+      end,
+      yank_key = function(_, item)
+        if not is_real(item) then return end
+        vim.fn.setreg('+', item.key)
+        vim.fn.setreg('*', item.key)
+        vim.notify('Copied ' .. item.key .. ' to clipboard', vim.log.levels.INFO)
+      end,
     },
     win = {
       input = {
         keys = {
           ['<Tab>'] = { 'list_down', mode = { 'i', 'n' } },
           ['<S-Tab>'] = { 'list_up', mode = { 'i', 'n' } },
-          ['<C-j>'] = { function() vim.cmd('stopinsert'); _G.BottomPanel.toggle_active() end, mode = { 'i', 'n' } },
+          ['<C-j>'] = { 'toggle_bottom', mode = { 'i', 'n' } },
+          ['<M-e>'] = { 'edit_issue', mode = { 'i', 'n' }, desc = 'Edit Issue' },
+          ['<C-e>'] = { 'edit_issue', mode = { 'i', 'n' }, desc = 'Edit Issue' },
+          ['<M-b>'] = { 'open_board', mode = { 'i', 'n' }, desc = 'Open Board' },
+          ['<C-b>'] = { 'open_board', mode = { 'i', 'n' }, desc = 'Open Board' },
+          ['<M-o>'] = { 'open_browser', mode = { 'i', 'n' }, desc = 'Open in Browser' },
+          ['<C-o>'] = { 'open_browser', mode = { 'i', 'n' }, desc = 'Open in Browser' },
+          ['<M-y>'] = { 'yank_key', mode = { 'i', 'n' }, desc = 'Yank Key' },
+          ['<C-y>'] = { 'yank_key', mode = { 'i', 'n' }, desc = 'Yank Key' },
         },
       },
       list = {
         keys = {
           ['<Tab>'] = { 'list_down', mode = { 'n', 'x' } },
           ['<S-Tab>'] = { 'list_up', mode = { 'n', 'x' } },
-          ['<C-j>'] = { function() _G.BottomPanel.toggle_active() end, mode = { 'n' } },
-          ['<C-e>'] = { function(picker, item)
-            if not is_real(item) then return end
-            picker:close()
-            require('jira.edit').open(item.key)
-          end, mode = { 'n', 'i' }, desc = 'Edit Issue' },
-          ['<C-b>'] = { function(picker, item)
-            if not is_real(item) then return end
-            picker:close()
-            require('jira.board').open(item.project_key)
-          end, mode = { 'n', 'i' }, desc = 'Open Board' },
-          ['<C-o>'] = { function(_, item)
-            if not is_real(item) then return end
-            local auth = require('jira.common.auth').get_auth()
-            local base_url = (auth.base or ''):gsub('/+$', '')
-            if base_url ~= '' then
-              vim.ui.open(base_url .. '/browse/' .. item.key)
-            end
-          end, mode = { 'n', 'i' }, desc = 'Open in Browser' },
-          ['<C-y>'] = { function(_, item)
-            if not is_real(item) then return end
-            vim.fn.setreg('+', item.key)
-            vim.fn.setreg('*', item.key)
-            vim.notify('Copied ' .. item.key .. ' to clipboard', vim.log.levels.INFO)
-          end, mode = { 'n', 'i' }, desc = 'Yank Key' },
+          ['<C-j>'] = { 'toggle_bottom', mode = { 'n' } },
+          ['<M-e>'] = { 'edit_issue', mode = { 'n' }, desc = 'Edit Issue' },
+          ['<C-e>'] = { 'edit_issue', mode = { 'n' }, desc = 'Edit Issue' },
+          ['e'] = { 'edit_issue', mode = { 'n' }, desc = 'Edit Issue' },
+          ['<M-b>'] = { 'open_board', mode = { 'n' }, desc = 'Open Board' },
+          ['<C-b>'] = { 'open_board', mode = { 'n' }, desc = 'Open Board' },
+          ['b'] = { 'open_board', mode = { 'n' }, desc = 'Open Board' },
+          ['<M-o>'] = { 'open_browser', mode = { 'n' }, desc = 'Open in Browser' },
+          ['<C-o>'] = { 'open_browser', mode = { 'n' }, desc = 'Open in Browser' },
+          ['o'] = { 'open_browser', mode = { 'n' }, desc = 'Open in Browser' },
+          ['<M-y>'] = { 'yank_key', mode = { 'n' }, desc = 'Yank Key' },
+          ['<C-y>'] = { 'yank_key', mode = { 'n' }, desc = 'Yank Key' },
+          ['y'] = { 'yank_key', mode = { 'n' }, desc = 'Yank Key' },
         },
       },
     },

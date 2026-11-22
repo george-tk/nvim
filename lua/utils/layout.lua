@@ -2161,6 +2161,7 @@ local function is_database_or_transient_buf(buf)
     ft == 'sqmeow-drawer'
     or ft == 'sqmeow-result'
     or ft == 'sqmeow-erd'
+    or ft == 'sqmeow-explain'
     or ft == 'sqmeow-output'
     or ft == 'dbui'
     or ft == 'dbout'

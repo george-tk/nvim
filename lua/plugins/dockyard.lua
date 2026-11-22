@@ -22,17 +22,6 @@ return {
       desc = 'Docker Panel',
     },
     {
-      '<leader>Dd',
-      function()
-        if _G.RightPanel and _G.RightPanel.open_dockyard then
-          _G.RightPanel.open_dockyard()
-        else
-          vim.cmd 'Dockyard'
-        end
-      end,
-      desc = 'Docker Panel',
-    },
-    {
       '<leader>Db',
       '<cmd>DockyardBuild<CR>',
       desc = 'Build Dockerfile',

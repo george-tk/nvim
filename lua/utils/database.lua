@@ -1092,7 +1092,7 @@ function M.last_result_column(win)
 end
 
 -------------------------------------------------------------------------------
--- Interactive Connection Switcher & Management (<leader>bs, <leader>ba, <leader>bd)
+-- Interactive Connection Switcher & Management (<leader>bs, <leader>bA, <leader>bD)
 -------------------------------------------------------------------------------
 
 M._conn_databases = M._conn_databases or {}
@@ -1430,7 +1430,7 @@ function M.delete_connection()
 end
 
 -------------------------------------------------------------------------------
--- Query Execution, Scratchpad, and Save Management (<leader>br, <leader>bq, <leader>bw)
+-- Query Execution, Scratchpad, and Save Management (<leader>br, <leader>bn, <leader>bw)
 -------------------------------------------------------------------------------
 
 function M.open_query_scratchpad()

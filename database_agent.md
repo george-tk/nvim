@@ -8,7 +8,7 @@ This document serves as the single source of truth for managing our integration 
 
 - **Upstream Repository**: [https://github.com/2giosangmitom/sqmeow.nvim.git](https://github.com/2giosangmitom/sqmeow.nvim.git)
 - **Local Clone Location**: `/home/georgek/.local/share/nvim/lazy/sqmeow.nvim`
-- **Baseline Commit Pinned**: `cdfeb6d` (`v3.3.0` release: native interactive ER diagrams in a tab `#135`, schema reader & Mermaid export `#125`, multi-statement first row-returning result `#128`, and prebuilt binary with `Error::ConnectionLost` detection)
+- **Baseline Commit Pinned**: `fd28aa6` (`v3.3.0+` master; latest prebuilt binary `v3.3.0`)
 
 ### How New Sessions Must Audit Upstream
 When starting a new session to inspect updates, run:
@@ -17,10 +17,10 @@ When starting a new session to inspect updates, run:
 git -C ~/.local/share/nvim/lazy/sqmeow.nvim fetch origin --tags
 
 # Check commits introduced since our baseline
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim log cdfeb6d..origin/master --oneline
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim log fd28aa6..origin/master --oneline
 
 # Inspect diffs across specific modules (api, drawer, result, table, view)
-git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff cdfeb6d..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
+git -C ~/.local/share/nvim/lazy/sqmeow.nvim diff fd28aa6..origin/master -- lua/sqmeow/api/ lua/sqmeow/ui/drawer.lua lua/sqmeow/ui/result.lua lua/sqmeow/ui/table.lua
 ```
 
 ---
@@ -64,12 +64,12 @@ flowchart TD
     end
 
     subgraph User Config Integrations [Retain in ~/.config/nvim]
-        E["Snacks.picker integration for Saved Queries"]
+        E["Snacks.picker integration for Saved Queries & DB Objects (<leader>bf, <leader>bt)"]
         F["Native sqmeow.completion.blink source + standalone SQL keywords (sql-keywords-blink.lua)"]
         G["BottomPanel / RightPanel layout docking and coordinator"]
         H["Per-database directory structure: scratch/{db_name}/*.sql"]
-        M["Two-Step Connection Switcher (<leader>bs)"]
-        V["Default Drawer Keymaps: 'p' for grid preview, 'P' for preview_editor"]
+        M["Two-Step Connection Switcher (<leader>bs) & Unified <leader>b* Keymaps"]
+        V["Default Drawer Keymaps: 'p' for grid preview, 'P' for preview_editor; Result 'gi' Cell Inspector; Editor '<leader>be' Explain Plan"]
     end
 ```
 
@@ -113,6 +113,9 @@ flowchart TD
 | **32. Auto-Disconnect & Stale-Error Cache Recovery on Lost Server Connections** | Upstream native `Error::ConnectionLost` & `payload.lost` (`v3.3.0` binary) | Stopping/restarting a DB container previously left connections marked `connected` and cached stale connection errors in the drawer. | **RESOLVED & SHIPPED IN `v3.3.0` (Commits `a719760`, `9c7aa00`, `9f4b3ae`)**. Shipped in the `v3.3.0` prebuilt binary. Local `M.watch_connection_loss`, `M.handle_connection_lost`, and `drawer.actions.toggle` hooks retired from `lua/utils/database.lua`. |
 | **33. Non-Row Statement Summary in Result Buffer When `ui.winbar = false`** | Upstream native `sqmeow.ui.result` (`draw()`) | Non-row statements (`INSERT`/`UPDATE`/`DELETE`, `0` columns) previously showed nothing in the result buffer when `ui.winbar = false`. | **RESOLVED & MERGED UPSTREAM ([PR #105](https://github.com/2giosangmitom/sqmeow.nvim/pull/105), Commit `82bbc4a`)**. Upstream natively renders `M.describe(call, false)` into the result buffer body when `not config.winbar('result')`. Local `render_non_grid_summary` hook retired from `lua/utils/database.lua` (retaining only the `refresh_statusline()` hook for `lualine`). |
 | **34. Interactive ER Diagrams (`gE`) & Schema / Mermaid Export API** | Upstream native `sqmeow.ui.erd` (`gE` / `:Sqmeow diagram`), `api.view.schema()`, & `api.export.mermaid()` | Extracting table neighborhoods or full schemas into interactive ER diagrams and Mermaid `erDiagram` output previously required a 1,444-line custom `lua/utils/erd.lua` module. | **RESOLVED & SHIPPED IN `v3.3.0` ([PR #125](https://github.com/2giosangmitom/sqmeow.nvim/pull/125) / [PR #135](https://github.com/2giosangmitom/sqmeow.nvim/pull/135), Commits `31af47d`, `c92ea46`)**. Local `lua/utils/erd.lua`, custom `ge`/`gE` drawer overrides, and `sqmeow.keymap` injection retired completely; `sqmeow-erd` added to layout/buffer-ring/treesitter/grug-far guards. |
+| **35. Read-Only Cell Inspector (`gi` in `sqmeow-result`)** | [`lua/utils/sql-cell-inspector.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-cell-inspector.lua) | Row details (`K`) shows multiline text inline, but large `JSONB`, `XML`, or long multiline payloads benefit from a dedicated read-only scratch buffer with syntax highlighting, pretty-printing, folding, and formatted/minified yank. | **ISSUE FILED UPSTREAM ([Issue #137](https://github.com/2giosangmitom/sqmeow.nvim/issues/137))**. Retire local module once upstream ships a native syntax-highlighted, foldable cell inspector. |
+| **36. Visual PostgreSQL Execution Plan Viewer (`<leader>be`)** | [`lua/utils/sql-explain.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-explain.lua) | No built-in visual query plan tree with exclusive cost % bars, buffer stats, `[FULL SCAN]` / `[EST MISMATCH]` warnings, and silent RPC execution (`rows` without opening `sqmeow-result` or polluting history). | **ISSUE FILED UPSTREAM ([Issue #138](https://github.com/2giosangmitom/sqmeow.nvim/issues/138))**. Retire local module once upstream ships a native visual `EXPLAIN` viewer. |
+| **37. Fuzzy DB Object Picker (`<leader>bf`) & Schema-Aware SQL Templates (`<leader>bt`)** | [`lua/utils/sql-objects.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-objects.lua) | Searching tables/columns across a schema and scaffolding FK-aware `SELECT`/`JOIN`/`INSERT -- @param`/`UPDATE`/`DELETE` queries from `api.view.schema()` metadata. | **ISSUE FILED UPSTREAM ([Issue #139](https://github.com/2giosangmitom/sqmeow.nvim/issues/139))**. Retire local module once upstream ships native `:Sqmeow find` & `:Sqmeow template` APIs. |
 
 
 
@@ -736,11 +739,44 @@ When `not (call and call.columns and #call.columns > 0)` and `call` is present (
 
 ---
 
-### Issue 20: Start multi-statement runs on the first row-returning result instead of the final statement [PR OPEN UPSTREAM - Issue #116 / PR #128]
+### Issue 20: Start multi-statement runs on the first row-returning result instead of the final statement [RESOLVED & SHIPPED IN v3.3.0 - Issue #116 / PR #128]
 
-> **Status**: **PR OPEN UPSTREAM** ([Issue #116](https://github.com/2giosangmitom/sqmeow.nvim/issues/116), [PR #128](https://github.com/2giosangmitom/sqmeow.nvim/pull/128)).
+> **Status**: **RESOLVED & SHIPPED IN `v3.3.0`** ([Issue #116](https://github.com/2giosangmitom/sqmeow.nvim/issues/116), [PR #128](https://github.com/2giosangmitom/sqmeow.nvim/pull/128), Commit `f68e911`).
 
 **Title**: `fix(result): start multi-statement runs on the first row-returning result instead of the final statement`
+
+---
+
+### Issue 21: Read-only Cell Inspector for JSON, XML, and long-text values [ISSUE FILED UPSTREAM - Issue #137]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #137](https://github.com/2giosangmitom/sqmeow.nvim/issues/137)).
+> **Local Implementation**: [`lua/utils/sql-cell-inspector.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-cell-inspector.lua) (`gi` in `sqmeow-result`).
+
+**Title**: `feat(result): read-only cell inspector for JSON, XML, and long-text values`
+- Reads `require('sqmeow.ui.result').current_cell()`, auto-detects JSON (`jq` / `vim.json` fallback), XML (`xmllint` / lightweight indenter), or Markdown/text, opens a read-only unlisted scratch buffer with Treesitter highlighting & folding (`za`/`zM`/`zR`), `y` formatted yank, `Y` minified yank, `q`/`<Esc>` close.
+
+---
+
+### Issue 22: Visual Query Execution Plan Viewer (`EXPLAIN ANALYZE / FORMAT JSON`) [ISSUE FILED UPSTREAM - Issue #138]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #138](https://github.com/2giosangmitom/sqmeow.nvim/issues/138)).
+> **Local Implementation**: [`lua/utils/sql-explain.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-explain.lua) (`<leader>be`).
+
+**Title**: `feat(view): visual query execution plan viewer (EXPLAIN ANALYZE / FORMAT JSON)`
+- Runs `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` for read-only statements (`SELECT`/`WITH`/`TABLE`/`VALUES`) and safe `EXPLAIN (FORMAT JSON)` for writes via `sqmeow.rpc.client` (`execute` + `rows`).
+- **Silent execution**: Hooks `sqmeow.ui.result.render` and `sqmeow.server.history.append` for internal explain `call_id`s so `<leader>be` never opens/overwrites the bottom `sqmeow-result` split, preserves `state.call`, and avoids polluting query history. Pre-subscribes to `call:state` before `execute` to avoid fast-plan races.
+- Renders an interactive `sqmeow-explain` operator tree with exclusive time/cost % bars, buffer hit/read stats, `[FULL SCAN]` / `[EST MISMATCH]` flags, `j`/`k` jump, `l`/`<CR>`/`K` detail popup, `h`/`za` fold, `y` yank raw JSON, `q`/`<Esc>` close.
+
+---
+
+### Issue 23: Schema-Aware SQL Query Templates & Fuzzy Object Picker API [ISSUE FILED UPSTREAM - Issue #139]
+
+> **Status**: **OPEN UPSTREAM** ([Issue #139](https://github.com/2giosangmitom/sqmeow.nvim/issues/139)).
+> **Local Implementation**: [`lua/utils/sql-objects.lua`](file:///home/georgek/.config/nvim/lua/utils/sql-objects.lua) (`<leader>bf` DB Objects, `<leader>bt` SQL Templates).
+
+**Title**: `feat(view): schema-aware SQL query templates & fuzzy object picker API`
+- Powered by `sqmeow.api.view.schema()` metadata (tables, columns, PKs, indexes, FKs).
+- **Insert-mode safe picker actions**: Registers custom actions under `Snacks.picker` `actions = { ... }` with modifier keymaps (`<M-p>` Grid Peek, `<M-e>`/`<C-e>` ERD, `<M-s>` Structure, `<M-t>`/`<C-t>` Templates, `<M-y>`/`<C-y>` Yank, `<M-r>` Refresh, `<Tab>`/`<S-Tab>` list nav) in Insert + Normal modes, plus single-letter shortcuts in Normal mode.
 
 
 

@@ -447,7 +447,7 @@ function M.open_viewer(key, target_win, opts)
       table.insert(lines, '- `i` : Edit ticket (on Description) or Add comment (on Comments)')
       table.insert(lines, '- `r` : Edit comment under cursor (on Comments)')
       table.insert(lines, '- `X` : Delete local ticket')
-      table.insert(lines, '- `q` : Back to My Tasks')
+      table.insert(lines, '- `q` / `h` : Back to My Tasks')
     end
 
     vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
@@ -566,6 +566,11 @@ function M.open_viewer(key, target_win, opts)
     end)
   end, 'Delete local ticket')
   map('q', function()
+    if opts.on_close then
+      opts.on_close(buf)
+    end
+  end, 'Back to board')
+  map('h', function()
     if opts.on_close then
       opts.on_close(buf)
     end
