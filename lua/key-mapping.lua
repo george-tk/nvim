@@ -131,7 +131,7 @@ local function smart_close()
   end
 
   -- 1. If inside Right Panel (Explorer, DBUI, AI, Neogit, Dockyard, GrugFar): close sub-view or hide the Right Panel
-  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar then
+  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar or info.is_jira then
     if (info.is_neogit and info.ft ~= 'NeogitStatus') or (info.is_dockyard and info.ft ~= 'dockyard') then
       -- Inside a Neogit or Dockyard sub-view/popup/loglens/files in the Right Panel: trigger its native `q` close to return to main view
       vim.wo[cur_win].winfixbuf = false
@@ -353,7 +353,7 @@ local function smart_goto_slot(n)
   end
 
   -- 2. In Right Panel (Explorer, DBUI, AI, Neogit, Dockyard, GrugFar): switch to right panel slot 1..6
-  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar then
+  if info.is_explorer or info.is_dbui or info.is_opencode or info.is_neogit or info.is_dockyard or info.is_grugfar or info.is_jira then
     layout.RightPanel.open_slot(n)
     return
   end
@@ -384,7 +384,7 @@ local function smart_goto_slot(n)
   end
 end
 
-for i = 1, 6 do
+for i = 1, 7 do
   vim.keymap.set({ 'n', 't', 'i' }, '<C-' .. i .. '>', function()
     smart_goto_slot(i)
   end, { desc = 'Go to / Create Buffer or Panel Slot ' .. i })

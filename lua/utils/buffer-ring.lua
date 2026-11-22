@@ -75,6 +75,7 @@ function M.is_qualifying(buf)
     ['dockyard-logs'] = true,
     ['dockyard-files'] = true,
     dockyard_popup = true,
+    ['jira-board'] = true,
   }
   if excluded[filetype] then
     return false
@@ -85,7 +86,7 @@ function M.is_qualifying(buf)
     return false
   end
 
-  if name:match '^fugitive://' or name:match '^diffview://' or name:match '^term://' or name:match '^octo://' or name:match '^dockyard://' then
+  if name:match '^fugitive://' or name:match '^diffview://' or name:match '^term://' or name:match '^octo://' or name:match '^dockyard://' or name:find('Jira: ', 1, true) or name:find('Jira Edit: ', 1, true) then
     return false
   end
 
@@ -526,6 +527,17 @@ local function get_active_cap_hl()
   return 'LualinePillCapActive_normal'
 end
 
+local function get_active_num_hl()
+  local ok, hl = pcall(require, 'lualine.highlight')
+  if ok and hl.get_mode_suffix then
+    local num = 'LualinePillNumActive' .. hl.get_mode_suffix()
+    if vim.fn.hlexists(num) == 1 then
+      return num
+    end
+  end
+  return 'LualinePillNumActive_normal'
+end
+
 -- Resolve inactive highlight (pill surface background with text color)
 local function get_inactive_hl()
   local ok, hl = pcall(require, 'lualine.highlight')
@@ -630,11 +642,12 @@ function M.lualine_component()
       local modified = vim.bo[b].modified and ' ●' or ''
       local pin = M.pinned[b] and '󰐃 ' or ''
       local hl = is_active and active_hl or inactive_hl
+      local num_hl = is_active and get_active_num_hl() or 'LualinePillSep'
 
       table.insert(entries, {
         is_active = is_active,
         is_empty = false,
-        text = string.format('%%#%s# %s%s %s%s %%*', hl, pin, icon, name, modified),
+        text = string.format('%%#%s# %d %%*%%#%s#%s%s %s%s %%*', num_hl, i, hl, pin, icon, name, modified),
       })
     else
       -- Standard 5-cell slot width matching RightPanel (`` adds 1 cell on left of slot 1, `` adds 1 cell on right of max_slot)

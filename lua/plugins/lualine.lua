@@ -45,6 +45,7 @@ return {
       }
       for mode, accent in pairs(mode_colors) do
         vim.api.nvim_set_hl(0, 'LualinePillCapActive_' .. mode, { bg = 'NONE', fg = accent })
+        vim.api.nvim_set_hl(0, 'LualinePillNumActive_' .. mode, { bg = accent, fg = pill_bg })
       end
       vim.api.nvim_set_hl(0, 'LualinePillBody', { bg = pill_bg, fg = text })
       vim.api.nvim_set_hl(0, 'LualinePillSubtext', { bg = pill_bg, fg = C.subtext1 or '#bac2de' })
