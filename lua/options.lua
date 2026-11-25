@@ -31,7 +31,7 @@ if is_wsl then
   local clip_cache = {
     lines = nil,
     regtype = 'v',
-    internal_ts = 0,
+    gen = 0,
     external_dirty = true,
   }
 
@@ -67,7 +67,11 @@ if is_wsl then
     if not cmd or not vim.system then
       return
     end
+    local req_gen = clip_cache.gen
     pcall(vim.system, cmd, { text = true }, function(out)
+      if clip_cache.gen ~= req_gen then
+        return
+      end
       if out and out.code == 0 and out.stdout then
         clip_cache.lines = split_clean_lines(out.stdout)
         clip_cache.regtype = 'v'
@@ -86,15 +90,17 @@ if is_wsl then
   vim.api.nvim_create_autocmd('FocusGained', {
     group = wsl_augroup,
     callback = function()
+      clip_cache.gen = clip_cache.gen + 1
       clip_cache.external_dirty = true
       async_prefetch_windows_clipboard()
     end,
   })
+  vim.schedule(async_prefetch_windows_clipboard)
 
   local function wsl_copy(lines, regtype)
+    clip_cache.gen = clip_cache.gen + 1
     clip_cache.lines = vim.deepcopy(lines)
     clip_cache.regtype = regtype or 'v'
-    clip_cache.internal_ts = (vim.uv or vim.loop).now()
     clip_cache.external_dirty = false
 
     -- 1. Emit OSC 52 escape sequence to terminal immediately (0ms latency in Windows Terminal / WezTerm / Alacritty / VS Code)
@@ -116,9 +122,8 @@ if is_wsl then
   end
 
   local function wsl_paste()
-    local now = (vim.uv or vim.loop).now()
-    -- If yanked/deleted inside Neovim recently (< 2s) and terminal focus wasn't lost, return cached lines in 0ms
-    if not clip_cache.external_dirty and clip_cache.lines and (now - clip_cache.internal_ts) < 2000 then
+    -- Return cached clipboard in 0ms whenever focus hasn't left Neovim (or FocusGained prefetch already refreshed it)
+    if not clip_cache.external_dirty and clip_cache.lines then
       return { clip_cache.lines, clip_cache.regtype or 'v' }
     end
 
@@ -130,6 +135,7 @@ if is_wsl then
         if res and res.code == 0 and res.stdout then
           local lines = split_clean_lines(res.stdout)
           clip_cache.lines = lines
+          clip_cache.regtype = 'v'
           clip_cache.external_dirty = false
           return { lines, 'v' }
         end
