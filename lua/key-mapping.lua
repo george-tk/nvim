@@ -11,6 +11,22 @@ vim.keymap.set('n', '<Esc>', '<cmd>nohlsearch<CR>')
 -- Exit terminal mode
 vim.keymap.set('t', '<Esc><Esc>', '<C-\\><C-n>', { desc = 'Exit Terminal Mode' })
 
+-- Clipboard-Safe Editing (Deletes/Changes go to black hole; X = Cut)
+vim.keymap.set({ 'n', 'x' }, 'd', '"_d', { desc = 'Delete (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 'D', '"_D', { desc = 'Delete to EOL (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 'c', '"_c', { desc = 'Change (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 'C', '"_C', { desc = 'Change to EOL (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 's', '"_s', { desc = 'Substitute (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 'S', '"_S', { desc = 'Substitute line (no yank)' })
+vim.keymap.set({ 'n', 'x' }, 'x', '"_x', { desc = 'Delete char (no yank)' })
+vim.keymap.set('n', 'p', ']p', { desc = 'Paste below (match indent)' })
+vim.keymap.set('n', 'P', '[p', { desc = 'Paste above (match indent)' })
+vim.keymap.set('x', 'p', 'P', { desc = 'Paste over selection (no yank)' })
+
+-- Dedicated Cut operator (X + motion, XX = cut line, Visual X = cut selection)
+vim.keymap.set({ 'n', 'x' }, 'X', 'd', { desc = 'Cut' })
+vim.keymap.set('n', 'XX', 'dd', { desc = 'Cut line' })
+
 -- Spelling (Clean 2-key length, compact cursor box, per-buffer persistence)
 vim.keymap.set('n', '<leader>st', function()
   local next_state = not vim.wo.spell
