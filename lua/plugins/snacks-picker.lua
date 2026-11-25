@@ -207,9 +207,22 @@ return {
       desc = 'Resume Last Picker',
     },
 
-    -- All Pickers (Meta escape hatch)
+    -- Switch Project Session (same clean transition as Dashboard project selection)
     {
       '<leader>fp',
+      function()
+        if _G.PickProjectSession then
+          _G.PickProjectSession()
+        else
+          Snacks.picker.projects()
+        end
+      end,
+      desc = 'Projects',
+    },
+
+    -- All Pickers (Meta escape hatch)
+    {
+      '<leader>fP',
       function()
         Snacks.picker.pickers()
       end,
