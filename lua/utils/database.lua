@@ -695,12 +695,12 @@ function M.setup_drawer_helpers()
     M._drawer_preview_hooked = true
     local orig_preview_editor = drawer.actions.preview_editor
     drawer.actions.preview_editor = function(...)
+      local node = drawer.current_node and drawer.current_node()
       local res = orig_preview_editor(...)
-      local buf = drawer.preview_buffer()
-      if buf and vim.api.nvim_buf_is_valid(buf) then
+      local buf = (drawer.preview_buffer and drawer.preview_buffer()) or vim.api.nvim_get_current_buf()
+      if buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].filetype ~= 'sqmeow-drawer' then
         vim.b[buf].is_preview_buffer = true
 
-        local node = drawer.current_node and drawer.current_node()
         local conn_name = nil
         if node and node.conn_id then
           local ok_st, st = pcall(require, 'sqmeow.core.state')
@@ -719,10 +719,16 @@ function M.setup_drawer_helpers()
           end
         end
 
+        local rel = vim.b[buf].sqmeow_relation
         if node and node.name then
           vim.b[buf].sqmeow_table = node.name
           if node.path and node.path[1] then
             vim.b[buf].sqmeow_schema = node.path[1]
+          end
+        elseif type(rel) == 'table' and rel.name then
+          vim.b[buf].sqmeow_table = rel.name
+          if rel.schema then
+            vim.b[buf].sqmeow_schema = rel.schema
           end
         end
 
@@ -843,7 +849,7 @@ function M.setup_drawer_helpers()
       local orig_create = editor.create
       editor.create = function(name)
         local trimmed = vim.trim(name or '')
-        if trimmed ~= '' and trimmed:sub(-1) ~= '/' and not editor.filetype(trimmed) then
+        if trimmed ~= '' and trimmed:sub(-1) ~= '/' and (not editor.filetype or not editor.filetype(trimmed)) then
           name = trimmed .. '.sql'
         end
         local buf, err = orig_create(name)
@@ -885,18 +891,22 @@ function M.setup_drawer_helpers()
       end)
     end
 
-    local orig_render = result.render
-    result.render = function(summary)
-      local r = orig_render(summary)
-      refresh_statusline()
-      return r
+    if result.render then
+      local orig_render = result.render
+      result.render = function(summary)
+        local r = orig_render(summary)
+        refresh_statusline()
+        return r
+      end
     end
 
-    local orig_update_winbar = result.update_winbar
-    result.update_winbar = function(summary)
-      local r = orig_update_winbar(summary)
-      refresh_statusline()
-      return r
+    if result.update_winbar then
+      local orig_update_winbar = result.update_winbar
+      result.update_winbar = function(summary)
+        local r = orig_update_winbar(summary)
+        refresh_statusline()
+        return r
+      end
     end
   end
 
@@ -965,7 +975,10 @@ function M.setup_drawer_helpers()
     local function close_erd_buffer()
       local v = erd.state and erd.state() or nil
       if not v then
-        return orig_close()
+        if orig_close then
+          return orig_close()
+        end
+        return
       end
       local buf = v.buf
       local win = v.win
@@ -993,7 +1006,9 @@ function M.setup_drawer_helpers()
         end
         v.win = -1
       end
-      orig_close()
+      if orig_close then
+        orig_close()
+      end
     end
 
     erd.close = close_erd_buffer
@@ -1467,9 +1482,9 @@ function M.run_query(full_buffer)
     if drawer and drawer.current_node then
       local node = drawer.current_node()
       if node and node.path and #node.path == 3 and (node.path[2] == 'tables' or node.path[2] == 'views') then
-        if drawer.actions.preview_editor then
+        if drawer.actions and drawer.actions.preview_editor then
           drawer.actions.preview_editor()
-        else
+        elseif drawer.actions and drawer.actions.preview then
           drawer.actions.preview()
         end
         return
@@ -1641,7 +1656,11 @@ function M.save_query(force_prompt)
 end
 
 function M.select_saved_query()
-  local editor = require 'sqmeow.ui.editor'
+  local ok_ed, editor = pcall(require, 'sqmeow.ui.editor')
+  if not (ok_ed and editor and editor.list) then
+    vim.notify('sqmeow editor is not available', vim.log.levels.WARN, { title = 'Database' })
+    return
+  end
   local pads = editor.list()
   if editor.project then
     local proj = editor.project()
