@@ -334,6 +334,103 @@ local function equalize_splits()
   balance_group(bottom_wins, RightPanel.has_custom_bottom_widths)
 end
 
+local function get_opencode_cmd()
+  local binary = vim.fn.exepath 'opencode'
+  if binary == '' then
+    local fallback = vim.fn.expand '~/.opencode/bin/opencode'
+    if (vim.uv or vim.loop).fs_stat(fallback) then
+      binary = fallback
+    else
+      binary = 'opencode'
+    end
+  end
+  return binary .. ' --port --agent plan'
+end
+
+local function get_single_editor_column_bottom_win()
+  local col = nil
+  local bottom_win = nil
+  local max_row = -1
+  for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.api.nvim_win_is_valid(w) then
+      local cfg = vim.api.nvim_win_get_config(w)
+      if not cfg.relative or cfg.relative == '' then
+        if get_win_info(w).is_editor then
+          local pos = vim.api.nvim_win_get_position(w)
+          if col == nil then
+            col = pos[2]
+          elseif pos[2] ~= col then
+            return nil
+          end
+          if pos[1] > max_row then
+            max_row = pos[1]
+            bottom_win = w
+          end
+        end
+      end
+    end
+  end
+  return bottom_win
+end
+
+-- Temporarily detach an open OpenCode terminal window while a full-width bottom split
+-- (`botright` / `wincmd J`) is created, then re-attach it at full height on the far right.
+-- Without this, `botright` transiently shrinks OpenCode's PTY height and `wincmd L` restores it
+-- within the same tick, which scrolls/crops libvterm's buffer upward without triggering a redraw.
+local function with_opencode_preserved(fn)
+  local oc_win = find_win_type 'is_opencode'
+  if not (oc_win and vim.api.nvim_win_is_valid(oc_win)) then
+    return fn()
+  end
+
+  local oc_buf = vim.api.nvim_win_get_buf(oc_win)
+  local oc_w = vim.api.nvim_win_get_width(oc_win)
+  local oc_term = nil
+  if Snacks and Snacks.terminal and Snacks.terminal.get then
+    local ok_t, t = pcall(Snacks.terminal.get, get_opencode_cmd(), { create = false })
+    if ok_t and t and t.win == oc_win then
+      oc_term = t
+    end
+  end
+
+  if oc_term then
+    pcall(function()
+      oc_term:hide()
+    end)
+  else
+    pcall(vim.api.nvim_win_close, oc_win, true)
+  end
+
+  local ok, res = pcall(fn)
+  local target_focus = vim.api.nvim_get_current_win()
+
+  if oc_term and oc_term:buf_valid() then
+    oc_term.opts.position = 'right'
+    oc_term.opts.relative = 'editor'
+    oc_term.opts.width = oc_w
+    oc_term.opts.enter = false
+    pcall(function()
+      oc_term:show()
+    end)
+  elseif oc_buf and vim.api.nvim_buf_is_valid(oc_buf) then
+    pcall(vim.cmd, 'botright vertical ' .. oc_w .. 'sbuffer ' .. oc_buf)
+    local new_oc_win = vim.api.nvim_get_current_win()
+    if vim.api.nvim_win_is_valid(new_oc_win) then
+      vim.wo[new_oc_win].winfixwidth = true
+      vim.wo[new_oc_win].winfixbuf = true
+    end
+  end
+
+  if target_focus and vim.api.nvim_win_is_valid(target_focus) then
+    pcall(vim.api.nvim_set_current_win, target_focus)
+  end
+
+  if not ok then
+    error(res)
+  end
+  return res
+end
+
 local function ensure_right_sidebar_precedence()
   if vim.t.diffview_view_initialized then
     return
@@ -366,25 +463,32 @@ local function ensure_right_sidebar_precedence()
     local bot_win = bottom_wins[1]
     local expected_w = vim.o.columns - (#right_wins > 0 and (sidebar_w + 1) or 0)
     if vim.api.nvim_win_is_valid(bot_win) and vim.api.nvim_win_get_width(bot_win) < expected_w - 2 then
-      local cur = vim.api.nvim_get_current_win()
-      local h = vim.api.nvim_win_get_height(bot_win)
-      vim.api.nvim_win_call(bot_win, function()
-        vim.cmd 'wincmd J'
+      with_opencode_preserved(function()
+        local cur = vim.api.nvim_get_current_win()
+        local h = vim.api.nvim_win_get_height(bot_win)
+        vim.api.nvim_win_call(bot_win, function()
+          vim.cmd 'wincmd J'
+        end)
+        pcall(vim.api.nvim_win_set_height, bot_win, h)
+        if vim.api.nvim_win_is_valid(cur) then
+          pcall(vim.api.nvim_set_current_win, cur)
+        end
       end)
-      pcall(vim.api.nvim_win_set_height, bot_win, h)
-      if vim.api.nvim_win_is_valid(cur) then
-        pcall(vim.api.nvim_set_current_win, cur)
-      end
     end
   end
 
   local r_win = get_right_sidebar_win()
   if r_win and vim.api.nvim_win_is_valid(r_win) then
     vim.api.nvim_win_call(r_win, function()
-      -- Only force `wincmd L` when there is a single right-panel window;
-      -- if Neogit or Dockyard has a stacked sub-view/popup split inside the Right Panel, preserve the vertical stack!
+      -- Only force `wincmd L` when there is a single right-panel window and it is not already
+      -- anchored full-height on the far right; if Neogit or Dockyard has a stacked sub-view/popup
+      -- split inside the Right Panel, preserve the vertical stack!
       if #right_wins <= 1 then
-        vim.cmd 'wincmd L'
+        local cur_nr = vim.fn.winnr()
+        local already_full_right = vim.fn.winnr 'l' == cur_nr and vim.fn.winnr 'k' == cur_nr and vim.fn.winnr 'j' == cur_nr
+        if not already_full_right then
+          vim.cmd 'wincmd L'
+        end
       end
       local info = get_win_info(r_win)
       local custom = RightPanel.custom_widths or {}
@@ -404,7 +508,9 @@ local function ensure_right_sidebar_precedence()
       else
         width = custom['explorer'] or 35
       end
-      vim.cmd('vertical resize ' .. width)
+      if vim.api.nvim_win_get_width(r_win) ~= width then
+        vim.cmd('vertical resize ' .. width)
+      end
     end)
 
     for _, w in ipairs(right_wins) do
@@ -486,19 +592,6 @@ end
 -------------------------------------------------------------------------------
 -- Unified Right-Side Panel Manager (Explorer | DBUI | OpenCode AI)
 -------------------------------------------------------------------------------
-
-local function get_opencode_cmd()
-  local binary = vim.fn.exepath 'opencode'
-  if binary == '' then
-    local fallback = vim.fn.expand '~/.opencode/bin/opencode'
-    if (vim.uv or vim.loop).fs_stat(fallback) then
-      binary = fallback
-    else
-      binary = 'opencode'
-    end
-  end
-  return binary .. ' --port --agent plan'
-end
 
 function RightPanel.close_all()
   local closed = false
@@ -1418,15 +1511,18 @@ function BottomPanel.open_terminal(count, no_toggle)
     hide_terminal_if_visible()
   end
 
-  local ed = get_editor_win()
+  local single_ed = get_single_editor_column_bottom_win()
+  local target_height = BottomPanel.custom_height or math.floor(vim.o.lines * 0.38)
+  local ed = single_ed or get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
     vim.api.nvim_set_current_win(ed)
   end
 
   local win_opts = {
     position = 'bottom',
-    relative = 'editor',
-    height = BottomPanel.custom_height or 0.38,
+    relative = single_ed and 'win' or 'editor',
+    win = single_ed or nil,
+    height = target_height,
     wo = {
       winbar = '',
       winfixheight = true,
@@ -1434,20 +1530,29 @@ function BottomPanel.open_terminal(count, no_toggle)
     },
   }
 
-  local target_term = Snacks.terminal.get(nil, {
-    count = target_count,
-    create = true,
-    win = win_opts,
-  })
-  if target_term then
-    target_term.opts.relative = 'editor'
-    target_term.opts.win = nil
-    target_term.opts.height = BottomPanel.custom_height or 0.38
-    target_term:show()
-    if target_term.buf and vim.api.nvim_buf_is_valid(target_term.buf) then
-      vim.b[target_term.buf].panel_zone = 'bottom'
-      vim.b[target_term.buf].panel_type = 'terminal'
+  local target_term
+  local function show_terminal()
+    target_term = Snacks.terminal.get(nil, {
+      count = target_count,
+      create = true,
+      win = win_opts,
+    })
+    if target_term then
+      target_term.opts.relative = single_ed and 'win' or 'editor'
+      target_term.opts.win = single_ed or nil
+      target_term.opts.height = target_height
+      target_term:show()
+      if target_term.buf and vim.api.nvim_buf_is_valid(target_term.buf) then
+        vim.b[target_term.buf].panel_zone = 'bottom'
+        vim.b[target_term.buf].panel_type = 'terminal'
+      end
     end
+  end
+
+  if single_ed then
+    show_terminal()
+  else
+    with_opencode_preserved(show_terminal)
   end
 
   ensure_right_sidebar_precedence()
@@ -1561,7 +1666,9 @@ function BottomPanel.open_dbout(no_toggle)
     close_qf_win(false)
     BottomPanel.active_mode = 'dbout'
     BottomPanel.dbout_open = true
-    view_api.open()
+    with_opencode_preserved(function()
+      view_api.open()
+    end)
 
     local res_win = nil
     local ok_res, res_mod = pcall(require, 'sqmeow.ui.result')
@@ -1618,13 +1725,20 @@ function BottomPanel.open_dbout(no_toggle)
   close_qf_win(false)
   BottomPanel.active_mode = 'dbout'
   BottomPanel.dbout_open = true
-  local ed = get_editor_win()
+  local single_ed = get_single_editor_column_bottom_win()
+  local ed = single_ed or get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
     vim.api.nvim_set_current_win(ed)
   end
 
   local results_height = BottomPanel.custom_height or math.floor(vim.o.lines * 0.35)
-  vim.cmd('botright ' .. results_height .. 'split')
+  if single_ed then
+    vim.cmd('belowright ' .. results_height .. 'split')
+  else
+    with_opencode_preserved(function()
+      vim.cmd('botright ' .. results_height .. 'split')
+    end)
+  end
   local win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(win, dbout_buf)
   vim.wo[win].winfixheight = true
@@ -1653,13 +1767,20 @@ function BottomPanel.open_qf(no_toggle)
   BottomPanel.active_mode = 'qf'
   BottomPanel.qf_open = true
 
-  local ed = get_editor_win()
+  local single_ed = get_single_editor_column_bottom_win()
+  local ed = single_ed or get_editor_win()
   if ed and vim.api.nvim_win_is_valid(ed) then
     vim.api.nvim_set_current_win(ed)
   end
 
   local qf_height = BottomPanel.custom_height or math.floor(vim.o.lines * 0.35)
-  vim.cmd('botright copen ' .. qf_height)
+  if single_ed then
+    vim.cmd('belowright copen ' .. qf_height)
+  else
+    with_opencode_preserved(function()
+      vim.cmd('botright copen ' .. qf_height)
+    end)
+  end
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_win_get_buf(win)
   vim.b[buf].panel_zone = 'bottom'
