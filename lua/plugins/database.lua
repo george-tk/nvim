@@ -172,6 +172,15 @@ return {
           vim.keymap.set('n', '<C-j>', function()
             _G.BottomPanel.toggle_active()
           end, { buffer = args.buf, silent = true, desc = 'Bottom Output' })
+          vim.keymap.set('n', 'D', function()
+            local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+            local node = ok_dr and drawer and drawer.current_node and drawer.current_node() or nil
+            if node and node.conn_id then
+              db.disconnect_connection(node.conn_id)
+            else
+              db.disconnect_connection()
+            end
+          end, { buffer = args.buf, silent = true, desc = 'Disconnect Database (keep saved)' })
           vim.keymap.set('n', 'q', function()
             if _G.RightPanel then
               _G.RightPanel.close_all()
@@ -376,6 +385,13 @@ return {
           end)
         end,
         desc = 'Export Results',
+      },
+      {
+        '<leader>bd',
+        function()
+          db.disconnect_connection()
+        end,
+        desc = 'Disconnect Database',
       },
       {
         '<leader>bA',

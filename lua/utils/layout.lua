@@ -583,6 +583,22 @@ local function prepare_nav()
   end
 end
 
+local function focus_panel_win(win)
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    return
+  end
+  vim.api.nvim_set_current_win(win)
+  local buf = vim.api.nvim_win_get_buf(win)
+  if vim.bo[buf].buftype == 'terminal' then
+    -- Schedule startinsert after any deferred stopinsert from prepare_nav() finishes
+    vim.schedule(function()
+      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_get_current_win() == win and vim.bo[vim.api.nvim_win_get_buf(win)].buftype == 'terminal' then
+        vim.cmd 'startinsert'
+      end
+    end)
+  end
+end
+
 local function try_wincmd(dir)
   local cur_winnr = vim.fn.winnr()
   vim.cmd('wincmd ' .. dir)
@@ -834,8 +850,7 @@ function RightPanel.open_opencode(no_toggle, opts)
   if existing_oc and vim.api.nvim_win_is_valid(existing_oc) then
     RightPanel.active_mode = 'opencode'
     if focus then
-      vim.api.nvim_set_current_win(existing_oc)
-      vim.cmd 'startinsert'
+      focus_panel_win(existing_oc)
     end
     pcall(function()
       require('lualine').refresh()
@@ -854,10 +869,22 @@ function RightPanel.open_opencode(no_toggle, opts)
   local width_opt = (RightPanel.custom_widths and RightPanel.custom_widths['opencode']) or 0.38
   local cmd = get_opencode_cmd()
 
+  local agents_dir = vim.fn.stdpath 'config' .. '/.agents'
+  local opencode_env = (vim.uv or vim.loop).fs_stat(agents_dir) and {
+    OPENCODE_CONFIG_CONTENT = vim.json.encode {
+      skills = { agents_dir .. '/skills' },
+      instructions = {
+        agents_dir .. '/rules/ponytail.md',
+        agents_dir .. '/rules/caveman.md',
+      },
+    },
+  } or nil
+
   local term = Snacks.terminal.get(cmd, {
     create = true,
     start_insert = false,
     auto_insert = true,
+    env = opencode_env,
     win = {
       position = 'right',
       width = width_opt,
@@ -1348,7 +1375,7 @@ function RightPanel.toggle_active()
   local visible_right = get_right_sidebar_win()
 
   if visible_right and vim.api.nvim_win_is_valid(visible_right) then
-    vim.api.nvim_set_current_win(visible_right)
+    focus_panel_win(visible_right)
     return
   end
 
@@ -1881,7 +1908,7 @@ function BottomPanel.toggle_active(count)
   -- 3. If currently in an explorer/sidebar, focus existing bottom output or open it
   local existing_bot = find_win_type 'is_terminal'
   if existing_bot and vim.api.nvim_win_is_valid(existing_bot) then
-    vim.api.nvim_set_current_win(existing_bot)
+    focus_panel_win(existing_bot)
     return
   end
 
@@ -1939,12 +1966,12 @@ local function smart_navigate_right()
     end
 
     if info.is_terminal and target_info.is_terminal then
-      vim.api.nvim_set_current_win(target_win)
+      focus_panel_win(target_win)
       return
     end
 
     if is_right_panel(target_info) then
-      vim.api.nvim_set_current_win(target_win)
+      focus_panel_win(target_win)
       return
     end
   end
@@ -1981,7 +2008,7 @@ local function smart_navigate_left()
     end
 
     if info.is_terminal and target_info.is_terminal then
-      vim.api.nvim_set_current_win(target_win)
+      focus_panel_win(target_win)
       return
     end
   end
@@ -2066,7 +2093,7 @@ local function smart_navigate_down()
     if count then
       BottomPanel.open_terminal(count)
     else
-      vim.api.nvim_set_current_win(bot_win)
+      focus_panel_win(bot_win)
     end
     return
   end

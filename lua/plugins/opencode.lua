@@ -18,10 +18,28 @@ return {
     end
     local opencode_cmd = binary .. ' --port --agent plan'
 
+    -- Inject repo-bundled .agents skills & rules so pulling nvim alone enables ponytail + caveman
+    local function get_opencode_env()
+      local agents_dir = vim.fn.stdpath 'config' .. '/.agents'
+      if not (vim.uv or vim.loop).fs_stat(agents_dir) then
+        return nil
+      end
+      return {
+        OPENCODE_CONFIG_CONTENT = vim.json.encode {
+          skills = { agents_dir .. '/skills' },
+          instructions = {
+            agents_dir .. '/rules/ponytail.md',
+            agents_dir .. '/rules/caveman.md',
+          },
+        },
+      }
+    end
+
     ---@type snacks.terminal.Opts
     local snacks_terminal_opts = {
       start_insert = false,
       auto_insert = true,
+      env = get_opencode_env(),
       win = {
         position = 'right',
         width = 0.38,
@@ -41,6 +59,13 @@ return {
 
     ---@type opencode.Opts
     vim.g.opencode_opts = {
+      -- Handle all permission/access requests natively in the OpenCode TUI panel
+      -- so back-to-back requests never split or collide between vim.ui.select and the panel.
+      events = {
+        permissions = {
+          enabled = false,
+        },
+      },
       server = {
         start = function()
           if _G.RightPanel then
@@ -443,6 +468,7 @@ return {
     vim.api.nvim_create_autocmd('User', {
       pattern = {
         'OpencodeEvent:tui.command.execute',
+        'OpencodeEvent:permission.asked',
         'OpencodeEvent:session.status',
         'OpencodeEvent:session.busy',
         'OpencodeEvent:session.idle',
@@ -465,7 +491,16 @@ return {
           active_session_id = sid
         end
 
-        if event.type == 'tui.command.execute' then
+        if event.type == 'permission.asked' then
+          if _G.RightPanel then
+            _G.RightPanel.open_opencode(true, { focus = false })
+          else
+            local win = require('snacks.terminal').get(opencode_cmd, { create = false })
+            if win then
+              win:show()
+            end
+          end
+        elseif event.type == 'tui.command.execute' then
           local cmd = props.command
           if cmd == 'prompt.submit' then
             set_prompt_running(true)

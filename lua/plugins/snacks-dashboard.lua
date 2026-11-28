@@ -151,28 +151,61 @@ local function pick_project_session()
     return
   end
 
+  -- 1-9, then a-z (skipping i/j/k/q so list navigation, insert/search, and quit stay intact)
+  local hotkey_chars = {
+    '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'l', 'm', 'n', 'o', 'p', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+  }
+
   local cur_cwd = vim.fs.normalize(vim.fn.getcwd())
   local items = {}
+  local actions = {}
+  local list_keys = {
+    ['/'] = { 'focus_input', mode = 'n' },
+    ['i'] = { 'focus_input', mode = 'n' },
+  }
+  local input_keys = {}
+
   for i, s in ipairs(sessions) do
     local display = vim.fn.fnamemodify(s.dir, ':~')
+    local hk = hotkey_chars[i]
     table.insert(items, {
       idx = i,
+      hotkey = hk,
       text = display,
       dir = s.dir,
       age = format_age(s.mtime),
       is_current = (s.dir == cur_cwd and vim.bo.filetype ~= 'snacks_dashboard'),
     })
+    if hk then
+      local action_name = 'open_project_' .. i
+      local target_dir = s.dir
+      actions[action_name] = function(picker)
+        picker:close()
+        open_project_clean(target_dir)
+      end
+      list_keys[hk] = { action_name, mode = 'n' }
+      input_keys[hk] = { action_name, mode = 'n' }
+    end
   end
 
   Snacks.picker.pick {
-    title = 'Projects',
+    title = 'Projects (1-9/a-z jump, / search)',
     items = items,
+    focus = 'list',
     layout = {
       preset = 'vscode',
       hidden = { 'preview' },
     },
+    actions = actions,
+    win = {
+      list = { keys = list_keys },
+      input = { keys = input_keys },
+    },
     format = function(item)
+      local badge = item.hotkey and (item.hotkey .. '  ') or '   '
       local ret = {
+        { badge, 'Number' },
         { '󰉋 ', item.is_current and 'DiagnosticOk' or 'Directory' },
         { item.text, item.is_current and 'Title' or 'Normal' },
         { '  ' .. item.age, 'Comment' },

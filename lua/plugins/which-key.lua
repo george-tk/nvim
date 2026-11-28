@@ -80,6 +80,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>bl', desc = 'Load Saved Query' },
       { '<leader>bv', desc = 'Review & Apply In-Grid Edits' },
       { '<leader>bx', desc = 'Export Results' },
+      { '<leader>bd', desc = 'Disconnect Database' },
       { '<leader>bA', desc = 'Add Database' },
       { '<leader>bD', desc = 'Delete Database' },
 

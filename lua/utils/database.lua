@@ -1392,6 +1392,112 @@ function M.add_connection(callback)
   end)
 end
 
+function M.disconnect_connection(target_conn_id)
+  local conn_api = sqmeow 'api.connection'
+  local state = sqmeow 'core.state'
+  if not (conn_api and conn_api.disconnect and state and state.connections) then
+    vim.notify('sqmeow is not loaded or has no active connections', vim.log.levels.INFO, { title = 'Database' })
+    return
+  end
+
+  local function do_disconnect(id, name)
+    pcall(conn_api.disconnect, id)
+    if name and M.current_db_name and (M.current_db_name == name or M.current_db_name:sub(1, #name + 1) == name .. '/') then
+      M.current_db = nil
+      M.current_db_name = nil
+    end
+    vim.schedule(function()
+      local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+      if ok_dr and drawer and drawer.is_open and drawer.is_open() and drawer.render then
+        pcall(drawer.render)
+      end
+      local ok_ll, lualine = pcall(require, 'lualine')
+      if ok_ll and lualine and lualine.refresh then
+        lualine.refresh()
+      end
+    end)
+    vim.notify('Disconnected: ' .. (name or tostring(id)), vim.log.levels.INFO, { title = 'Database' })
+  end
+
+  if target_conn_id then
+    local conn = state.connections[target_conn_id]
+    if not conn then
+      vim.notify('Connection is already disconnected', vim.log.levels.INFO, { title = 'Database' })
+      return
+    end
+    do_disconnect(target_conn_id, conn.name)
+    return
+  end
+
+  local active = {}
+  for id, conn in pairs(state.connections) do
+    if conn and conn.state ~= 'closed' then
+      table.insert(active, { id = id, name = conn.name or tostring(id), parent = conn.parent })
+    end
+  end
+
+  if #active == 0 then
+    vim.notify('No active database connections to disconnect', vim.log.levels.INFO, { title = 'Database' })
+    return
+  end
+
+  table.sort(active, function(a, b)
+    if (a.parent == nil) ~= (b.parent == nil) then
+      return a.parent == nil
+    end
+    return a.name < b.name
+  end)
+
+  if #active == 1 then
+    do_disconnect(active[1].id, active[1].name)
+    return
+  end
+
+  local items = {
+    { text = 'Disconnect ALL active connections (' .. #active .. ')', all = true },
+  }
+  for _, c in ipairs(active) do
+    table.insert(items, {
+      text = c.name,
+      id = c.id,
+      name = c.name,
+    })
+  end
+
+  Snacks.picker.select(items, {
+    prompt = 'Disconnect Database (keeps saved connection)',
+    format_item = function(item)
+      return (item.all and '󰅙 ' or '󰌺 ') .. item.text
+    end,
+  }, function(choice)
+    if not choice then
+      return
+    end
+    if choice.all then
+      for _, c in ipairs(active) do
+        if state.connections[c.id] then
+          pcall(conn_api.disconnect, c.id)
+        end
+      end
+      M.current_db = nil
+      M.current_db_name = nil
+      vim.schedule(function()
+        local ok_dr, drawer = pcall(require, 'sqmeow.ui.drawer')
+        if ok_dr and drawer and drawer.is_open and drawer.is_open() and drawer.render then
+          pcall(drawer.render)
+        end
+        local ok_ll, lualine = pcall(require, 'lualine')
+        if ok_ll and lualine and lualine.refresh then
+          lualine.refresh()
+        end
+      end)
+      vim.notify('Disconnected all active database connections', vim.log.levels.INFO, { title = 'Database' })
+    else
+      do_disconnect(choice.id, choice.name)
+    end
+  end)
+end
+
 function M.delete_connection()
   local connections = M.get_all_connections()
   local items = {}
