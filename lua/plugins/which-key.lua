@@ -129,6 +129,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>ci', desc = 'Implementations' },
       { '<leader>ct', desc = 'Change Filetype' },
       { '<leader>cf', desc = 'Format Buffer' },
+      { '<leader>cv', desc = 'Toggle CSV Table / Raw View' },
 
       -- Spelling Group (<leader>s)
       { '<leader>st', desc = 'Spelling Toggle' },

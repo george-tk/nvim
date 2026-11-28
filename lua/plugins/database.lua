@@ -131,11 +131,6 @@ return {
             end
           end
 
-          pcall(function()
-            vim.b[buf].neocodeium_enabled = true
-            vim.b[buf].neocodeium_allowed_encoding = true
-          end)
-
           local ok_lualine, lualine = pcall(require, 'lualine')
           if ok_lualine and lualine.refresh then
             lualine.refresh()

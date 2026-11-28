@@ -854,8 +854,6 @@ function M.setup_drawer_helpers()
         end
         local buf, err = orig_create(name)
         if buf and vim.api.nvim_buf_is_valid(buf) then
-          vim.b[buf].neocodeium_enabled = true
-          vim.b[buf].neocodeium_allowed_encoding = true
           if M.current_db_name and not vim.b[buf].sqmeow_connection then
             vim.b[buf].db_name = M.current_db_name
             vim.b[buf].sqmeow_connection = M.current_db_name
@@ -1565,8 +1563,6 @@ function M.open_query_scratchpad()
       vim.b[cur_buf].db_name = M.current_db_name
       vim.b[cur_buf].sqmeow_connection = M.current_db_name
     end
-    vim.b[cur_buf].neocodeium_enabled = true
-    vim.b[cur_buf].neocodeium_allowed_encoding = true
     local ok_lualine, lualine = pcall(require, 'lualine')
     if ok_lualine and lualine.refresh then
       lualine.refresh()

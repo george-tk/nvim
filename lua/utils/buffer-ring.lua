@@ -383,7 +383,6 @@ function M.new_buffer(filetype, target_slot)
   vim.bo[buf].buflisted = true
   vim.bo[buf].swapfile = true
   vim.b[buf].is_user_buffer = true
-  vim.b[buf].neocodeium_allowed_encoding = true
 
   vim.api.nvim_win_set_buf(win, buf)
   if filetype and filetype ~= '' then
