@@ -426,3 +426,33 @@ When launching future audit sessions:
 5. **External Binary Sync**: If `sqmeow.nvim` updates its release version in `lua/sqmeow/rpc/client.lua`, run `nvim --headless -c 'lua require("sqmeow").install()' -c 'qa!'` so the managed `sqmeow-core` binary matches the Lua RPC client version.
 6. Record breaking changes, redundancy opportunities, or new features in Section 3 of this document (and [`database_agent.md`](file:///home/georgek/.config/nvim/database_agent.md) for `sqmeow.nvim`).
 7. Update the Baseline Commit hash in Section 1 once reviewed and verified.
+
+
+---
+
+## Deferred Feature Spec: AI Inline Ghost-Text Autocomplete
+
+Removed `neocodeium` / `windsurf.nvim` (retired repo & broken upstream Codeium/Windsurf endpoints). Re-implement later using this exact spec:
+
+### Control Scheme (Insert Mode — Coexists With `blink.cmp`)
+- `<M-a>` — Accept full suggestion
+- `<M-w>` — Accept next word
+- `<M-e>` — Accept current line
+- `<M-n>` — Next suggestion / manual trigger
+- `<M-p>` — Previous suggestion
+- `<M-c>` — Clear / dismiss suggestion
+- `<leader>aU` (Normal mode) — Auth / status command (add back to `lua/plugins/which-key.lua`)
+
+### Rendering & Coexistence
+- **Virtual-text ghost text only** (disable `nvim-cmp` / `blink.cmp` source integration so popup menu and ghost text never fight).
+- Muted ghost-text highlight: `fg = '#7f849c'`, `ctermfg = 244`.
+
+### Filetype & Database / SQL Rules
+- **Enabled by default**, explicitly including **SQL buffers, `sqmeow` scratchpads, `[Preview: ...]` buffers, and unnamed user buffers** (`buftype == ''` or scratchpad buffers outside `cwd`).
+- **Disabled** on: `markdown`, `help`, `gitcommit`, `gitrebase`, `opencode_ask`, `snacks_*` (dashboard, picker, terminal), `dbui`, `dbout`, `sqmeow-drawer`, `sqmeow-result`, `prompt`, `terminal`.
+
+### Platform & Provider Requirements
+- Must work identically on **Linux and WSL** with **zero extra OS-level installs** after `git pull` (installed purely via `lazy.nvim`).
+- Top future candidates:
+  1. **`milanglacier/minuet-ai.nvim`** (pure Lua + `curl`, native SQL scratchpad support, swap between Codestral / Gemini Flash / local Ollama).
+  2. **`zbirenbaum/copilot.lua`** (GitHub Copilot free tier, 2,000 completions/month, 1-time `:Copilot auth`).

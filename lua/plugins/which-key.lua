@@ -146,7 +146,6 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>ac', desc = 'Compact AI Session' },
       { '<leader>ax', desc = 'Stop AI Generation' },
       { '<leader>at', desc = 'Toggle AI Agent (Plan/Build)' },
-      { '<leader>aU', desc = 'AI Auth / Status' },
 
       -- Window Group (<leader>w)
       { '<leader>ws', desc = 'Split Horizontally' },
