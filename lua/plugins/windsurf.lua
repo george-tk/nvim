@@ -36,7 +36,23 @@ return {
     local orig_uv_spawn = vim.uv.spawn
     vim.uv.spawn = wrap_spawn_with_inference_url(orig_uv_spawn)
 
+    -- Codeium retired https://api.codeium.com/register_user/ (returns 404 plain text, breaking json_decode).
+    -- Route RegisterUser auth POSTs to the live server.codeium.com JSON endpoint instead.
+    local ok_io, codeium_io = pcall(require, 'codeium.io')
+    if ok_io and codeium_io and codeium_io.post and not codeium_io._register_user_patched then
+      codeium_io._register_user_patched = true
+      local orig_post = codeium_io.post
+      codeium_io.post = function(url, opts)
+        if type(url) == 'string' and url:find('api%.codeium%.com/register_user') then
+          url = 'https://server.codeium.com/exa.seat_management_pb.SeatManagementService/RegisterUser'
+        end
+        return orig_post(url, opts)
+      end
+    end
+
     require('codeium').setup {
+      -- Reuse ~/.codeium/config.json (shared with neocodeium so existing auth carries over automatically)
+      config_path = vim.fn.expand '~/.codeium/config.json',
       enable_cmp_source = false,
       virtual_text = {
         enabled = true,
