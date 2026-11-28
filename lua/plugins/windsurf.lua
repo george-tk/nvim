@@ -5,48 +5,43 @@ return {
     'nvim-lua/plenary.nvim',
   },
   config = function()
-    -- Ensure Windsurf/Codeium language server routes inference through server.codeium.com
-    -- (default inference.codeium.com / server.windsurf.com can time out on some ISP/WSL networks)
-    local function wrap_spawn_with_inference_url(orig_spawn)
-      return function(path, spawn_opts, on_exit)
-        if spawn_opts and type(spawn_opts.args) == 'table' and tostring(path):find 'language_server' then
-          local has_inference = false
-          for _, arg in ipairs(spawn_opts.args) do
-            if arg == '--inference_api_server_url' then
-              has_inference = true
-              break
-            end
+    -- Patch codeium.io before setup():
+    -- 1. Route retired https://api.codeium.com/register_user/ (404) to live server.codeium.com JSON endpoint.
+    -- 2. Pass --inference_api_server_url to language_server (default inference.codeium.com has no DNS).
+    local ok_io, codeium_io = pcall(require, 'codeium.io')
+    if ok_io and codeium_io then
+      if codeium_io.post and not codeium_io._register_user_patched then
+        codeium_io._register_user_patched = true
+        local orig_post = codeium_io.post
+        codeium_io.post = function(url, opts)
+          if type(url) == 'string' and url:find 'api%.codeium%.com/register_user' then
+            url = 'https://server.codeium.com/exa.seat_management_pb.SeatManagementService/RegisterUser'
           end
-          if not has_inference then
-            local api_url = 'https://server.codeium.com'
-            for i, arg in ipairs(spawn_opts.args) do
-              if arg == '--api_server_url' and spawn_opts.args[i + 1] then
-                api_url = spawn_opts.args[i + 1]
-                break
+          return orig_post(url, opts)
+        end
+      end
+
+      if codeium_io.job and not codeium_io._inference_job_patched then
+        codeium_io._inference_job_patched = true
+        local orig_job = codeium_io.job
+        codeium_io.job = function(job_args)
+          if type(job_args) == 'table' and tostring(job_args[1] or ''):find 'language_server' then
+            local has_inference = false
+            local api_url = 'https://server.codeium.com:443'
+            for i, arg in ipairs(job_args) do
+              if arg == '--inference_api_server_url' then
+                has_inference = true
+              elseif arg == '--api_server_url' and job_args[i + 1] then
+                api_url = job_args[i + 1]
               end
             end
-            table.insert(spawn_opts.args, '--inference_api_server_url')
-            table.insert(spawn_opts.args, api_url)
+            if not has_inference then
+              table.insert(job_args, '--inference_api_server_url')
+              table.insert(job_args, api_url)
+            end
           end
+          return orig_job(job_args)
         end
-        return orig_spawn(path, spawn_opts, on_exit)
-      end
-    end
-
-    local orig_uv_spawn = vim.uv.spawn
-    vim.uv.spawn = wrap_spawn_with_inference_url(orig_uv_spawn)
-
-    -- Codeium retired https://api.codeium.com/register_user/ (returns 404 plain text, breaking json_decode).
-    -- Route RegisterUser auth POSTs to the live server.codeium.com JSON endpoint instead.
-    local ok_io, codeium_io = pcall(require, 'codeium.io')
-    if ok_io and codeium_io and codeium_io.post and not codeium_io._register_user_patched then
-      codeium_io._register_user_patched = true
-      local orig_post = codeium_io.post
-      codeium_io.post = function(url, opts)
-        if type(url) == 'string' and url:find('api%.codeium%.com/register_user') then
-          url = 'https://server.codeium.com/exa.seat_management_pb.SeatManagementService/RegisterUser'
-        end
-        return orig_post(url, opts)
       end
     end
 
@@ -86,8 +81,6 @@ return {
         },
       },
     }
-
-    vim.uv.spawn = orig_uv_spawn
 
     vim.api.nvim_set_hl(0, 'CodeiumSuggestion', { fg = '#7f849c', ctermfg = 244, default = false })
 
