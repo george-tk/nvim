@@ -288,8 +288,11 @@ return {
       end
     end
 
+    local neogit_ui_group = vim.api.nvim_create_augroup('UserNeogitUI', { clear = true })
+
     -- 3. Enforce soft wrapping & VS Code-style direct commit on `c` in NeogitStatus
     vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter', 'User' }, {
+      group = neogit_ui_group,
       pattern = { 'NeogitStatus', 'NeogitStatusRefreshed' },
       callback = function()
         vim.schedule(function()
@@ -474,6 +477,7 @@ return {
 
     -- Explorer-style `l` to open commits/items in Neogit sub-views (LogView, RefsView, StashView)
     vim.api.nvim_create_autocmd('FileType', {
+      group = neogit_ui_group,
       pattern = { 'NeogitLogView', 'NeogitRefsView', 'NeogitStashView', 'NeogitCommitSelectView' },
       callback = function(ev)
         vim.keymap.set('n', 'l', '<CR>', { buffer = ev.buf, remap = true, silent = true, nowait = true, desc = 'Open Commit / Item' })
@@ -664,17 +668,6 @@ return {
   keys = {
     {
       '<leader>gg',
-      function()
-        if _G.RightPanel and _G.RightPanel.open_neogit then
-          _G.RightPanel.open_neogit()
-        else
-          require('neogit').open { kind = 'vsplit' }
-        end
-      end,
-      desc = 'Status (Right Panel)',
-    },
-    {
-      '<leader>gs',
       function()
         if _G.RightPanel and _G.RightPanel.open_neogit then
           _G.RightPanel.open_neogit()

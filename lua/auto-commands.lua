@@ -39,6 +39,17 @@ api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- Auto-reload buffers modified externally (OpenCode AI, git, bottom terminal)
+api.nvim_create_autocmd({ 'FocusGained', 'TermLeave', 'BufEnter' }, {
+  desc = 'Check for external file changes',
+  group = api.nvim_create_augroup('UserAutoReload', { clear = true }),
+  callback = function()
+    if vim.o.buftype ~= 'nofile' and vim.fn.mode() ~= 'c' then
+      vim.cmd 'silent! checktime'
+    end
+  end,
+})
+
 -- Auto create parent directories on save
 api.nvim_create_autocmd('BufWritePre', {
   desc = 'Auto create parent directories',

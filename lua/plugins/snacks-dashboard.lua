@@ -103,7 +103,7 @@ local function open_project_clean(dir, target_file)
   end
 
   pcall(vim.cmd, 'only')
-  vim.cmd.cd(vim.fn.fnameescape(dir))
+  vim.fn.chdir(dir)
 
   pcall(function()
     require('snacks.explorer.git').update(dir, { untracked = true })
@@ -247,7 +247,7 @@ vim.api.nvim_create_autocmd('VimEnter', {
     end
 
     local dir_buf = vim.api.nvim_get_current_buf()
-    vim.cmd.cd(vim.fn.fnameescape(dir))
+    vim.fn.chdir(dir)
 
     -- Replace the directory buffer with a clean empty buffer
     vim.cmd 'enew'

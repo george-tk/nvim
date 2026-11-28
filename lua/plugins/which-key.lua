@@ -8,24 +8,23 @@ return { -- Useful plugin to show you pending keybinds.
       mappings = false,
     },
     spec = {
-      -- Core Top-Level Groups (Uniform 2-Key Length, Zero Prefix Collisions)
+      -- Core Top-Level Groups (Uniform Lowercase 2-Key Length, Zero Prefix Collisions)
       { '<leader>c', group = 'Code', mode = { 'n', 'v' } },
       { '<leader>f', group = 'Find' },
       { '<leader>b', group = 'Database', mode = { 'n', 'v' } },
       { '<leader>a', group = 'Ai', mode = { 'n', 'v' } },
-      { '<leader>T', group = 'Todo' },
+      { '<leader>t', group = 'Todo' },
       { '<leader>g', group = 'Git', mode = { 'n', 'v' } },
-      { '<leader>D', group = 'Docker', mode = { 'n', 'v' } },
+      { '<leader>d', group = 'Docker', mode = { 'n', 'v' } },
       { '<leader>m', group = 'Markdown' },
       { '<leader>j', group = 'Jira' },
       { '<leader>s', group = 'Spelling' },
       { '<leader>w', group = 'Window' },
 
       -- Direct 1-Key Actions
-      { '<leader>t', desc = 'Terminal', mode = { 'n', 't' } },
       { '<leader>p', desc = 'Toggle Pin Buffer' },
       { '<leader>e', desc = 'File Explorer', mode = { 'n', 'v' } },
-      { '<leader>d', desc = 'Dashboard' },
+      { '<leader>h', desc = 'Home (Dashboard)' },
       { '<leader>z', desc = 'Zen Mode' },
       { '<leader>n', desc = 'New Buffer (with Filetype)' },
       { '<leader>q', desc = 'Close Buffer' },
@@ -84,26 +83,28 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>bA', desc = 'Add Database' },
       { '<leader>bD', desc = 'Delete Database' },
 
-      -- Todo Group (<leader>T)
-      { '<leader>TT', desc = 'Todo List' },
-      { '<leader>Tb', desc = 'Todo Board' },
-      { '<leader>Tn', desc = 'New Todo' },
-      { '<leader>Tr', desc = 'Reference Todo' },
-      { '<leader>Tj', desc = 'Jump to Todo' },
-      { '<leader>Tl', desc = 'Todo Log' },
+      -- Todo Group (<leader>t)
+      { '<leader>tt', desc = 'Todo List' },
+      { '<leader>tb', desc = 'Todo Board' },
+      { '<leader>tn', desc = 'New Todo' },
+      { '<leader>tN', desc = 'New Todo Reference' },
+      { '<leader>tr', desc = 'Reference Todo' },
+      { '<leader>tj', desc = 'Jump to Todo' },
+      { '<leader>tl', desc = 'Todo Log' },
 
       -- Git Group (<leader>g)
       { '<leader>gg', desc = 'Status' },
       { '<leader>gc', desc = 'Commit' },
+      { '<leader>gl', desc = 'Log' },
       { '<leader>gp', desc = 'Pull' },
       { '<leader>gP', desc = 'Push' },
       { '<leader>gb', desc = 'Branch' },
       { '<leader>gd', desc = 'Diff' },
 
-      -- Docker Group (<leader>D)
-      { '<leader>DD', desc = 'Docker Panel' },
-      { '<leader>Db', desc = 'Build Dockerfile' },
-      { '<leader>Dr', desc = 'Run Docker Compose', mode = { 'n', 'v' } },
+      -- Docker Group (<leader>d)
+      { '<leader>dd', desc = 'Docker Panel' },
+      { '<leader>db', desc = 'Build Dockerfile' },
+      { '<leader>dr', desc = 'Run Docker Compose', mode = { 'n', 'v' } },
 
       -- Markdown Group (<leader>m)
       { '<leader>mt', desc = 'Create Table' },
@@ -143,6 +144,7 @@ return { -- Useful plugin to show you pending keybinds.
       { '<leader>an', desc = 'New AI Session' },
       { '<leader>ac', desc = 'Compact AI Session' },
       { '<leader>ax', desc = 'Stop AI Generation' },
+      { '<leader>at', desc = 'Toggle AI Agent (Plan/Build)' },
       { '<leader>aU', desc = 'AI Auth / Status' },
 
       -- Window Group (<leader>w)

@@ -11,7 +11,7 @@ return {
   },
   keys = {
     {
-      '<leader>DD',
+      '<leader>dd',
       function()
         if _G.RightPanel and _G.RightPanel.open_dockyard then
           _G.RightPanel.open_dockyard()
@@ -22,12 +22,12 @@ return {
       desc = 'Docker Panel',
     },
     {
-      '<leader>Db',
+      '<leader>db',
       '<cmd>DockyardBuild<CR>',
       desc = 'Build Dockerfile',
     },
     {
-      '<leader>Dr',
+      '<leader>dr',
       '<cmd>DockyardRun<CR>',
       mode = { 'n', 'v' },
       desc = 'Run Docker Compose',
@@ -891,7 +891,10 @@ return {
           vim.bo[buf].bufhidden = 'wipe'
           vim.bo[buf].swapfile = false
 
+          local write_group = vim.api.nvim_create_augroup('UserDockyardFileWrite', { clear = false })
+          pcall(vim.api.nvim_clear_autocmds, { group = write_group, buffer = buf })
           vim.api.nvim_create_autocmd('BufWriteCmd', {
+            group = write_group,
             buffer = buf,
             callback = function()
               local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)

@@ -6,17 +6,10 @@ return {
     'folke/snacks.nvim',
   },
   config = function()
-    -- Automatically locate opencode executable in PATH or ~/.opencode/bin
-    local binary = vim.fn.exepath 'opencode'
-    if binary == '' then
-      local opencode_path = vim.fn.expand '~/.opencode/bin/opencode'
-      if (vim.uv or vim.loop).fs_stat(opencode_path) then
-        binary = opencode_path
-      else
-        binary = 'opencode'
-      end
-    end
-    local opencode_cmd = binary .. ' --port --agent plan'
+    -- Reuse canonical opencode command from layout.lua (single source of truth)
+    local ok_layout, layout = pcall(require, 'utils.layout')
+    local opencode_cmd = (ok_layout and layout.RightPanel and layout.RightPanel.get_opencode_cmd and layout.RightPanel.get_opencode_cmd())
+      or 'opencode --port --agent plan'
 
     -- Inject repo-bundled .agents skills & rules so pulling nvim alone enables ponytail + caveman
     local function get_opencode_env()
@@ -52,7 +45,6 @@ return {
         on_buf = function(t)
           vim.b[t.buf].panel_zone = 'right'
           vim.b[t.buf].panel_type = 'opencode'
-          vim.keymap.set('t', '<leader>t', '<Space>t', { buffer = t.buf, noremap = true, silent = true })
         end,
       },
     }
@@ -466,6 +458,7 @@ return {
 
     -- Automatically show terminal on prompt submit & update Lualine running indicator
     vim.api.nvim_create_autocmd('User', {
+      group = vim.api.nvim_create_augroup('UserOpencodeEvents', { clear = true }),
       pattern = {
         'OpencodeEvent:tui.command.execute',
         'OpencodeEvent:permission.asked',

@@ -32,9 +32,12 @@ return {
       end
     end
 
+    local nc_group = vim.api.nvim_create_augroup('UserNeoCodeium', { clear = true })
+
     -- Send an immediate Heartbeat as soon as the language server port is discovered
     -- (by default neocodeium waits 10s for the first heartbeat tick, leaving state INACTIVE)
     vim.api.nvim_create_autocmd('User', {
+      group = nc_group,
       pattern = 'NeoCodeiumServerConnected',
       callback = function()
         pcall(function()
@@ -88,6 +91,7 @@ return {
     -- Ensure buffers created via nvim_create_buf (scratchpads, new buffers, previews)
     -- always have neocodeium_allowed_encoding initialized before InsertEnter checks status
     vim.api.nvim_create_autocmd({ 'BufEnter', 'InsertEnter' }, {
+      group = nc_group,
       callback = function(ev)
         local b = ev.buf
         if b and vim.api.nvim_buf_is_valid(b) and vim.b[b].neocodeium_allowed_encoding == nil then

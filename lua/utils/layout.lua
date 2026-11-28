@@ -894,7 +894,6 @@ function RightPanel.open_opencode(no_toggle, opts)
       on_buf = function(t)
         vim.b[t.buf].panel_zone = 'right'
         vim.b[t.buf].panel_type = 'opencode'
-        vim.keymap.set('t', '<leader>t', '<Space>t', { buffer = t.buf, noremap = true, silent = true })
       end,
     },
   })
@@ -2685,6 +2684,7 @@ local function setup_autocmds()
 
   -- Track query results buffer automatically
   vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+    group = layout_lock_group,
     pattern = '*',
     callback = function(args)
       local buf = args.buf
@@ -2725,6 +2725,7 @@ local function setup_autocmds()
 
   -- Track active terminal instance automatically when entering a terminal buffer
   vim.api.nvim_create_autocmd({ 'BufEnter', 'TermOpen' }, {
+    group = layout_lock_group,
     callback = function(args)
       local st = vim.b[args.buf].snacks_terminal
       local is_opencode = tostring(st and st.cmd or ''):find 'opencode' or vim.b[args.buf].panel_type == 'opencode'

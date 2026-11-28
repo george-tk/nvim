@@ -53,8 +53,11 @@ return {
       vim.api.nvim_set_hl(0, 'LualinePillMacro', { bg = pill_bg, fg = red, bold = true })
     end
 
+    local lualine_group = vim.api.nvim_create_augroup('UserLualineSync', { clear = true })
+
     setup_dock_highlights()
     vim.api.nvim_create_autocmd('ColorScheme', {
+      group = lualine_group,
       callback = setup_dock_highlights,
     })
 
@@ -122,6 +125,7 @@ return {
     end
 
     vim.api.nvim_create_autocmd('DirChanged', {
+      group = lualine_group,
       callback = function()
         cached_workspace_branch = ''
       end,
@@ -170,6 +174,7 @@ return {
     end
 
     vim.api.nvim_create_autocmd({ 'WinEnter', 'BufEnter' }, {
+      group = lualine_group,
       callback = function()
         local prev = last_main_zone
         local now_zone = get_focused_zone()

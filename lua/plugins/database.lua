@@ -17,8 +17,11 @@ return {
       require('sqmeow').install()
     end,
     init = function()
+      local db_ui_group = vim.api.nvim_create_augroup('UserDatabaseUI', { clear = true })
+
       -- Database UI and result buffers inherit the global spell setting otherwise.
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        group = db_ui_group,
         callback = function(args)
           local buf = args.buf or vim.api.nvim_get_current_buf()
           if not buf or not vim.api.nvim_buf_is_valid(buf) then
@@ -43,6 +46,7 @@ return {
 
       -- Automatically bind per-buffer database, attach <CR> execution keymaps, and enable AI completion for SQL buffers
       vim.api.nvim_create_autocmd({ 'FileType', 'BufEnter', 'BufWinEnter' }, {
+        group = db_ui_group,
         callback = function(args)
           if vim.g.SessionLoad == 1 then
             return
@@ -141,6 +145,7 @@ return {
 
       -- Explorer-like navigation in sqmeow drawer: Tab/S-Tab, l/CR, h, q, <C-j>
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        group = db_ui_group,
         pattern = { 'sqmeow-drawer', 'sqmeow://drawer*' },
         callback = function(args)
           local buf = args.buf or vim.api.nvim_get_current_buf()
@@ -195,6 +200,7 @@ return {
 
       -- Result window coordination: keymaps, navigation, sticky headers & winbar
       vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
+        group = db_ui_group,
         pattern = { 'sqmeow-result', 'sqmeow://result*' },
         callback = function(args)
           local buf_ft = vim.bo[args.buf].filetype

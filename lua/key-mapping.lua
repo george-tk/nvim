@@ -27,6 +27,14 @@ vim.keymap.set('x', 'p', 'P', { desc = 'Paste over selection (no yank)' })
 vim.keymap.set({ 'n', 'x' }, 'X', 'd', { desc = 'Cut' })
 vim.keymap.set('n', 'XX', 'dd', { desc = 'Cut line' })
 
+-- Seamless Editing Flow (stay selected on indent, stay centered on jumps/search)
+vim.keymap.set('x', '<', '<gv', { desc = 'Indent left (keep selection)' })
+vim.keymap.set('x', '>', '>gv', { desc = 'Indent right (keep selection)' })
+vim.keymap.set('n', '<C-d>', '<C-d>zz', { desc = 'Half-page down (centered)' })
+vim.keymap.set('n', '<C-u>', '<C-u>zz', { desc = 'Half-page up (centered)' })
+vim.keymap.set('n', 'n', 'nzzzv', { desc = 'Next match (centered)' })
+vim.keymap.set('n', 'N', 'Nzzzv', { desc = 'Prev match (centered)' })
+
 -- Spelling (Clean 2-key length, compact cursor box, per-buffer persistence)
 vim.keymap.set('n', '<leader>st', function()
   local next_state = not vim.wo.spell
@@ -97,11 +105,6 @@ vim.keymap.set('n', '<S-Tab>', function()
     pcall(move.goto_previous_start, '@parameter.inner', 'textobjects')
   end
 end, { desc = 'Previous Table Cell / Parameter' })
-
--- Snacks Zen Mode (Distraction-free mode)
-vim.keymap.set('n', '<leader>z', function()
-  Snacks.zen()
-end, { desc = 'Zen Mode' })
 
 -------------------------------------------------------------------------------
 -- 3-Zone IDE Layout Engine Bridge
@@ -478,10 +481,10 @@ vim.keymap.set('n', '<leader>wo', function()
 end, { desc = 'Close Other Splits' })
 
 -------------------------------------------------------------------------------
--- Snacks Dashboard (<leader>d)
+-- Snacks Dashboard (<leader>h = Home, frees <leader>d for Docker)
 -------------------------------------------------------------------------------
 
-vim.keymap.set('n', '<leader>d', function()
+vim.keymap.set('n', '<leader>h', function()
   if vim.bo.filetype == 'snacks_dashboard' then
     return
   end
@@ -524,12 +527,6 @@ vim.keymap.set({ 'n', 't', 'i' }, '<C-k>', layout.navigate_up, { desc = 'Up / Ed
 
 -- <C-j>: Spatial navigation down / Focus or Toggle Bottom Output
 vim.keymap.set({ 'n', 't', 'i' }, '<C-j>', layout.navigate_down, { desc = 'Down / Bottom Output' })
-
--- <leader>t: Direct Terminal Toggle & Switch Bottom Mode
-vim.keymap.set({ 'n', 't' }, '<leader>t', function()
-  local count = vim.v.count > 0 and vim.v.count or nil
-  layout.BottomPanel.open_terminal(count)
-end, { desc = 'Terminal' })
 
 -------------------------------------------------------------------------------
 -- Window Resizing (<M-h/j/k/l> & <C-w>=)

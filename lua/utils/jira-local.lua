@@ -299,7 +299,10 @@ function M.open_editor(key, target_win, opts)
     end
   end
 
+  local write_group = vim.api.nvim_create_augroup('UserJiraLocalWrite', { clear = false })
+  pcall(vim.api.nvim_clear_autocmds, { group = write_group, buffer = buf })
   vim.api.nvim_create_autocmd('BufWriteCmd', {
+    group = write_group,
     buffer = buf,
     callback = function()
       local cur_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
